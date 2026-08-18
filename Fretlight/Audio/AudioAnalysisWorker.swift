@@ -11,6 +11,8 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     private var incoming = Array(repeating: Float.zero, count: 1024)
     private var history: [Int] = []
     private var lastMIDI: Int?
+    private var lastFrequency: Double = 0
+    private var lastDetection: ContinuousClock.Instant?
     private var lastPublish = ContinuousClock.now
     private var running: Int32 = 0
     var onUpdate: (@Sendable (PitchDisplayState, UInt64) -> Void)?
@@ -47,18 +49,31 @@ final class AudioAnalysisWorker: @unchecked Sendable {
             lastPublish = now
             let capture = ring.currentCaptureTime()
             var display = PitchDisplayState(level: rms, latencyMilliseconds: 0, bufferSize: bufferSize)
+            var hasCurrentDetection = false
             if let result, result.confidence > 0.78, let mapped = NoteMapper.map(frequency: result.frequency) {
                 history.append(mapped.midiNote); if history.count > 5 { history.removeFirst() }
                 let median = history.sorted()[history.count / 2]
                 if lastMIDI == nil || abs(median - lastMIDI!) <= 1 || history.filter({ $0 == median }).count >= 3 { lastMIDI = median }
-                if let stable = lastMIDI {
-                    let stableFrequency = 440 * pow(2, Double(stable - 69) / 12)
-                    display.frequency = result.frequency
-                    display.confidence = result.confidence
-                    display.note = NoteMapper.map(frequency: stableFrequency)
-                    if var note = display.note { note = MappedNote(name: note.name, octave: note.octave, midiNote: note.midiNote, cents: 1200 * log2(result.frequency / stableFrequency), positions: note.positions); display.note = note }
+                lastFrequency = result.frequency
+                lastDetection = now
+                hasCurrentDetection = true
+                display.confidence = result.confidence
+            } else { history.removeAll(keepingCapacity: true) }
+            // A short hold prevents the display from blinking out during the
+            // naturally aperiodic final cycles of a decaying guitar note.
+            let isWithinHold = lastDetection.map { now - $0 < .milliseconds(180) } ?? false
+            if let stable = lastMIDI, hasCurrentDetection || isWithinHold {
+                let stableFrequency = 440 * pow(2, Double(stable - 69) / 12)
+                display.frequency = lastFrequency
+                display.note = NoteMapper.map(frequency: stableFrequency)
+                if var note = display.note {
+                    note = MappedNote(name: note.name, octave: note.octave, midiNote: note.midiNote, cents: 1200 * log2(lastFrequency / stableFrequency), positions: note.positions)
+                    display.note = note
                 }
-            } else { history.removeAll(keepingCapacity: true); lastMIDI = nil }
+            } else {
+                lastMIDI = nil
+                lastDetection = nil
+            }
             onUpdate?(display, capture)
         }
     }

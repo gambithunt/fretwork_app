@@ -25,7 +25,7 @@ struct ContentView: View {
     private var header: some View {
         ZStack(alignment: .leading) {
             HStack(spacing: 10) {
-                Text("Fretlight").font(.title2.weight(.bold))
+                Text("Fretwork").font(.title2.weight(.bold))
                 Label(state.errorMessage == nil ? "Listening" : "Reconnecting", systemImage: "circle.fill")
                     .font(.callout).foregroundStyle(state.errorMessage == nil ? .green : .orange)
             }
@@ -35,18 +35,32 @@ struct ContentView: View {
     }
 
     private var signalPath: some View {
-        HStack(alignment: .bottom, spacing: 14) {
+        HStack(alignment: .top, spacing: 14) {
             routePicker("INPUT", devices: state.inputDevices, selection: state.selectedInputDeviceID, action: state.selectInputDevice)
-            Image(systemName: "arrow.right").foregroundStyle(.secondary).padding(.bottom, 11)
-            routePicker("OUTPUT", devices: state.outputDevices, selection: state.selectedOutputDeviceID, action: state.selectOutputDevice)
-            Button { state.monitorMuted.toggle() } label: {
-                Label(state.monitorMuted ? "Monitor muted" : "Monitor on", systemImage: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
+            VStack(spacing: 5) {
+                Text("ROUTE").font(.caption2.weight(.medium)).foregroundStyle(.clear)
+                Image(systemName: "arrow.right").foregroundStyle(.secondary).frame(height: 44)
             }
-            .buttonStyle(.bordered)
-            .tint(.secondary)
-            .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
-            .padding(.bottom, 1)
-            Slider(value: $state.monitorVolume, in: 0...1).frame(width: 118).disabled(state.monitorMuted).padding(.bottom, 11)
+            routePicker("OUTPUT", devices: state.outputDevices, selection: state.selectedOutputDeviceID, action: state.selectOutputDevice)
+            monitorControl
+        }
+    }
+
+    private var monitorControl: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("MONITOR").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button { state.monitorMuted.toggle() } label: {
+                    Image(systemName: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
+                Slider(value: $state.monitorVolume, in: 0...1)
+                    .frame(width: 118)
+                    .disabled(state.monitorMuted)
+            }
+            .frame(height: 44)
         }
     }
 

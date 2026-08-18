@@ -4,9 +4,18 @@ struct TunerPanel: View {
     let display: PitchDisplayState
     var body: some View {
         HStack(spacing: 28) {
-            Text(display.note.map { "\($0.name)\($0.octave)" } ?? "—")
-                .font(.system(size: 64, weight: .semibold, design: .rounded))
-                .frame(width: 145, alignment: .leading)
+            Group {
+                if let note = display.note {
+                    Text("\(note.name)\(note.octave)")
+                        .id(note.midiNote)
+                        .transition(.scale(scale: 0.65).combined(with: .opacity))
+                } else {
+                    Text("—")
+                        .transition(.opacity)
+                }
+            }
+            .font(.system(size: 64, weight: .semibold, design: .rounded))
+            .frame(width: 145, alignment: .leading)
             Divider().frame(height: 96)
             VStack(spacing: 9) {
                 TunerGauge(cents: display.note?.cents).frame(height: 54)
@@ -21,6 +30,7 @@ struct TunerPanel: View {
         }
         .padding(.horizontal, 32).padding(.vertical, 22)
         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
+        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: display.note?.midiNote)
     }
 }
 

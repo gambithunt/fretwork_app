@@ -26,6 +26,11 @@ final class AppState {
                 self?.errorMessage = message
             }
         }
+        audioEngine.onRecovered = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.errorMessage = nil
+            }
+        }
         if let saved = UserDefaults.standard.object(forKey: "selectedInputDeviceID") as? UInt32,
            inputDevices.contains(where: { $0.id == saved }) {
             selectedInputDeviceID = saved

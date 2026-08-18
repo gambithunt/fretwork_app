@@ -33,6 +33,7 @@ final class AudioEngine: @unchecked Sendable {
     private var monitorWorker: AudioMonitorWorker?
     var onUpdate: (@Sendable (PitchDisplayState) -> Void)?
     var onError: (@Sendable (String) -> Void)?
+    var onRecovered: (@Sendable () -> Void)?
     private var timebase = mach_timebase_info_data_t()
     private var configChangeObservers: [NSObjectProtocol] = []
     private var currentInputDeviceID: AudioDeviceID?
@@ -41,6 +42,7 @@ final class AudioEngine: @unchecked Sendable {
     private var pendingRestart: DispatchWorkItem?
     private var restartAttempts = 0
     private var restartWindowStart = Date.distantPast
+    private var didReportConnectionFailure = false
 
     init() { mach_timebase_info(&timebase) }
 
@@ -48,6 +50,12 @@ final class AudioEngine: @unchecked Sendable {
     func start(inputDeviceID: AudioDeviceID, outputDeviceID: AudioDeviceID, monitorVolume: Float) {
         controlQueue.async { [weak self] in
             guard let self else { return }
+            // This is an explicit user action, so it should always clear the
+            // previous recovery circuit breaker — even when the same device is
+            // selected again via the Retry button.
+            self.restartAttempts = 0
+            self.restartWindowStart = .distantPast
+            self.didReportConnectionFailure = false
             do { try self.startSynchronously(inputDeviceID: inputDeviceID, outputDeviceID: outputDeviceID, monitorVolume: monitorVolume) }
             catch { self.onError?(error.localizedDescription) }
         }
@@ -137,6 +145,7 @@ final class AudioEngine: @unchecked Sendable {
         let monitor = AudioMonitorWorker(ring: monitorRing, player: player, format: monitorFormat)
         monitorWorker = monitor
         monitor.start()
+        onRecovered?()
     }
 
     /// A USB interface — especially a DSP-heavy one like a modeling
@@ -151,21 +160,26 @@ final class AudioEngine: @unchecked Sendable {
     /// rather than spinning forever — a device that keeps failing to
     /// restart needs a person to look at it, not an infinite loop.
     private func observeConfigurationChanges(of engine: AVAudioEngine) {
-        let token = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self] _ in
-            self?.scheduleRestart()
+        let token = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { [weak self, weak engine] _ in
+            guard let engine else { return }
+            self?.scheduleRestart(for: engine)
         }
         configChangeObservers.append(token)
     }
 
-    private func scheduleRestart() {
+    private func scheduleRestart(for engine: AVAudioEngine) {
         controlQueue.async { [weak self] in
             guard let self else { return }
+            // Notifications from an engine that has already been stopped are
+            // normal during teardown. They must not start a fresh recovery
+            // loop for a healthy, newly-created engine.
+            guard self.captureEngine === engine || self.playbackEngine === engine else { return }
             self.pendingRestart?.cancel()
             let work = DispatchWorkItem { [weak self] in self?.attemptRestart() }
             self.pendingRestart = work
-            // Give the device's own teardown a moment to actually finish
-            // before we try to reattach to it — and let a burst of several
-            // notifications for the same underlying event collapse into one.
+            // Rebuild after the device has finished its own configuration
+            // change. This is the recovery path that keeps the input tap
+            // alive on interfaces which renegotiate mid-stream.
             self.controlQueue.asyncAfter(deadline: .now() + 0.5, execute: work)
         }
     }
@@ -179,14 +193,35 @@ final class AudioEngine: @unchecked Sendable {
         }
         restartAttempts += 1
         guard restartAttempts <= 3 else {
-            onError?("Lost a stable connection to the audio device after repeated attempts to recover. Try reselecting it, or disconnecting and reconnecting it.")
+            reportConnectionFailureIfNeeded()
             return
         }
         do {
             try startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: currentMonitorVolume)
         } catch {
-            onError?(error.localizedDescription)
+            reportConnectionFailureIfNeeded()
         }
+    }
+
+    private func reportConnectionFailureIfNeeded() {
+        guard !didReportConnectionFailure else { return }
+        // The selected hardware is still enumerated: this was an engine
+        // reconfiguration failure, not a disconnected device. Keep recovery
+        // silent rather than falsely claiming the connection was lost.
+        guard selectedDevicesAreUnavailable() else {
+            restartAttempts = 0
+            restartWindowStart = .distantPast
+            return
+        }
+        didReportConnectionFailure = true
+        onError?("Lost a stable connection to the audio device after repeated attempts to recover. Try reselecting it, or disconnecting and reconnecting it.")
+    }
+
+    private func selectedDevicesAreUnavailable() -> Bool {
+        guard let inputID = currentInputDeviceID, let outputID = currentOutputDeviceID else { return true }
+        let inputExists = AudioDeviceEnumerator.inputDevices().contains { $0.id == inputID }
+        let outputExists = AudioDeviceEnumerator.outputDevices().contains { $0.id == outputID }
+        return !inputExists || !outputExists
     }
 
     func setMonitorVolume(_ value: Float) {

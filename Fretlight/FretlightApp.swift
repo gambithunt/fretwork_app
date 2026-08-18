@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct FretlightApp: App {
+struct FretworkApp: App {
     @State private var state = AppState()
 
     var body: some Scene {
