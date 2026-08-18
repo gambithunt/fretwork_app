@@ -16,6 +16,12 @@ struct InputLevelPanel: View {
                 }
                 Text(String(format: "%.0f dB", Self.decibels(level)))
                     .font(.body.monospacedDigit()).frame(width: 68, alignment: .trailing)
+                    // level changes ~30x/sec while listening, under the
+                    // .animation(value: level) below — a plain string swap
+                    // has no defined animation, which is what rendered as
+                    // overlapping/garbled digits. This gives SwiftUI an
+                    // actual digit-rolling transition to run instead.
+                    .contentTransition(.numericText())
             }
         }
         .frame(maxWidth: .infinity).padding(.vertical, 13)

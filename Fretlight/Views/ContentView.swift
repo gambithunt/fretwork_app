@@ -28,13 +28,28 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        ZStack(alignment: .leading) {
-            HStack(spacing: 10) {
-                Text("Fretwork").font(.title2.weight(.bold))
-                Label(state.errorMessage == nil ? "Listening" : "Reconnecting", systemImage: "circle.fill")
-                    .font(.callout).foregroundStyle(state.errorMessage == nil ? .green : .orange)
+        // A plain sequential HStack, not a ZStack overlaying a centered
+        // signalPath on top of the title. Centering via ZStack doesn't
+        // reserve space for the title, so depending on width the two could
+        // genuinely render on top of each other — that's what the garbled
+        // "Fretwork"/"GP-200 Audio" overlap was. Laid out left-to-right,
+        // overlap is structurally impossible: each element gets its own
+        // space in sequence.
+        HStack(alignment: .top, spacing: 24) {
+            VStack(alignment: .leading, spacing: 5) {
+                // Invisible label matching signalPath's controls, so the
+                // title block sits at the exact same baseline as them
+                // instead of just "somewhere in the middle" of a taller row.
+                Text("FRETWORK").font(.caption2.weight(.medium)).foregroundStyle(.clear)
+                HStack(spacing: 10) {
+                    Text("Fretwork").font(.title2.weight(.bold))
+                    Label(state.errorMessage == nil ? "Listening" : "Reconnecting", systemImage: "circle.fill")
+                        .font(.callout).foregroundStyle(state.errorMessage == nil ? .green : .orange)
+                }
+                .frame(height: 44)
             }
-            HStack { Spacer(); signalPath; Spacer() }
+            signalPath
+            Spacer(minLength: 0)
         }
         .padding(.bottom, 8)
     }
