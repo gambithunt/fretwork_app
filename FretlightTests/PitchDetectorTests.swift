@@ -1,5 +1,5 @@
 import XCTest
-@testable import Fretlight
+@testable import Fretwork
 
 final class PitchDetectorTests: XCTestCase {
     private let sampleRate = 48_000.0

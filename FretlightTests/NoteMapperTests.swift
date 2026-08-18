@@ -1,5 +1,5 @@
 import XCTest
-@testable import Fretlight
+@testable import Fretwork
 
 final class NoteMapperTests: XCTestCase {
     func testA2MapsToOpenAAndLowE5() {

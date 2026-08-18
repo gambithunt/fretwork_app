@@ -14,6 +14,7 @@ struct ContentView: View {
             FretboardView(note: state.display.note).frame(height: 335)
         }
         .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(red: 0.035, green: 0.045, blue: 0.047))
         .preferredColorScheme(.dark)
         .task {
