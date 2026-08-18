@@ -58,14 +58,26 @@ struct FretboardView: View {
             GeometryReader { proxy in
                 let labels: CGFloat = 62
                 let board = CGRect(x: labels, y: 34, width: proxy.size.width - labels, height: proxy.size.height - 38)
+                let stringSpacing = board.height / 6
                 ForEach(activeMarkers) { marker in
                     if let note {
                         let position = marker.position
                         let x = position.fret == 0 ? board.minX + 14 : board.minX + board.width * (CGFloat(position.fret) - 0.5) / CGFloat(frets)
-                        let y = board.minY + board.height * (CGFloat(position.string) + 0.5) / 6
+                        let targetY = board.minY + board.height * (CGFloat(position.string) + 0.5) / 6
+                        // The display runs Low E at the top through High E at
+                        // the bottom. Treble strings (G, B, High E — index 3
+                        // and up) enter from the string immediately above and
+                        // slide down into place, then retreat back up when
+                        // they disappear; bass strings (Low E, A, D) do the
+                        // opposite. Each marker's start/end Y is computed as
+                        // an absolute position (not an offset layered on top
+                        // of a separately-fixed position), so the two ends of
+                        // the animation are exactly one string apart with
+                        // nothing else able to pull it toward the board's
+                        // center.
+                        let startY = position.string >= 3 ? targetY - stringSpacing : targetY + stringSpacing
                         NoteMarker(note: note)
-                            .position(x: x, y: y)
-                            .transition(markerTransition(for: position.string, stringSpacing: board.height / 6))
+                            .transition(markerTransition(x: x, targetY: targetY, startY: startY))
                     }
                 }
             }
@@ -75,15 +87,10 @@ struct FretboardView: View {
         .accessibilityLabel("Twenty-two fret guitar fretboard")
     }
 
-    private func markerTransition(for string: Int, stringSpacing: CGFloat) -> AnyTransition {
-        // The display is ordered Low E at the top through High E at the bottom.
-        // Treble markers travel down from the string immediately above; bass
-        // markers travel up from the string immediately below. The same active
-        // state on removal makes the marker retrace that one-string movement.
-        let offsetY = string >= 3 ? -stringSpacing : stringSpacing
-        return .modifier(
-            active: MarkerMotionModifier(offsetY: offsetY, scale: 0.66, opacity: 0),
-            identity: MarkerMotionModifier(offsetY: 0, scale: 1, opacity: 1)
+    private func markerTransition(x: CGFloat, targetY: CGFloat, startY: CGFloat) -> AnyTransition {
+        .modifier(
+            active: MarkerMotionModifier(x: x, y: startY, scale: 0.66, opacity: 0),
+            identity: MarkerMotionModifier(x: x, y: targetY, scale: 1, opacity: 1)
         )
     }
 }
@@ -96,15 +103,16 @@ private struct ActiveFretMarker: Identifiable {
 }
 
 private struct MarkerMotionModifier: ViewModifier {
-    let offsetY: CGFloat
+    let x: CGFloat
+    let y: CGFloat
     let scale: CGFloat
     let opacity: Double
 
     func body(content: Content) -> some View {
         content
-            .offset(y: offsetY)
             .scaleEffect(scale)
             .opacity(opacity)
+            .position(x: x, y: y)
     }
 }
 

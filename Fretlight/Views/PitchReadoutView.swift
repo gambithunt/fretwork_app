@@ -19,9 +19,25 @@ struct TunerPanel: View {
             Divider().frame(height: 96)
             VStack(spacing: 9) {
                 TunerGauge(cents: display.note?.cents).frame(height: 54)
-                Text(display.note.map { String(format: "%+.1f cents", $0.cents) } ?? "Listening…")
-                    .font(.title3.monospacedDigit().weight(.medium))
-                    .foregroundStyle(display.note.map { abs($0.cents) < 8 ? Color.green : Color.orange } ?? .secondary)
+                // A single Text whose *content* flips between "Listening…"
+                // and the cents readout — under the shared spring animation
+                // below — is exactly what produced the overlapping/garbled
+                // text glitch: SwiftUI has no transition to animate a plain
+                // content mutation, so old and new could render mid-swap.
+                // Branching gives each state its own identity and an
+                // explicit crossfade, same as the note text above.
+                Group {
+                    if let note = display.note {
+                        Text(String(format: "%+.1f cents", note.cents))
+                            .foregroundStyle(abs(note.cents) < 8 ? Color.green : Color.orange)
+                            .transition(.opacity)
+                    } else {
+                        Text("Listening…")
+                            .foregroundStyle(.secondary)
+                            .transition(.opacity)
+                    }
+                }
+                .font(.title3.monospacedDigit().weight(.medium))
             }
             .frame(maxWidth: .infinity)
             Text(display.frequency.map { String(format: "%.2f Hz", $0) } ?? "— Hz")
