@@ -29,5 +29,9 @@ struct InputLevelPanel: View {
         .animation(.easeOut(duration: 0.08), value: level)
     }
 
-    private func meterColor(_ index: Int) -> Color { index < 34 ? .green : (index < 44 ? .yellow : .orange) }
+    // Standard broadcast VU-meter convention — green through most of the
+    // range, yellow as it climbs, red only near the very top as a clipping
+    // warning — rather than the green/yellow/orange split before, which
+    // never actually signaled "too hot."
+    private func meterColor(_ index: Int) -> Color { index < 36 ? .green : (index < 46 ? .yellow : .red) }
 }

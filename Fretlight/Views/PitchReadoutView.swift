@@ -28,9 +28,14 @@ struct TunerPanel: View {
                 // explicit crossfade, same as the note text above.
                 Group {
                     if let note = display.note {
-                        Text(String(format: "%+.1f cents", note.cents))
-                            .foregroundStyle(abs(note.cents) < 8 ? Color.green : Color.orange)
-                            .transition(.opacity)
+                        let inTune = abs(note.cents) < 8
+                        HStack(spacing: 6) {
+                            Image(systemName: inTune ? "checkmark.circle.fill" : (note.cents > 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill"))
+                                .contentTransition(.symbolEffect(.replace))
+                            Text(String(format: "%+.1f cents", note.cents))
+                        }
+                        .foregroundStyle(inTune ? Color.green : Color.orange)
+                        .transition(.opacity)
                     } else {
                         Text("Listening…")
                             .foregroundStyle(.secondary)
@@ -52,28 +57,52 @@ struct TunerPanel: View {
 
 struct TunerGauge: View {
     let cents: Double?
+
+    /// Traffic-light zones: green at the center — the same ±8 cent "in
+    /// tune" threshold used everywhere else this app judges tuning — fading
+    /// through yellow to red at the ±50 extremes.
+    private static let zoneGradient = Gradient(stops: [
+        .init(color: .red, location: 0.0),
+        .init(color: .yellow, location: 0.25),
+        .init(color: .green, location: 0.42),
+        .init(color: .green, location: 0.58),
+        .init(color: .yellow, location: 0.75),
+        .init(color: .red, location: 1.0),
+    ])
+
+    /// Discrete version of the same zones, for the needle and individual
+    /// tick marks — Canvas gradients shade smoothly along a path, but
+    /// there's no public API to sample a Gradient at an arbitrary point,
+    /// so single-color elements use this instead.
+    private static func zoneColor(forCents cents: Double) -> Color {
+        let magnitude = abs(cents)
+        if magnitude < 8 { return .green }
+        if magnitude < 25 { return .yellow }
+        return .red
+    }
+
     var body: some View {
         Canvas { context, size in
             let y = size.height * 0.62
             let left = size.width * 0.04
             let right = size.width * 0.96
             var baseline = Path(); baseline.move(to: CGPoint(x: left, y: y)); baseline.addLine(to: CGPoint(x: right, y: y))
-            context.stroke(baseline, with: .color(.white.opacity(0.22)), lineWidth: 2)
+            context.stroke(baseline, with: .linearGradient(Self.zoneGradient, startPoint: CGPoint(x: left, y: y), endPoint: CGPoint(x: right, y: y)), lineWidth: 2)
             for tick in 0...20 {
                 let x = left + (right - left) * CGFloat(tick) / 20
                 let major = tick.isMultiple(of: 5)
+                let value = -50 + tick * 5
                 var mark = Path(); mark.move(to: CGPoint(x: x, y: y - (major ? 16 : 8))); mark.addLine(to: CGPoint(x: x, y: y + 5))
-                context.stroke(mark, with: .color(.white.opacity(major ? 0.6 : 0.35)), lineWidth: 1)
+                context.stroke(mark, with: .color(Self.zoneColor(forCents: Double(value)).opacity(major ? 0.85 : 0.5)), lineWidth: 1)
                 if major {
-                    let value = -50 + tick * 5
                     context.draw(Text("\(value > 0 ? "+" : "")\(value)").font(.caption2).foregroundColor(.secondary), at: CGPoint(x: x, y: 8))
                 }
             }
             let value = max(-50, min(50, cents ?? 0))
             let x = left + (right - left) * CGFloat((value + 50) / 100)
             var needle = Path(); needle.move(to: CGPoint(x: x, y: y - 22)); needle.addLine(to: CGPoint(x: x, y: y + 14))
-            let needleColor: Color = cents == nil ? .secondary : (abs(cents!) < 8 ? .green : .orange)
-            context.stroke(needle, with: .color(needleColor), lineWidth: 2)
+            let needleColor: Color = cents == nil ? .secondary : Self.zoneColor(forCents: cents!)
+            context.stroke(needle, with: .color(needleColor), lineWidth: 2.5)
         }
     }
 }
