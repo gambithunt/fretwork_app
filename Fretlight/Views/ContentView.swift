@@ -47,8 +47,24 @@ struct ContentView: View {
                 Image(systemName: "arrow.right").foregroundStyle(.secondary).frame(height: 44)
             }
             routePicker("OUTPUT", devices: state.outputDevices, selection: state.selectedOutputDeviceID, action: state.selectOutputDevice)
+            rescanButton
             monitorControl
             sensitivityControl
+        }
+    }
+
+    private var rescanButton: some View {
+        VStack(spacing: 5) {
+            // Invisible label matching the other controls' caption row,
+            // so this button's icon sits at the same baseline as theirs.
+            Text("RESCAN").font(.caption2.weight(.medium)).foregroundStyle(.clear)
+            Button { state.refreshDevices() } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .tint(.secondary)
+            .help("Rescan for input/output devices connected since launch")
+            .frame(height: 44)
         }
     }
 

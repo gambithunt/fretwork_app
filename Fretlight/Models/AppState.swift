@@ -14,6 +14,7 @@ final class AppState {
     var display = PitchDisplayState()
     var errorMessage: String?
     private let audioEngine = AudioEngine()
+    private let deviceWatcher = AudioDeviceWatcher()
 
     init() {
         refreshDevices()
@@ -30,6 +31,14 @@ final class AppState {
         audioEngine.onRecovered = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.errorMessage = nil
+            }
+        }
+        // Picks up hardware plugged in after launch — e.g. an interface
+        // connected once the app is already running — without the user
+        // having to notice and hit Rescan themselves.
+        deviceWatcher.onChange = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.refreshDevices()
             }
         }
         if let saved = UserDefaults.standard.object(forKey: "selectedInputDeviceID") as? UInt32,
