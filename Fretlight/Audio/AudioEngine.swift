@@ -29,6 +29,7 @@ final class AudioEngine: @unchecked Sendable {
     private var playerNode: AVAudioPlayerNode?
     private let analysisRing = RingBuffer()
     private let monitorRing = RingBuffer()
+    private let sensitivity = SensitivitySettings()
     private var worker: AudioAnalysisWorker?
     private var monitorWorker: AudioMonitorWorker?
     var onUpdate: (@Sendable (PitchDisplayState) -> Void)?
@@ -101,7 +102,7 @@ final class AudioEngine: @unchecked Sendable {
         playback.connect(player, to: playback.mainMixerNode, format: monitorFormat)
         playback.mainMixerNode.outputVolume = monitorVolume
 
-        let analysis = AudioAnalysisWorker(ring: analysisRing)
+        let analysis = AudioAnalysisWorker(ring: analysisRing, sensitivity: sensitivity)
         let timebase = timebase
         analysis.onUpdate = { [weak self] state, captureTime in
             Task { @MainActor [weak self] in
@@ -222,6 +223,13 @@ final class AudioEngine: @unchecked Sendable {
         let inputExists = AudioDeviceEnumerator.inputDevices().contains { $0.id == inputID }
         let outputExists = AudioDeviceEnumerator.outputDevices().contains { $0.id == outputID }
         return !inputExists || !outputExists
+    }
+
+    /// Safe to call from any thread — SensitivitySettings does its own
+    /// locking, unlike currentMonitorVolume/playbackEngine below which need
+    /// the control queue's serialization.
+    func setSensitivity(_ value: Double) {
+        sensitivity.value = value
     }
 
     func setMonitorVolume(_ value: Float) {

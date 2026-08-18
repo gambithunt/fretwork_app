@@ -10,6 +10,7 @@ final class AppState {
     var selectedOutputDeviceID: AudioDeviceID?
     var monitorMuted = true { didSet { applyMonitorVolume() } }
     var monitorVolume: Double = 0.8 { didSet { applyMonitorVolume() } }
+    var sensitivity: Double = SensitivitySettings.defaultValue { didSet { applySensitivity() } }
     var display = PitchDisplayState()
     var errorMessage: String?
     private let audioEngine = AudioEngine()
@@ -43,6 +44,9 @@ final class AppState {
         } else {
             selectedOutputDeviceID = outputDevices.first?.id
         }
+        if let saved = UserDefaults.standard.object(forKey: "sensitivity") as? Double {
+            sensitivity = saved
+        }
     }
 
     func refreshDevices() {
@@ -70,6 +74,11 @@ final class AppState {
 
     private func applyMonitorVolume() {
         audioEngine.setMonitorVolume(monitorMuted ? 0 : Float(monitorVolume))
+    }
+
+    private func applySensitivity() {
+        audioEngine.setSensitivity(sensitivity)
+        UserDefaults.standard.set(sensitivity, forKey: "sensitivity")
     }
 
     func start() {

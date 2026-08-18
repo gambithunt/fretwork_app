@@ -5,6 +5,7 @@ import Darwin
 
 final class AudioAnalysisWorker: @unchecked Sendable {
     private let ring: RingBuffer
+    private let sensitivity: SensitivitySettings
     private let queue = DispatchQueue(label: "com.fretlight.analysis", qos: .userInitiated)
     private let detector = PitchDetector()
     private var window = Array(repeating: Float.zero, count: 2048)
@@ -17,7 +18,10 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     private var running: Int32 = 0
     var onUpdate: (@Sendable (PitchDisplayState, UInt64) -> Void)?
 
-    init(ring: RingBuffer) { self.ring = ring }
+    init(ring: RingBuffer, sensitivity: SensitivitySettings) {
+        self.ring = ring
+        self.sensitivity = sensitivity
+    }
 
     func start(sampleRate: Double, bufferSize: Int) {
         OSAtomicCompareAndSwap32Barrier(0, 1, &running)
@@ -43,14 +47,14 @@ final class AudioAnalysisWorker: @unchecked Sendable {
             let rms = window.withUnsafeBufferPointer { data -> Float in
                 var value: Float = 0; vDSP_rmsqv(data.baseAddress!, 1, &value, vDSP_Length(data.count)); return value
             }
-            let result = detector.detect(samples: window, sampleRate: sampleRate)
+            let result = detector.detect(samples: window, sampleRate: sampleRate, threshold: sensitivity.yinThreshold)
             let now = ContinuousClock.now
             guard now - lastPublish >= .milliseconds(33) else { continue }
             lastPublish = now
             let capture = ring.currentCaptureTime()
             var display = PitchDisplayState(level: rms, latencyMilliseconds: 0, bufferSize: bufferSize)
             var hasCurrentDetection = false
-            if let result, result.confidence > 0.78, let mapped = NoteMapper.map(frequency: result.frequency) {
+            if let result, result.confidence > sensitivity.confidenceThreshold, let mapped = NoteMapper.map(frequency: result.frequency) {
                 history.append(mapped.midiNote); if history.count > 5 { history.removeFirst() }
                 let median = history.sorted()[history.count / 2]
                 if lastMIDI == nil || abs(median - lastMIDI!) <= 1 || history.filter({ $0 == median }).count >= 3 { lastMIDI = median }

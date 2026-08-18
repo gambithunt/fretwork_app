@@ -48,6 +48,7 @@ struct ContentView: View {
             }
             routePicker("OUTPUT", devices: state.outputDevices, selection: state.selectedOutputDeviceID, action: state.selectOutputDevice)
             monitorControl
+            sensitivityControl
         }
     }
 
@@ -64,6 +65,19 @@ struct ContentView: View {
                 Slider(value: $state.monitorVolume, in: 0...1)
                     .frame(width: 118)
                     .disabled(state.monitorMuted)
+            }
+            .frame(height: 44)
+        }
+    }
+
+    private var sensitivityControl: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("SENSITIVITY").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(.secondary)
+                Slider(value: $state.sensitivity, in: 0...1)
+                    .frame(width: 118)
+                    .help("Strict: fewer false triggers on noisy signal. Lenient: catches weaker or quieter notes.")
             }
             .frame(height: 44)
         }

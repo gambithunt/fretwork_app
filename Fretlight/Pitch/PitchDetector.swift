@@ -9,7 +9,13 @@ final class PitchDetector: @unchecked Sendable {
     private var difference: [Float]
     private var cmndf: [Float]
     private var scratch: [Float]
-    private let threshold: Float = 0.12
+
+    /// The CMNDF cutoff below which a tau is accepted as period-like.
+    /// Lower is stricter (only very clean periodicity counts, fewer false
+    /// positives on noisy signals); higher is more lenient (catches weaker
+    /// or noisier signals, at the cost of more false positives). 0.12
+    /// matches the detector's original fixed behavior.
+    static let defaultThreshold: Float = 0.12
 
     init(maxWindowSize: Int = 2048) {
         difference = .init(repeating: 0, count: maxWindowSize / 2 + 1)
@@ -17,7 +23,7 @@ final class PitchDetector: @unchecked Sendable {
         scratch = .init(repeating: 0, count: maxWindowSize)
     }
 
-    func detect(samples: [Float], sampleRate: Double) -> PitchDetection? {
+    func detect(samples: [Float], sampleRate: Double, threshold: Float = PitchDetector.defaultThreshold) -> PitchDetection? {
         let count = samples.count
         guard count >= 256, sampleRate > 0 else { return nil }
         let maxTau = min(count / 2, Int(sampleRate / 65))
