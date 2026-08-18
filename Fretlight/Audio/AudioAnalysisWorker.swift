@@ -13,6 +13,8 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     private var history: [Int] = []
     private var lastMIDI: Int?
     private var lastFrequency: Double = 0
+    private var smoothedCents: Double?
+    private var smoothedCentsMIDI: Int?
     private var lastDetection: ContinuousClock.Instant?
     private var lastPublish = ContinuousClock.now
     private var running: Int32 = 0
@@ -71,12 +73,27 @@ final class AudioAnalysisWorker: @unchecked Sendable {
                 display.frequency = lastFrequency
                 display.note = NoteMapper.map(frequency: stableFrequency)
                 if var note = display.note {
-                    note = MappedNote(name: note.name, octave: note.octave, midiNote: note.midiNote, cents: 1200 * log2(lastFrequency / stableFrequency), positions: note.positions)
+                    let rawCents = 1200 * log2(lastFrequency / stableFrequency)
+                    // The needle was tracking this raw, per-frame value
+                    // directly — every frame's small pitch-estimation
+                    // jitter showed up immediately as visible twitch. An
+                    // exponential moving average smooths that out; it
+                    // resets when the locked note itself changes (rather
+                    // than persisting across it) so an actual note change
+                    // still reads as an immediate jump, not a slow glide
+                    // carrying the previous note's offset into the new one.
+                    if smoothedCentsMIDI != stable { smoothedCents = nil; smoothedCentsMIDI = stable }
+                    let smoothingFactor = 0.25
+                    let smoothed = smoothedCents.map { $0 + smoothingFactor * (rawCents - $0) } ?? rawCents
+                    smoothedCents = smoothed
+                    note = MappedNote(name: note.name, octave: note.octave, midiNote: note.midiNote, cents: smoothed, positions: note.positions)
                     display.note = note
                 }
             } else {
                 lastMIDI = nil
                 lastDetection = nil
+                smoothedCents = nil
+                smoothedCentsMIDI = nil
             }
             onUpdate?(display, capture)
         }

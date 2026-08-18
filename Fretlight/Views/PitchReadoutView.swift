@@ -18,7 +18,15 @@ struct TunerPanel: View {
             .frame(width: 145, alignment: .leading)
             Divider().frame(height: 96)
             VStack(spacing: 9) {
-                TunerGauge(cents: display.note?.cents).frame(height: 54)
+                // Even with the underlying cents value itself smoothed
+                // (AudioAnalysisWorker), each ~33ms update is still a
+                // discrete jump — TunerGauge being Animatable lets SwiftUI
+                // interpolate the drawn needle position between updates
+                // instead of snapping, which is most of what made this
+                // read as twitchy rather than a settling needle.
+                TunerGauge(displayCents: display.note?.cents ?? 0, isActive: display.note != nil)
+                    .frame(height: 54)
+                    .animation(.easeOut(duration: 0.18), value: display.note?.cents)
                 // A single Text whose *content* flips between "Listening…"
                 // and the cents readout — under the shared spring animation
                 // below — is exactly what produced the overlapping/garbled
@@ -55,8 +63,22 @@ struct TunerPanel: View {
     }
 }
 
-struct TunerGauge: View {
-    let cents: Double?
+struct TunerGauge: View, Animatable {
+    /// Non-optional and always in range, so this can be SwiftUI's
+    /// `animatableData` — `Double?` doesn't conform to `VectorArithmetic`,
+    /// so an Optional can't be interpolated directly. `isActive` (not part
+    /// of animatableData; a plain discrete toggle) carries whether there's
+    /// actually a note to report, for the needle's color/visibility.
+    var displayCents: Double
+    var isActive: Bool
+
+    // Animatable's requirement isn't itself @MainActor-isolated, but View's
+    // is, so conforming to both under strict concurrency needs an explicit
+    // nonisolated here — this is pure value access, nothing UI-touching.
+    nonisolated var animatableData: Double {
+        get { displayCents }
+        set { displayCents = newValue }
+    }
 
     /// Traffic-light zones: green at the center — the same ±8 cent "in
     /// tune" threshold used everywhere else this app judges tuning — fading
@@ -98,10 +120,10 @@ struct TunerGauge: View {
                     context.draw(Text("\(value > 0 ? "+" : "")\(value)").font(.caption2).foregroundColor(.secondary), at: CGPoint(x: x, y: 8))
                 }
             }
-            let value = max(-50, min(50, cents ?? 0))
+            let value = max(-50, min(50, displayCents))
             let x = left + (right - left) * CGFloat((value + 50) / 100)
             var needle = Path(); needle.move(to: CGPoint(x: x, y: y - 22)); needle.addLine(to: CGPoint(x: x, y: y + 14))
-            let needleColor: Color = cents == nil ? .secondary : Self.zoneColor(forCents: cents!)
+            let needleColor: Color = isActive ? Self.zoneColor(forCents: displayCents) : .secondary
             context.stroke(needle, with: .color(needleColor), lineWidth: 2.5)
         }
     }
