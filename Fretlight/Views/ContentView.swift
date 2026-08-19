@@ -27,97 +27,111 @@ struct ContentView: View {
         }
     }
 
+    // Every block in the top bar is laid out the same way: a fixed-height
+    // caption row above a fixed-height control row. Because the two heights
+    // are shared constants, all captions land on one line and all controls
+    // land on another, no matter what each control's natural size is — the
+    // pickers used to float above the buttons and sliders because only some
+    // of them pinned a height.
+    private enum HeaderMetrics {
+        static let captionRow: CGFloat = 13
+        static let controlRow: CGFloat = 32
+        static let gap: CGFloat = 6
+        static var blockHeight: CGFloat { captionRow + gap + controlRow }
+    }
+
     private var header: some View {
         // A plain sequential HStack, not a ZStack overlaying a centered
-        // signalPath on top of the title. Centering via ZStack doesn't
-        // reserve space for the title, so depending on width the two could
+        // signalPath on top of the brand. Centering via ZStack doesn't
+        // reserve space for the brand, so depending on width the two could
         // genuinely render on top of each other — that's what the garbled
         // "Fretwork"/"GP-200 Audio" overlap was. Laid out left-to-right,
         // overlap is structurally impossible: each element gets its own
         // space in sequence.
-        HStack(alignment: .top, spacing: 24) {
-            VStack(alignment: .leading, spacing: 5) {
-                // Invisible label matching signalPath's controls, so the
-                // title block sits at the exact same baseline as them
-                // instead of just "somewhere in the middle" of a taller row.
-                Text("FRETWORK").font(.caption2.weight(.medium)).foregroundStyle(.clear)
-                HStack(spacing: 10) {
-                    Text("Fretwork").font(.title2.weight(.bold))
-                    Label(state.errorMessage == nil ? "Listening" : "Reconnecting", systemImage: "circle.fill")
-                        .font(.callout).foregroundStyle(state.errorMessage == nil ? .green : .orange)
-                }
-                .frame(height: 44)
-            }
+        HStack(alignment: .center, spacing: 20) {
+            brand
+            Divider().frame(height: HeaderMetrics.controlRow)
             signalPath
             Spacer(minLength: 0)
         }
         .padding(.bottom, 8)
     }
 
+    private var brand: some View {
+        HStack(spacing: 10) {
+            // The app icon's lettering is the wordmark, so it stands in for
+            // the title outright. Sized to the full two-row height of the
+            // controls beside it so the emblem's script stays legible.
+            Image("Logo")
+                .resizable()
+                .scaledToFit()
+                .frame(height: HeaderMetrics.blockHeight)
+                .accessibilityLabel("Fretwork")
+            Label(state.errorMessage == nil ? "Listening" : "Reconnecting", systemImage: "circle.fill")
+                .font(.callout).foregroundStyle(state.errorMessage == nil ? .green : .orange)
+        }
+    }
+
     private var signalPath: some View {
         HStack(alignment: .top, spacing: 14) {
-            routePicker("INPUT", devices: state.inputDevices, selection: state.selectedInputDeviceID, action: state.selectInputDevice)
-            VStack(spacing: 5) {
-                Text("ROUTE").font(.caption2.weight(.medium)).foregroundStyle(.clear)
-                Image(systemName: "arrow.right").foregroundStyle(.secondary).frame(height: 44)
+            labeled("INPUT") {
+                DevicePickerView(title: "INPUT", devices: state.inputDevices, selection: state.selectedInputDeviceID, onSelect: state.selectInputDevice)
             }
-            routePicker("OUTPUT", devices: state.outputDevices, selection: state.selectedOutputDeviceID, action: state.selectOutputDevice)
-            rescanButton
-            monitorControl
-            sensitivityControl
+            labeled("") {
+                Image(systemName: "arrow.right").foregroundStyle(.secondary)
+            }
+            labeled("OUTPUT") {
+                DevicePickerView(title: "OUTPUT", devices: state.outputDevices, selection: state.selectedOutputDeviceID, onSelect: state.selectOutputDevice)
+            }
+            labeled("") { rescanButton }
+            labeled("MONITOR") { monitorControl }
+            labeled("SENSITIVITY") { sensitivityControl }
+        }
+    }
+
+    // Caption above control, both on their shared fixed rows. An empty label
+    // still reserves its row, which is how the unlabelled arrow and rescan
+    // button stay in line with the labelled controls.
+    private func labeled<Content: View>(_ caption: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: HeaderMetrics.gap) {
+            Text(caption)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(height: HeaderMetrics.captionRow, alignment: .bottom)
+            content()
+                .frame(height: HeaderMetrics.controlRow)
         }
     }
 
     private var rescanButton: some View {
-        VStack(spacing: 5) {
-            // Invisible label matching the other controls' caption row,
-            // so this button's icon sits at the same baseline as theirs.
-            Text("RESCAN").font(.caption2.weight(.medium)).foregroundStyle(.clear)
-            Button { state.refreshDevices() } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.bordered)
-            .tint(.secondary)
-            .help("Rescan for input/output devices connected since launch")
-            .frame(height: 44)
+        Button { state.refreshDevices() } label: {
+            Image(systemName: "arrow.clockwise")
         }
+        .buttonStyle(.bordered)
+        .tint(.secondary)
+        .help("Rescan for input/output devices connected since launch")
     }
 
     private var monitorControl: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("MONITOR").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                Button { state.monitorMuted.toggle() } label: {
-                    Image(systemName: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
-                }
-                .buttonStyle(.bordered)
-                .tint(.secondary)
-                .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
-                Slider(value: $state.monitorVolume, in: 0...1)
-                    .frame(width: 118)
-                    .disabled(state.monitorMuted)
+        HStack(spacing: 8) {
+            Button { state.monitorMuted.toggle() } label: {
+                Image(systemName: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
             }
-            .frame(height: 44)
+            .buttonStyle(.bordered)
+            .tint(.secondary)
+            .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
+            Slider(value: $state.monitorVolume, in: 0...1)
+                .frame(width: 118)
+                .disabled(state.monitorMuted)
         }
     }
 
     private var sensitivityControl: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("SENSITIVITY").font(.caption2.weight(.medium)).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(.secondary)
-                Slider(value: $state.sensitivity, in: 0...1)
-                    .frame(width: 118)
-                    .help("Strict: fewer false triggers on noisy signal. Lenient: catches weaker or quieter notes.")
-            }
-            .frame(height: 44)
-        }
-    }
-
-    private func routePicker(_ label: String, devices: [AudioDevice], selection: AudioDeviceID?, action: @escaping (AudioDeviceID?) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
-            DevicePickerView(title: label, devices: devices, selection: selection, onSelect: action)
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(.secondary)
+            Slider(value: $state.sensitivity, in: 0...1)
+                .frame(width: 118)
+                .help("Strict: fewer false triggers on noisy signal. Lenient: catches weaker or quieter notes.")
         }
     }
 
