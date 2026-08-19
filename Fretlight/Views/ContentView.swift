@@ -120,16 +120,15 @@ struct ContentView: View {
             .buttonStyle(.bordered)
             .tint(.secondary)
             .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
-            Slider(value: $state.monitorVolume, in: 0...1)
+            RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
                 .frame(width: 118)
-                .disabled(state.monitorMuted)
         }
     }
 
     private var sensitivityControl: some View {
         HStack(spacing: 8) {
             Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(.secondary)
-            Slider(value: $state.sensitivity, in: 0...1)
+            RulerSlider(value: $state.sensitivity)
                 .frame(width: 118)
                 .help("Strict: fewer false triggers on noisy signal. Lenient: catches weaker or quieter notes.")
         }
