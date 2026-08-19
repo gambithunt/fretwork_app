@@ -137,8 +137,20 @@ struct ContentView: View {
     private var telemetry: some View {
         HStack(spacing: 24) {
             Label("\(state.display.bufferSize) frames", systemImage: "waveform")
+                .help("Hardware IO buffer actually in force on the input device.")
             Divider().frame(height: 20)
             Label(String(format: "%.1f ms", state.display.latencyMilliseconds), systemImage: "timer")
+            Divider().frame(height: 20)
+            Label(state.display.isDirectMonitoring ? "Direct" : "Buffered",
+                  systemImage: state.display.isDirectMonitoring ? "bolt.fill" : "arrow.triangle.swap")
+                .help(state.display.isDirectMonitoring
+                      ? "One device, one clock: monitoring stays inside a single render graph."
+                      : "Input and output are separate devices, so audio is buffered between them, which costs noticeable delay.")
+            if let candidate = state.directMonitoringCandidate {
+                Button("Monitor through \(candidate.name)") { state.useInputDeviceForOutput() }
+                    .buttonStyle(.link)
+                    .help("Play back through the same device the guitar comes in on. Capture and playback then share one clock, which removes most of the monitoring delay.")
+            }
         }
         .font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(maxWidth: .infinity)
     }

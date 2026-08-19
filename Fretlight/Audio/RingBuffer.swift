@@ -43,6 +43,25 @@ final class RingBuffer: @unchecked Sendable {
         return true
     }
 
+    /// Reads up to `count` frames, returning how many were copied. A render
+    /// callback needs this rather than the all-or-nothing `read`: when capture
+    /// is briefly behind it should play what exists and pad the remainder,
+    /// not discard a whole block that is mostly good audio.
+    func readPartial(into destination: UnsafeMutablePointer<Float>, count: Int) -> Int {
+        let read = Int(OSAtomicAdd32Barrier(0, &readIndex))
+        let write = Int(OSAtomicAdd32Barrier(0, &writeIndex))
+        let available = min(count, write - read)
+        guard available > 0 else { return 0 }
+        for index in 0..<available { destination[index] = samples[(read + index) % capacity] }
+        OSAtomicAdd32Barrier(Int32(available), &readIndex)
+        return available
+    }
+
+    /// Frames captured but not yet played. Reader-side only.
+    func backlogFrames() -> Int {
+        Int(OSAtomicAdd32Barrier(0, &writeIndex)) - Int(OSAtomicAdd32Barrier(0, &readIndex))
+    }
+
     func currentCaptureTime() -> UInt64 { UInt64(bitPattern: OSAtomicAdd64Barrier(0, &latestCaptureTime)) }
 
     /// Bounds how far the reader can fall behind the writer. Without this,
