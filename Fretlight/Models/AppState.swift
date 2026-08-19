@@ -12,8 +12,14 @@ final class AppState {
     var monitorVolume: Double = 0.8 { didSet { applyMonitorVolume() } }
     var sensitivity: Double = SensitivitySettings.defaultValue { didSet { applySensitivity() } }
     var display = PitchDisplayState()
+    /// Where the current note is most likely being played, best candidate
+    /// first. Derived here rather than on the analysis thread because it
+    /// depends on playing history, not on the audio.
+    private(set) var fretPositions: [RankedPosition] = []
     var errorMessage: String?
     private let audioEngine = AudioEngine()
+    private let resolver = FretPositionResolver()
+    private var resolvedMIDI: Int?
     private let deviceWatcher = AudioDeviceWatcher()
     /// What the user actually chose. `selectedInput/OutputDeviceID` is only a
     /// resolution of these against whatever is plugged in right now.
@@ -24,7 +30,9 @@ final class AppState {
         refreshDevices()
         audioEngine.onUpdate = { [weak self] update in
             Task { @MainActor [weak self] in
-                self?.display = update
+                guard let self else { return }
+                self.display = update
+                self.resolvePositions(for: update.note)
             }
         }
         audioEngine.onError = { [weak self] message in
@@ -138,6 +146,21 @@ final class AppState {
     }
 
     func retryAudio() { start() }
+
+    /// The analysis worker republishes the held note about thirty times a
+    /// second, but only a genuine change of note is a new event to score —
+    /// feeding it every frame would let one sustained note walk the resolver's
+    /// hand-position estimate along the neck.
+    private func resolvePositions(for note: MappedNote?) {
+        guard let note else {
+            fretPositions = []
+            resolvedMIDI = nil
+            return
+        }
+        guard note.midiNote != resolvedMIDI else { return }
+        resolvedMIDI = note.midiNote
+        fretPositions = resolver.resolve(midiNote: note.midiNote)
+    }
 
     deinit { audioEngine.stop() }
 }

@@ -2,13 +2,19 @@ import SwiftUI
 
 struct FretboardView: View {
     let note: MappedNote?
+    /// Every position the note could be played at, the resolver's pick first.
+    /// All of them are drawn identically for now: the ranking is computed and
+    /// carried here, but not yet expressed visually.
+    let positions: [RankedPosition]
     private let frets = 22
     private var activeMarkers: [ActiveFretMarker] {
         guard let note else { return [] }
-        return note.positions.sorted {
-            $0.string == $1.string ? $0.fret < $1.fret : $0.string < $1.string
+        return positions.sorted {
+            $0.position.string == $1.position.string
+                ? $0.position.fret < $1.position.fret
+                : $0.position.string < $1.position.string
         }
-        .map { ActiveFretMarker(noteMIDI: note.midiNote, position: $0) }
+        .map { ActiveFretMarker(noteMIDI: note.midiNote, position: $0.position) }
     }
 
     var body: some View {
@@ -118,13 +124,14 @@ private struct MarkerMotionModifier: ViewModifier {
 
 private struct NoteMarker: View {
     let note: MappedNote
+    private var tint: Color { NotePalette.color(for: note.name) }
     var body: some View {
         Text("\(note.name)\(note.octave)")
             .font(.caption2.weight(.bold))
             .foregroundStyle(.white)
             .frame(width: 31, height: 31)
-            .background(NotePalette.color(for: note.name), in: Circle())
+            .background(tint, in: Circle())
             .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1))
-            .shadow(color: NotePalette.color(for: note.name).opacity(0.65), radius: 8)
+            .shadow(color: tint.opacity(0.65), radius: 8)
     }
 }

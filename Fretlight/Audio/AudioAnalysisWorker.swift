@@ -86,7 +86,7 @@ final class AudioAnalysisWorker: @unchecked Sendable {
                     let smoothingFactor = 0.25
                     let smoothed = smoothedCents.map { $0 + smoothingFactor * (rawCents - $0) } ?? rawCents
                     smoothedCents = smoothed
-                    note = MappedNote(name: note.name, octave: note.octave, midiNote: note.midiNote, cents: smoothed, positions: note.positions)
+                    note = MappedNote(name: note.name, octave: note.octave, midiNote: note.midiNote, cents: smoothed)
                     display.note = note
                 }
             } else {

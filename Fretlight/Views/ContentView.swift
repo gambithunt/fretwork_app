@@ -15,7 +15,7 @@ struct ContentView: View {
             // fixed height, but never shrinks below a size that keeps the
             // fret labels and note markers legible — FretworkApp's minHeight
             // is sized so the rest of this VStack plus this floor always fit.
-            FretboardView(note: state.display.note).frame(minHeight: 260, maxHeight: .infinity)
+            FretboardView(note: state.display.note, positions: state.fretPositions).frame(minHeight: 260, maxHeight: .infinity)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
