@@ -11,6 +11,7 @@ struct ContentView: View {
             TunerPanel(mode: state.detectionMode, display: state.display, chord: state.chordDisplay)
             InputLevelPanel(level: state.display.level)
             telemetry
+            fretboardControls
             // Grows to take up whatever's left in the window rather than a
             // fixed height, but never shrinks below a size that keeps the
             // fret labels and note markers legible — FretworkApp's minHeight
@@ -18,7 +19,7 @@ struct ContentView: View {
             // Stays mounted across both modes — Chords mode draws the
             // detected chord's shape here instead of hiding the board, so
             // switching modes never collapses the layout.
-            FretboardView(mode: state.detectionMode, note: state.display.note, positions: state.fretPositions, chord: state.chordDisplay.chord)
+            FretboardView(mode: state.detectionMode, note: state.display.note, positions: state.fretPositions, chord: state.chordDisplay.chord, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260, maxHeight: .infinity)
         }
         .padding(24)
@@ -170,6 +171,30 @@ struct ContentView: View {
             }
         }
         .font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+    }
+
+    // A sequential HStack with a trailing Spacer, not a leading-aligned
+    // frame — same reasoning as `header`: this reserves the button its own
+    // space on the left rather than relying on alignment to keep it there.
+    // A button naming the current top string, not a switch: it reads as one
+    // action to take rather than a state to parse, and at `.callout`/
+    // `.small` it sits at the same visual weight as `telemetry` right below
+    // it instead of towering over that row the way a full-size native
+    // switch did.
+    private var fretboardControls: some View {
+        HStack {
+            Button {
+                state.isFretboardFlipped.toggle()
+            } label: {
+                Label(state.isFretboardFlipped ? "High E on top" : "Low E on top", systemImage: "arrow.up.arrow.down")
+                    .font(.callout)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.secondary)
+            .help("Flip the fretboard: swap which string draws at the top.")
+            Spacer(minLength: 0)
+        }
     }
 
     private func audioErrorBanner(_ message: String) -> some View {

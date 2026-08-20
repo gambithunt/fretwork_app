@@ -8,6 +8,10 @@ struct FretboardView: View {
     let positions: [RankedPosition]
     /// Only consulted in `.chords` mode.
     let chord: ChordMatch?
+    /// Display orientation only. `GuitarTuning`'s string indices (0 = Low E
+    /// ... 5 = High E) never change; this just tells `BoardGeometry` which
+    /// screen row to draw each index at.
+    let flipped: Bool
     private let frets = 22
     /// The frets a real neck marks with inlays. Drawn as a darker bar behind
     /// the whole column rather than as dots of their own — the grid is already
@@ -20,10 +24,12 @@ struct FretboardView: View {
     private static let fretLineWidth: CGFloat = 1
 
     /// Notes mode marks every place the one detected note could be played,
-    /// the resolver's pick first; chords mode marks the one-fret-per-string
-    /// shape `ChordShapeResolver` reaches for. Different sources, same
-    /// marker so the rest of the view (layout, animation, drawing) doesn't
-    /// need to know which mode it's in.
+    /// the resolver's pick first; chords mode marks every open-position
+    /// chord tone `ChordShapeResolver` finds, which can be more than one
+    /// per string — chroma can't tell which exact voicing was strummed, so
+    /// rather than guess one shape this shows every reachable one. Different
+    /// sources, same marker so the rest of the view (layout, animation,
+    /// drawing) doesn't need to know which mode it's in.
     private var activeMarkers: [ActiveFretMarker] {
         switch mode {
         case .notes:
@@ -62,7 +68,7 @@ struct FretboardView: View {
 
     var body: some View {
         Canvas { context, size in
-            let geometry = BoardGeometry(size: size, frets: frets)
+            let geometry = BoardGeometry(size: size, frets: frets, flipped: flipped)
             context.fill(
                 Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 14),
                 with: .color(Color(red: 0.085, green: 0.085, blue: 0.105))
@@ -80,21 +86,22 @@ struct FretboardView: View {
         }
         .overlay {
             GeometryReader { proxy in
-                let geometry = BoardGeometry(size: proxy.size, frets: frets)
+                let geometry = BoardGeometry(size: proxy.size, frets: frets, flipped: flipped)
+                // Markers in the board's bottom half enter one string closer
+                // to center and slide down/outward into their own row, then
+                // retreat back toward center when they disappear; markers in
+                // the top half do the opposite. Compared against the board's
+                // own mid-Y (not a fixed string index) so this still picks
+                // the right direction whichever string `flipped` put on top.
+                // Each marker's start/end Y is computed as an absolute
+                // position (not an offset layered on top of a
+                // separately-fixed position), so the two ends of the
+                // animation are exactly one string apart with nothing else
+                // able to pull it toward the board's center.
+                let midY = (geometry.y(string: 0) + geometry.y(string: 5)) / 2
                 ForEach(activeMarkers) { marker in
                     let point = geometry.point(marker.position)
-                    // The display runs Low E at the top through High E at
-                    // the bottom. Treble strings (G, B, High E — index 3
-                    // and up) enter from the string immediately above and
-                    // slide down into place, then retreat back up when
-                    // they disappear; bass strings (Low E, A, D) do the
-                    // opposite. Each marker's start/end Y is computed as
-                    // an absolute position (not an offset layered on top
-                    // of a separately-fixed position), so the two ends of
-                    // the animation are exactly one string apart with
-                    // nothing else able to pull it toward the board's
-                    // center.
-                    let startY = marker.position.string >= 3
+                    let startY = point.y > midY
                         ? point.y - geometry.stringSpacing
                         : point.y + geometry.stringSpacing
                     NoteMarker(label: marker.label, tint: marker.tint)
@@ -213,10 +220,15 @@ struct FretboardView: View {
 private struct BoardGeometry {
     let board: CGRect
     let columns: Int
+    /// When true, string 0 (Low E) draws at the bottom row and string 5
+    /// (High E) at the top — every other draw call routes through `y(string:)`
+    /// so this one flag is the entire flip.
+    let flipped: Bool
 
-    init(size: CGSize, frets: Int) {
+    init(size: CGSize, frets: Int, flipped: Bool) {
         board = CGRect(x: 62, y: 34, width: size.width - 62, height: size.height - 38)
         columns = frets + 1
+        self.flipped = flipped
     }
 
     /// Fret 0 (open) is a column of the grid like any other, rather than a
@@ -225,7 +237,8 @@ private struct BoardGeometry {
         board.minX + board.width * (CGFloat(fret) + 0.5) / CGFloat(columns)
     }
     func y(string: Int) -> CGFloat {
-        board.minY + board.height * (CGFloat(string) + 0.5) / 6
+        let row = flipped ? 5 - string : string
+        return board.minY + board.height * (CGFloat(row) + 0.5) / 6
     }
     func point(_ position: FretPosition) -> CGPoint {
         CGPoint(x: x(fret: position.fret), y: y(string: position.string))

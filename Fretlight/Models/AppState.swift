@@ -25,6 +25,11 @@ final class AppState {
     /// is looking at.
     var detectionMode: DetectionMode = .notes { didSet { audioEngine.setChordDetectionEnabled(detectionMode == .chords) } }
     var chordDisplay = ChordDisplayState()
+    /// Purely a display orientation for `FretboardView` — doesn't touch the
+    /// pitch pipeline or `GuitarTuning`'s string indices, just which row
+    /// `BoardGeometry` draws each index at. Left un-persisted, same as
+    /// `detectionMode`: a per-session display choice, not a saved setting.
+    var isFretboardFlipped = false
     /// Where the current note is most likely being played, best candidate
     /// first. Derived here rather than on the analysis thread because it
     /// depends on playing history, not on the audio.
