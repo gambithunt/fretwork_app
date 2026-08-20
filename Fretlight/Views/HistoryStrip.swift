@@ -24,10 +24,23 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
     let onClear: () -> Void
 
     var body: some View {
-        // Collapses to nothing on a fresh session rather than showing an
-        // empty track — there's nothing useful to fill the row with yet.
-        if !history.isEmpty {
-            HStack(spacing: 8) {
+        // The row is reserved whether or not there is anything in it. It used
+        // to collapse to nothing on a fresh session, which meant the first
+        // note played shoved the fretboard down — and since the strip fills
+        // within seconds of playing, the empty state it was optimising for is
+        // the one nobody spends any time in. An empty track costs a blank
+        // 40pt; a board that jumps under the player's eyes costs more.
+        ZStack(alignment: .leading) {
+            Color.clear
+            if !history.isEmpty {
+                strip
+            }
+        }
+        .frame(height: 40)
+    }
+
+    private var strip: some View {
+        HStack(spacing: 8) {
                 GeometryReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 0) {
@@ -56,8 +69,6 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
                     .animation(.easeInOut(duration: 0.32), value: history.map(\.id))
                 }
                 clearButton
-            }
-            .frame(height: 40)
         }
     }
 

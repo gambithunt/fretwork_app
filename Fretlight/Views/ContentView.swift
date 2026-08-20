@@ -11,12 +11,10 @@ struct ContentView: View {
             TunerPanel(mode: state.detectionMode, display: state.display, chord: state.chordDisplay)
             InputLevelPanel(level: state.display.level)
             telemetry
-            fretboardControls
-            // Directly above the board it controls, not wedged into the
-            // telemetry/fretboardControls block above — both this strip and
-            // the board are about "what's shown below," so keeping them
-            // adjacent keeps that causal pair visually together. One strip
-            // per mode, same component, different entry type.
+            // The strip sits under the readouts and the flip control sits
+            // directly above the board it flips, so each control is adjacent
+            // to what it acts on. One strip per mode, same component,
+            // different entry type.
             switch state.detectionMode {
             case .chords:
                 HistoryStrip(
@@ -39,6 +37,7 @@ struct ContentView: View {
                     onClear: { state.clearNoteHistory() }
                 )
             }
+            fretboardControls
             // Grows to take up whatever's left in the window rather than a
             // fixed height, but never shrinks below a size that keeps the
             // fret labels and note markers legible — FretworkApp's minHeight
