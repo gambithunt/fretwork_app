@@ -61,9 +61,16 @@ final class AudioEngine: @unchecked Sendable {
     private var monitorMixer: AVAudioMixerNode?
     private let analysisRing = RingBuffer()
     private let monitorRing = RingBuffer()
+    private let chordRing = RingBuffer()
     private let sensitivity = SensitivitySettings()
     private var worker: AudioAnalysisWorker?
+    private var chordWorker: ChordAnalysisWorker?
+    /// Persists across a device-change restart, which tears the worker down
+    /// and rebuilds it — this is what tells the new one whether it should
+    /// pick back up where the toggle left it.
+    private var chordDetectionEnabled = false
     var onUpdate: (@Sendable (PitchDisplayState) -> Void)?
+    var onChordUpdate: (@Sendable (ChordDisplayState) -> Void)?
     var onError: (@Sendable (String) -> Void)?
     var onRecovered: (@Sendable () -> Void)?
     private var timebase = mach_timebase_info_data_t()
@@ -163,7 +170,7 @@ final class AudioEngine: @unchecked Sendable {
         // unit but AVAudioEngine caches the node's format and never re-reads
         // it, so the two ends disagree.
         let mixer = engine.mainMixerNode
-        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: nil)
+        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing)
         engine.attach(sink.node)
         // One source, two destinations: the mixer carries what is heard, the
         // sink feeds the detector. Neither can delay the other.
@@ -174,6 +181,7 @@ final class AudioEngine: @unchecked Sendable {
 
         let frames = AudioDeviceEnumerator.bufferFrameSize(deviceID).map(Int.init) ?? 512
         let analysis = makeAnalysisWorker(directMonitoring: true)
+        let chord = makeChordWorker()
         captureSink = sink
 
         engine.prepare()
@@ -188,6 +196,7 @@ final class AudioEngine: @unchecked Sendable {
         monitorMixer = mixer
         observeConfigurationChanges(of: engine)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
+        chord.start(sampleRate: hardwareFormat.sampleRate)
     }
 
     // MARK: - Split
@@ -221,7 +230,8 @@ final class AudioEngine: @unchecked Sendable {
         playback.mainMixerNode.outputVolume = monitorVolume
 
         let analysis = makeAnalysisWorker(directMonitoring: false)
-        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: monitorRing)
+        let chord = makeChordWorker()
+        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: monitorRing, chordRing: chordRing)
         capture.attach(sink.node)
         capture.connect(input, to: sink.node, format: hardwareFormat)
         captureSink = sink
@@ -245,6 +255,7 @@ final class AudioEngine: @unchecked Sendable {
         observeConfigurationChanges(of: capture)
         observeConfigurationChanges(of: playback)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
+        chord.start(sampleRate: hardwareFormat.sampleRate)
     }
 
     // MARK: - Shared graph pieces
@@ -271,6 +282,29 @@ final class AudioEngine: @unchecked Sendable {
         }
         worker = analysis
         return analysis
+    }
+
+    /// Built and started alongside `worker` on every graph (re)build, same
+    /// as it, but whether it actually costs anything is controlled
+    /// separately by `setChordDetectionEnabled` — see `ChordAnalysisWorker`.
+    private func makeChordWorker() -> ChordAnalysisWorker {
+        let chord = ChordAnalysisWorker(ring: chordRing)
+        chord.onUpdate = { [weak self] state in
+            Task { @MainActor [weak self] in self?.onChordUpdate?(state) }
+        }
+        chord.setEnabled(chordDetectionEnabled)
+        chordWorker = chord
+        return chord
+    }
+
+    /// Safe to call from any thread — both the stored flag write and the
+    /// worker's own flag are atomic-guarded internally.
+    func setChordDetectionEnabled(_ value: Bool) {
+        controlQueue.async { [weak self] in
+            guard let self else { return }
+            self.chordDetectionEnabled = value
+            self.chordWorker?.setEnabled(value)
+        }
     }
 
     /// A USB interface — especially a DSP-heavy one like a modeling
@@ -377,11 +411,13 @@ final class AudioEngine: @unchecked Sendable {
         configChangeObservers.forEach(NotificationCenter.default.removeObserver)
         configChangeObservers.removeAll()
         worker?.stop()
+        chordWorker?.stop()
         captureEngine?.stop()
         captureEngine?.reset()
         playbackEngine?.stop()
         playbackEngine?.reset()
         worker = nil
+        chordWorker = nil
         monitorRenderer = nil
         captureSink = nil
         inputNode = nil

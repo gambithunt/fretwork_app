@@ -2,6 +2,11 @@ import Foundation
 import Observation
 import CoreAudio
 
+enum DetectionMode: String, CaseIterable, Sendable {
+    case notes = "Notes"
+    case chords = "Chords"
+}
+
 @MainActor @Observable
 final class AppState {
     var inputDevices: [AudioDevice] = []
@@ -12,6 +17,14 @@ final class AppState {
     var monitorVolume: Double = 0.8 { didSet { applyMonitorVolume() } }
     var sensitivity: Double = SensitivitySettings.defaultValue { didSet { applySensitivity() } }
     var display = PitchDisplayState()
+    /// Notes and chords are read differently enough (a dialed-in single
+    /// pitch vs. a held chord shape) that showing both readouts at once is
+    /// clutter, not information — so this is exclusive, not an additive
+    /// toggle. It also gates whether `ChordAnalysisWorker` does any work at
+    /// all: an idle Notes-mode session shouldn't pay for a detector nobody
+    /// is looking at.
+    var detectionMode: DetectionMode = .notes { didSet { audioEngine.setChordDetectionEnabled(detectionMode == .chords) } }
+    var chordDisplay = ChordDisplayState()
     /// Where the current note is most likely being played, best candidate
     /// first. Derived here rather than on the analysis thread because it
     /// depends on playing history, not on the audio.
@@ -43,6 +56,11 @@ final class AppState {
         audioEngine.onUpdate = { [weak self] update in
             Task { @MainActor [weak self] in
                 self?.publish(update)
+            }
+        }
+        audioEngine.onChordUpdate = { [weak self] update in
+            Task { @MainActor [weak self] in
+                self?.chordDisplay = update
             }
         }
         audioEngine.onError = { [weak self] message in

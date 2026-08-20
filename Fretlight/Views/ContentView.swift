@@ -8,14 +8,25 @@ struct ContentView: View {
         VStack(spacing: 14) {
             header
             if let error = state.errorMessage { audioErrorBanner(error) }
-            TunerPanel(display: state.display)
+            switch state.detectionMode {
+            case .notes:
+                TunerPanel(display: state.display)
+            case .chords:
+                ChordPanel(chord: state.chordDisplay)
+            }
             InputLevelPanel(level: state.display.level)
             telemetry
-            // Grows to take up whatever's left in the window rather than a
-            // fixed height, but never shrinks below a size that keeps the
-            // fret labels and note markers legible — FretworkApp's minHeight
-            // is sized so the rest of this VStack plus this floor always fit.
-            FretboardView(note: state.display.note, positions: state.fretPositions).frame(minHeight: 260, maxHeight: .infinity)
+            // Fret positions only mean something for a single resolved note
+            // — a strummed chord's spectrum has no one fretboard shape to
+            // point at, so the board stays a Notes-mode view.
+            if state.detectionMode == .notes {
+                // Grows to take up whatever's left in the window rather than
+                // a fixed height, but never shrinks below a size that keeps
+                // the fret labels and note markers legible — FretworkApp's
+                // minHeight is sized so the rest of this VStack plus this
+                // floor always fit.
+                FretboardView(note: state.display.note, positions: state.fretPositions).frame(minHeight: 260, maxHeight: .infinity)
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -86,6 +97,7 @@ struct ContentView: View {
             labeled("") { rescanButton }
             labeled("MONITOR") { monitorControl }
             labeled("SENSITIVITY") { sensitivityControl }
+            labeled("DETECT") { detectionModeControl }
         }
     }
 
@@ -123,6 +135,18 @@ struct ContentView: View {
             RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
                 .frame(width: 118)
         }
+    }
+
+    private var detectionModeControl: some View {
+        Picker("Detection mode", selection: $state.detectionMode) {
+            ForEach(DetectionMode.allCases, id: \.self) { mode in
+                Text(mode.rawValue).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 130)
+        .help("Notes: tune one string at a time. Chords: name what's strummed.")
     }
 
     private var sensitivityControl: some View {

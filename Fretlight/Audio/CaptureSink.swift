@@ -21,7 +21,13 @@ final class CaptureSink {
 
     /// - Parameter monitorRing: nil on the duplex path, where monitoring is a
     ///   direct connection in the render graph and nothing needs buffering.
-    init(analysisRing: RingBuffer, monitorRing: RingBuffer?) {
+    /// - Parameter chordRing: its own ring rather than a second reader on
+    ///   `analysisRing` — `RingBuffer` is strictly single-consumer. Written
+    ///   unconditionally, same as `monitorRing`; `ChordAnalysisWorker` is
+    ///   what decides whether anything is actually draining it, so an idle
+    ///   Notes-mode session costs one more `write` call per render block,
+    ///   not a second detector running.
+    init(analysisRing: RingBuffer, monitorRing: RingBuffer?, chordRing: RingBuffer) {
         node = AVAudioSinkNode { _, frameCount, audioBufferList in
             let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: audioBufferList))
             // Channel 0 of a deinterleaved capture. Multi-channel interfaces
@@ -32,6 +38,7 @@ final class CaptureSink {
             let count = Int(frameCount)
             analysisRing.write(source, count: count, captureTime: captureTime)
             monitorRing?.write(source, count: count, captureTime: captureTime)
+            chordRing.write(source, count: count, captureTime: captureTime)
             return noErr
         }
     }
