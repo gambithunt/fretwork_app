@@ -50,11 +50,12 @@ final class AppState {
     /// studying a past shape would be undone by the player's own next strum.
     var pinnedChordHistoryID: UUID?
     /// Distinct notes the player has actually fretted, most recent last.
-    /// Appended from `resolvePositions` at the same point a genuine note
-    /// change is detected, so this needs no dedup logic of its own the way
-    /// chord history does — a sustained note republishes through `publish`
-    /// far more often than it changes, but `resolvePositions` only runs its
-    /// body on an actual change.
+    /// Appended from `resolvePositions` after a short settle window (see
+    /// `scheduleHistoryAppend`) — the raw pitch estimate can swing through a
+    /// wrong harmonic/octave for a few hops during a pluck's attack before
+    /// settling, and each swing is a genuine midiNote change, so logging
+    /// immediately on every change would turn one pluck into several
+    /// history entries.
     private(set) var noteHistory: [NoteHistoryEntry] = []
     private static let noteHistoryLimit = 10
     /// Set when the player taps a note-history chip to hold that note's
@@ -313,6 +314,29 @@ final class AppState {
         noteHistory = Self.appending(note, positions: positions, to: noteHistory, limit: Self.noteHistoryLimit)
     }
 
+    /// Debounces history logging against pitch-detector jitter around a
+    /// pluck's attack transient, where the raw estimate can briefly swing
+    /// through a wrong harmonic or an adjacent octave before settling on the
+    /// true pitch. Each swing is a genuine midiNote change as far as
+    /// `resolvePositions` is concerned, so without this a single pluck could
+    /// log two or three history entries instead of one. Mirrors the settle
+    /// window `ChordAnalysisWorker` already uses for the same reason on the
+    /// chord side. Only the note still current after the window gets
+    /// logged; the live fretboard/tuner readout is untouched by this and
+    /// stays instant.
+    private static let noteHistorySettle = Duration.milliseconds(90)
+    private var pendingHistoryTask: Task<Void, Never>?
+
+    private func scheduleHistoryAppend(_ note: MappedNote, positions: [RankedPosition]) {
+        pendingHistoryTask?.cancel()
+        let targetMIDI = note.midiNote
+        pendingHistoryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.noteHistorySettle)
+            guard !Task.isCancelled, let self, self.resolvedMIDI == targetMIDI else { return }
+            self.appendToNoteHistory(note, positions: positions)
+        }
+    }
+
     /// Pure dedup+cap step, mirroring `appending(_:to:limit:)` for chords.
     /// The dedup guard here is a defensive backstop, not the primary
     /// mechanism — `resolvePositions` already only calls this on a genuine
@@ -329,12 +353,14 @@ final class AppState {
         guard let note else {
             fretPositions = []
             resolvedMIDI = nil
+            pendingHistoryTask?.cancel()
+            pendingHistoryTask = nil
             return
         }
         guard note.midiNote != resolvedMIDI else { return }
         resolvedMIDI = note.midiNote
         fretPositions = resolver.resolve(midiNote: note.midiNote)
-        appendToNoteHistory(note, positions: fretPositions)
+        scheduleHistoryAppend(note, positions: fretPositions)
     }
 
     deinit { audioEngine.stop() }

@@ -5,6 +5,13 @@ import SwiftUI
 /// it onto the fretboard in place of the live feed; tapping the same chip
 /// again releases it. Generic over the entry type so both modes share one
 /// component instead of two near-identical views.
+///
+/// Spread edge-to-edge with spacers between chips rather than packed to the
+/// leading edge in a horizontal scroll: the history is capped (see
+/// `AppState.chordHistoryLimit`/`noteHistoryLimit`), and the window's own
+/// minimum width comfortably fits that many chips, so there's no case where
+/// this actually needs to scroll — packing them left just left most of the
+/// row visibly unused.
 struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
     let history: [Entry]
     let pinnedID: UUID?
@@ -16,29 +23,25 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
 
     var body: some View {
         // Collapses to nothing on a fresh session rather than showing an
-        // empty track — there's nothing useful to scroll through yet.
+        // empty track — there's nothing useful to fill the row with yet.
         if !history.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                ScrollViewReader { proxy in
-                    HStack(spacing: 8) {
-                        ForEach(history) { entry in
-                            chip(entry)
-                        }
-                    }
-                    // Keeps the newest entry in view as the log grows,
-                    // without the player having to scroll to see what they
-                    // just played.
-                    .onChange(of: history.count) { _, _ in
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(history.last?.id, anchor: .trailing)
-                        }
-                    }
-                    .onAppear {
-                        proxy.scrollTo(history.last?.id, anchor: .trailing)
+            HStack(spacing: 0) {
+                ForEach(Array(history.enumerated()), id: \.element.id) { index, entry in
+                    chip(entry)
+                        .transition(.opacity.combined(with: .scale(scale: 0.7)))
+                    if index < history.count - 1 {
+                        Spacer(minLength: 8)
                     }
                 }
             }
+            .frame(maxWidth: .infinity)
             .frame(height: 40)
+            // The oldest chip falls off the front the moment the cap is
+            // exceeded (see `AppState.appending`), which without an explicit
+            // animation would just pop out of existence on the next redraw.
+            // Keying on the id sequence (not just count) means this also
+            // fires for the ordinary case of a chip fading in at the end.
+            .animation(.easeInOut(duration: 0.32), value: history.map(\.id))
         }
     }
 
@@ -59,7 +62,6 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
                 .opacity(isPinned ? 1 : 0.72)
         }
         .buttonStyle(.plain)
-        .id(entry.id)
         .help(isPinned ? "Showing this \(noun)'s shape — tap again to follow live" : "Hold this \(noun)'s shape on the fretboard")
     }
 }
