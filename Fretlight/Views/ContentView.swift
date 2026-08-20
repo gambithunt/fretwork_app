@@ -152,12 +152,28 @@ struct ContentView: View {
         }
     }
 
+    /// Laid out against the widest value it can show, with the live value
+    /// overlaid on top. A digit appearing or disappearing used to re-lay-out
+    /// the whole row, shoving everything to its right sideways; reserving the
+    /// space means the row's geometry no longer depends on the number in it.
+    /// Precision follows the scale: tenths matter at 2ms on the direct path,
+    /// and are pure jitter at 100ms on the buffered one.
+    private var latencyReadout: some View {
+        let milliseconds = state.display.latencyMilliseconds
+        let text = milliseconds < 10
+            ? String(format: "%.1f ms", milliseconds)
+            : String(format: "%.0f ms", milliseconds)
+        return Label("999 ms", systemImage: "timer")
+            .hidden()
+            .overlay(alignment: .leading) { Label(text, systemImage: "timer") }
+    }
+
     private var telemetry: some View {
         HStack(spacing: 24) {
             Label("\(state.display.bufferSize) frames", systemImage: "waveform")
                 .help("Hardware IO buffer actually in force on the input device.")
             Divider().frame(height: 20)
-            Label(String(format: "%.1f ms", state.display.latencyMilliseconds), systemImage: "timer")
+            latencyReadout
             Divider().frame(height: 20)
             Label(state.display.isDirectMonitoring ? "Direct" : "Buffered",
                   systemImage: state.display.isDirectMonitoring ? "bolt.fill" : "arrow.triangle.swap")

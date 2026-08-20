@@ -51,6 +51,14 @@ final class AppState {
     /// show twice as often.
     private static let displayInterval = Duration.seconds(1.0 / 12)
     private var lastPublish: ContinuousClock.Instant?
+    /// Latency is measured as the age of the audio being analysed, so it
+    /// carries every bit of scheduling jitter between the capture callback and
+    /// the main actor. Raw, it never repeats a value twice — a readout that
+    /// changes twelve times a second reads as noise, not as information, and
+    /// on an idle machine there is nothing for it to be reporting. Smoothed
+    /// and held for display only; the measurement itself is untouched.
+    private var smoothedLatency: Double?
+    private var shownLatency: Double?
     /// What the user actually chose. `selectedInput/OutputDeviceID` is only a
     /// resolution of these against whatever is plugged in right now.
     private var selectedInputUID: String?
@@ -197,8 +205,25 @@ final class AppState {
         let noteChanged = update.note?.midiNote != display.note?.midiNote
         if !noteChanged, let lastPublish, now - lastPublish < Self.displayInterval { return }
         lastPublish = now
-        display = update
+        var shown = update
+        shown.latencyMilliseconds = stableLatency(update.latencyMilliseconds)
+        display = shown
         resolvePositions(for: update.note)
+    }
+
+    /// Eased, then held until it has actually moved. The threshold is
+    /// relative because the two monitoring paths live orders of magnitude
+    /// apart: a millisecond of drift is the whole story at 2ms and beneath
+    /// notice at 100ms.
+    private func stableLatency(_ measured: Double) -> Double {
+        let smoothed = smoothedLatency.map { $0 + 0.2 * (measured - $0) } ?? measured
+        smoothedLatency = smoothed
+        guard let shown = shownLatency else {
+            shownLatency = smoothed
+            return smoothed
+        }
+        if abs(smoothed - shown) >= max(0.4, shown * 0.05) { shownLatency = smoothed }
+        return shownLatency ?? smoothed
     }
 
     private func resolvePositions(for note: MappedNote?) {
