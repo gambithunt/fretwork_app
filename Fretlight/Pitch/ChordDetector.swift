@@ -59,8 +59,6 @@ enum ChordQuality: String, Sendable, CaseIterable {
 /// resolution deliberately — see `ChordAnalysisWorker`, which runs this at a
 /// slower cadence than the note pipeline for exactly that reason.
 final class ChordDetector: @unchecked Sendable {
-    private static let names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]
-
     /// Cosine similarity floor below which no template is treated as a
     /// match. 0.55 is a starting point reasoned from the template geometry
     /// (a clean triad against its own template scores ~0.8-1.0; unrelated
@@ -130,7 +128,7 @@ final class ChordDetector: @unchecked Sendable {
             if best == nil || score > best!.score { best = (template.root, template.quality, score) }
         }
         guard let best, best.score >= Self.minimumConfidence else { return nil }
-        return ChordMatch(root: Self.names[best.root], quality: best.quality, confidence: best.score)
+        return ChordMatch(root: NoteMapper.pitchClassNames[best.root], quality: best.quality, confidence: best.score)
     }
 
     private func chromagram(of samples: [Float], sampleRate: Double) -> [Float] {

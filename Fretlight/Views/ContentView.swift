@@ -8,25 +8,18 @@ struct ContentView: View {
         VStack(spacing: 14) {
             header
             if let error = state.errorMessage { audioErrorBanner(error) }
-            switch state.detectionMode {
-            case .notes:
-                TunerPanel(display: state.display)
-            case .chords:
-                ChordPanel(chord: state.chordDisplay)
-            }
+            TunerPanel(mode: state.detectionMode, display: state.display, chord: state.chordDisplay)
             InputLevelPanel(level: state.display.level)
             telemetry
-            // Fret positions only mean something for a single resolved note
-            // — a strummed chord's spectrum has no one fretboard shape to
-            // point at, so the board stays a Notes-mode view.
-            if state.detectionMode == .notes {
-                // Grows to take up whatever's left in the window rather than
-                // a fixed height, but never shrinks below a size that keeps
-                // the fret labels and note markers legible — FretworkApp's
-                // minHeight is sized so the rest of this VStack plus this
-                // floor always fit.
-                FretboardView(note: state.display.note, positions: state.fretPositions).frame(minHeight: 260, maxHeight: .infinity)
-            }
+            // Grows to take up whatever's left in the window rather than a
+            // fixed height, but never shrinks below a size that keeps the
+            // fret labels and note markers legible — FretworkApp's minHeight
+            // is sized so the rest of this VStack plus this floor always fit.
+            // Stays mounted across both modes — Chords mode draws the
+            // detected chord's shape here instead of hiding the board, so
+            // switching modes never collapses the layout.
+            FretboardView(mode: state.detectionMode, note: state.display.note, positions: state.fretPositions, chord: state.chordDisplay.chord)
+                .frame(minHeight: 260, maxHeight: .infinity)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

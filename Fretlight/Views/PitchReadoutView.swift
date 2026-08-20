@@ -1,91 +1,140 @@
 import SwiftUI
 
+/// One card shell shared by Notes and Chords — switching modes swaps what's
+/// *inside* each of the three blocks (headline, gauge/status, secondary
+/// reading) rather than swapping in a whole different panel. A whole-panel
+/// swap collapses the layout to whatever the new panel's natural size is,
+/// which reads as the UI jumping; keeping one shape and re-labelling it
+/// reads as the same instrument switching what it's listening for.
 struct TunerPanel: View {
+    let mode: DetectionMode
     let display: PitchDisplayState
+    let chord: ChordDisplayState
 
     var body: some View {
         HStack(spacing: 28) {
-            noteBlock
+            headlineBlock
             Divider().frame(height: 96)
             VStack(spacing: 9) {
-                // The needle is smoothed at the source (AudioAnalysisWorker)
-                // and the stream is rate-limited before it gets here
-                // (AppState.publish), so it no longer carries a per-update
-                // ease. That ease lasted 180ms while updates arrived every
-                // 33ms, so it restarted before it could ever finish and
-                // pinned the whole window at 60fps — measured at 10 points of
-                // a core. TunerGauge stays Animatable: the panel spring below
-                // still interpolates the needle when the note changes.
-                TunerGauge(displayCents: display.note?.cents ?? 0, isActive: display.note != nil)
+                // Cents only mean something for a single held pitch — in
+                // Chords mode there's no one pitch to needle at, so the
+                // gauge stays on screen (same size, same position) but
+                // inert: no needle color, dimmed, not chasing a value.
+                TunerGauge(displayCents: mode == .notes ? (display.note?.cents ?? 0) : 0, isActive: mode == .notes && display.note != nil)
                     .frame(height: 54)
-                centsReadout
+                    .opacity(mode == .notes ? 1 : 0.25)
+                statusReadout
             }
             .frame(maxWidth: .infinity)
-            frequencyBlock
+            secondaryBlock
         }
         .padding(.horizontal, 32).padding(.vertical, 22)
         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.06), lineWidth: 1))
     }
 
-    /// Pitch class as a flat, unadorned color chip beside the letter, and the
-    /// octave demoted to a caption underneath — the note's name is the one
-    /// thing worth reading across the room, so nothing else competes with it
-    /// at that weight.
-    private var noteBlock: some View {
+    /// What identifies "the current reading" for the spring below — a new
+    /// note's MIDI number in Notes mode, a new chord's name in Chords mode.
+    private var headlineKey: String? {
+        switch mode {
+        case .notes: return display.note.map { String($0.midiNote) }
+        case .chords: return chord.chord?.name
+        }
+    }
+
+    /// Pitch class (or chord root) as a flat, unadorned color chip beside the
+    /// letter, and the octave/qualifier demoted to a caption underneath —
+    /// the name is the one thing worth reading across the room, so nothing
+    /// else competes with it at that weight.
+    private var headlineBlock: some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
-                .fill(display.note.map { NotePalette.color(for: $0.name) } ?? Color.white.opacity(0.14))
+                .fill(headlineColor)
                 .frame(width: 16, height: 16)
                 .padding(.top, 15)
             VStack(alignment: .leading, spacing: 2) {
                 Group {
-                    if let note = display.note {
-                        Text(note.name)
-                            .id(note.midiNote)
-                            .transition(.scale(scale: 0.65).combined(with: .opacity))
-                    } else {
-                        // Dimmed: at this weight and size a full-strength
-                        // placeholder shouts as loudly as a real reading.
-                        Text("—")
-                            .foregroundStyle(.white.opacity(0.22))
-                            .transition(.opacity)
+                    switch mode {
+                    case .notes:
+                        if let note = display.note {
+                            Text(note.name)
+                                .id(note.midiNote)
+                                .transition(.scale(scale: 0.65).combined(with: .opacity))
+                        } else {
+                            placeholderGlyph
+                        }
+                    case .chords:
+                        if let match = chord.chord {
+                            Text(match.name)
+                                .id(match.name)
+                                .transition(.scale(scale: 0.65).combined(with: .opacity))
+                        } else {
+                            placeholderGlyph
+                        }
                     }
                 }
                 .font(.system(size: 62, weight: .black)).tracking(-2)
-                Text(display.note.map { "OCTAVE \($0.octave)" } ?? "NO SIGNAL")
+                Text(subtitle)
                     .font(.caption2.weight(.bold)).tracking(1.5)
                     .foregroundStyle(.secondary)
             }
         }
         .frame(width: 172, alignment: .leading)
-        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: display.note?.midiNote)
+        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: headlineKey)
     }
 
-    // Branching rather than flipping one Text's content between "Listening…"
-    // and the cents readout. A plain content mutation under an active
-    // animation is what produced the overlapping/garbled text glitch, and
-    // while no animation reaches this view any more — the spring is scoped to
-    // the note block now — an identity per state is what keeps that true if
-    // one ever does.
-    private var centsReadout: some View {
+    // Dimmed: at this weight and size a full-strength placeholder shouts as
+    // loudly as a real reading.
+    private var placeholderGlyph: some View {
+        Text("—")
+            .foregroundStyle(.white.opacity(0.22))
+            .transition(.opacity)
+    }
+
+    private var headlineColor: Color {
+        switch mode {
+        case .notes: return display.note.map { NotePalette.color(for: $0.name) } ?? Color.white.opacity(0.14)
+        case .chords: return chord.chord.map { NotePalette.color(for: $0.root) } ?? Color.white.opacity(0.14)
+        }
+    }
+
+    private var subtitle: String {
+        switch mode {
+        case .notes: return display.note.map { "OCTAVE \($0.octave)" } ?? "NO SIGNAL"
+        case .chords: return chord.chord != nil ? "STRUMMED CHORD" : "NO SIGNAL"
+        }
+    }
+
+    // Branching rather than flipping one Text's content between states — a
+    // plain content mutation under an active animation is what produced the
+    // overlapping/garbled text glitch this codebase hit before, and an
+    // identity per state is what keeps that true.
+    private var statusReadout: some View {
         Group {
-            if let note = display.note {
-                let inTune = abs(note.cents) < 8
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Image(systemName: inTune ? "checkmark.circle.fill" : (note.cents > 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill"))
-                        .contentTransition(.symbolEffect(.replace))
-                    Text(String(format: "%+.1f", note.cents))
-                        .font(.system(size: 20, weight: .black, design: .monospaced))
-                        .contentTransition(.numericText())
-                    Text("CENTS")
-                        .font(.caption2.weight(.bold)).tracking(1.5)
+            switch mode {
+            case .notes:
+                if let note = display.note {
+                    let inTune = abs(note.cents) < 8
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Image(systemName: inTune ? "checkmark.circle.fill" : (note.cents > 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill"))
+                            .contentTransition(.symbolEffect(.replace))
+                        Text(String(format: "%+.1f", note.cents))
+                            .font(.system(size: 20, weight: .black, design: .monospaced))
+                            .contentTransition(.numericText())
+                        Text("CENTS")
+                            .font(.caption2.weight(.bold)).tracking(1.5)
+                            .foregroundStyle(.secondary)
+                    }
+                    .foregroundStyle(inTune ? Color.green : Color.orange)
+                    .transition(.opacity)
+                } else {
+                    Text("LISTENING")
+                        .font(.caption2.weight(.bold)).tracking(1.6)
                         .foregroundStyle(.secondary)
+                        .transition(.opacity)
                 }
-                .foregroundStyle(inTune ? Color.green : Color.orange)
-                .transition(.opacity)
-            } else {
-                Text("LISTENING")
+            case .chords:
+                Text(chord.chord != nil ? "CHORD DETECTED" : "LISTENING")
                     .font(.caption2.weight(.bold)).tracking(1.6)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
@@ -94,20 +143,31 @@ struct TunerPanel: View {
         .frame(height: 24)
     }
 
-    /// Value over unit, same stacking as the note over its octave, so the two
-    /// ends of the panel read as one system.
-    private var frequencyBlock: some View {
+    /// Value over unit, same stacking as the headline over its qualifier, so
+    /// the two ends of the panel read as one system: Hertz for a note's
+    /// exact pitch, template-match confidence for a chord's.
+    private var secondaryBlock: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            Text(display.frequency.map { String(format: "%.2f", $0) } ?? "—")
-                .font(.system(size: 25, weight: .black, design: .monospaced))
-                // Inert while no animation reaches this block, and kept for
-                // the same reason as the one on the level readout: it is what
-                // stops the digits rendering on top of each other if an
-                // animation is ever put back in scope.
-                .contentTransition(.numericText())
-            Text("HERTZ")
-                .font(.caption2.weight(.bold)).tracking(1.5)
-                .foregroundStyle(.secondary)
+            switch mode {
+            case .notes:
+                Text(display.frequency.map { String(format: "%.2f", $0) } ?? "—")
+                    .font(.system(size: 25, weight: .black, design: .monospaced))
+                    // Inert while no animation reaches this block, and kept
+                    // for the same reason as the one on the level readout:
+                    // it is what stops the digits rendering on top of each
+                    // other if an animation is ever put back in scope.
+                    .contentTransition(.numericText())
+                Text("HERTZ")
+                    .font(.caption2.weight(.bold)).tracking(1.5)
+                    .foregroundStyle(.secondary)
+            case .chords:
+                Text(chord.chord.map { String(format: "%.0f", $0.confidence * 100) } ?? "—")
+                    .font(.system(size: 25, weight: .black, design: .monospaced))
+                    .contentTransition(.numericText())
+                Text("MATCH")
+                    .font(.caption2.weight(.bold)).tracking(1.5)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(width: 132, alignment: .trailing)
     }

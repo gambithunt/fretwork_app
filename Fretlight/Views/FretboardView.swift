@@ -1,9 +1,13 @@
 import SwiftUI
 
 struct FretboardView: View {
+    let mode: DetectionMode
     let note: MappedNote?
     /// Every position the note could be played at, the resolver's pick first.
+    /// Only consulted in `.notes` mode.
     let positions: [RankedPosition]
+    /// Only consulted in `.chords` mode.
+    let chord: ChordMatch?
     private let frets = 22
     /// The frets a real neck marks with inlays. Drawn as a darker bar behind
     /// the whole column rather than as dots of their own — the grid is already
@@ -15,14 +19,45 @@ struct FretboardView: View {
     private static let lineOpacity: Double = 0.16
     private static let fretLineWidth: CGFloat = 1
 
+    /// Notes mode marks every place the one detected note could be played,
+    /// the resolver's pick first; chords mode marks the one-fret-per-string
+    /// shape `ChordShapeResolver` reaches for. Different sources, same
+    /// marker so the rest of the view (layout, animation, drawing) doesn't
+    /// need to know which mode it's in.
     private var activeMarkers: [ActiveFretMarker] {
-        guard let note else { return [] }
-        return positions.sorted {
-            $0.position.string == $1.position.string
-                ? $0.position.fret < $1.position.fret
-                : $0.position.string < $1.position.string
+        switch mode {
+        case .notes:
+            guard let note else { return [] }
+            return positions.sorted {
+                $0.position.string == $1.position.string
+                    ? $0.position.fret < $1.position.fret
+                    : $0.position.string < $1.position.string
+            }
+            .map { ActiveFretMarker(id: "\(note.midiNote)-\($0.position.string)-\($0.position.fret)", position: $0.position, label: "\(note.name)\(note.octave)", tint: NotePalette.color(for: note.name)) }
+        case .chords:
+            guard let chord else { return [] }
+            return ChordShapeResolver.fingering(for: chord).map { fingering in
+                let label = NoteMapper.pitchClassNames[((fingering.midiNote % 12) + 12) % 12]
+                let position = FretPosition(string: fingering.string, fret: fingering.fret)
+                return ActiveFretMarker(
+                    id: "\(chord.name)-\(fingering.string)-\(fingering.fret)",
+                    position: position,
+                    label: label,
+                    tint: fingering.isRoot ? NotePalette.color(for: chord.root) : .white.opacity(0.4)
+                )
+            }
         }
-        .map { ActiveFretMarker(noteMIDI: note.midiNote, position: $0.position) }
+    }
+
+    /// What the spring below keys its animation on: a new note in notes
+    /// mode, a new chord in chords mode. Unified to `String?` so one
+    /// `.animation(value:)` covers both without either mode's identity
+    /// leaking into the other's.
+    private var animationKey: String? {
+        switch mode {
+        case .notes: return note.map { String($0.midiNote) }
+        case .chords: return chord?.name
+        }
     }
 
     var body: some View {
@@ -47,43 +82,50 @@ struct FretboardView: View {
             GeometryReader { proxy in
                 let geometry = BoardGeometry(size: proxy.size, frets: frets)
                 ForEach(activeMarkers) { marker in
-                    if let note {
-                        let point = geometry.point(marker.position)
-                        // The display runs Low E at the top through High E at
-                        // the bottom. Treble strings (G, B, High E — index 3
-                        // and up) enter from the string immediately above and
-                        // slide down into place, then retreat back up when
-                        // they disappear; bass strings (Low E, A, D) do the
-                        // opposite. Each marker's start/end Y is computed as
-                        // an absolute position (not an offset layered on top
-                        // of a separately-fixed position), so the two ends of
-                        // the animation are exactly one string apart with
-                        // nothing else able to pull it toward the board's
-                        // center.
-                        let startY = marker.position.string >= 3
-                            ? point.y - geometry.stringSpacing
-                            : point.y + geometry.stringSpacing
-                        NoteMarker(note: note)
-                            .transition(
-                                .modifier(
-                                    active: MarkerMotionModifier(x: point.x, y: startY, scale: 0.66, opacity: 0),
-                                    identity: MarkerMotionModifier(x: point.x, y: point.y, scale: 1, opacity: 1)
-                                )
+                    let point = geometry.point(marker.position)
+                    // The display runs Low E at the top through High E at
+                    // the bottom. Treble strings (G, B, High E — index 3
+                    // and up) enter from the string immediately above and
+                    // slide down into place, then retreat back up when
+                    // they disappear; bass strings (Low E, A, D) do the
+                    // opposite. Each marker's start/end Y is computed as
+                    // an absolute position (not an offset layered on top
+                    // of a separately-fixed position), so the two ends of
+                    // the animation are exactly one string apart with
+                    // nothing else able to pull it toward the board's
+                    // center.
+                    let startY = marker.position.string >= 3
+                        ? point.y - geometry.stringSpacing
+                        : point.y + geometry.stringSpacing
+                    NoteMarker(label: marker.label, tint: marker.tint)
+                        .transition(
+                            .modifier(
+                                active: MarkerMotionModifier(x: point.x, y: startY, scale: 0.66, opacity: 0),
+                                identity: MarkerMotionModifier(x: point.x, y: point.y, scale: 1, opacity: 1)
                             )
-                    }
+                        )
                 }
             }
             .allowsHitTesting(false)
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.7), value: note?.midiNote)
+        .animation(.spring(response: 0.32, dampingFraction: 0.7), value: animationKey)
         .accessibilityLabel("Twenty-two fret guitar fretboard")
         .accessibilityValue(accessibilityDescription)
     }
 
     private var accessibilityDescription: String {
-        guard let note, let pick = positions.first(where: \.isPrimary) else { return "No note detected" }
-        let fret = pick.position.fret == 0 ? "open" : "fret \(pick.position.fret)"
-        return "\(note.name)\(note.octave), \(GuitarTuning.stringNames[pick.position.string]) string, \(fret)"
+        switch mode {
+        case .notes:
+            guard let note, let pick = positions.first(where: \.isPrimary) else { return "No note detected" }
+            let fret = pick.position.fret == 0 ? "open" : "fret \(pick.position.fret)"
+            return "\(note.name)\(note.octave), \(GuitarTuning.stringNames[pick.position.string]) string, \(fret)"
+        case .chords:
+            guard let chord else { return "No chord detected" }
+            let shape = ChordShapeResolver.fingering(for: chord).sorted { $0.string < $1.string }
+                .map { "\(GuitarTuning.stringNames[$0.string]) \($0.fret == 0 ? "open" : "fret \($0.fret)")" }
+                .joined(separator: ", ")
+            return "\(chord.name) chord: \(shape)"
+        }
     }
 
     private func drawFretNumbers(in context: GraphicsContext, geometry: BoardGeometry) {
@@ -197,10 +239,10 @@ private struct BoardGeometry {
 }
 
 private struct ActiveFretMarker: Identifiable {
-    let noteMIDI: Int
+    let id: String
     let position: FretPosition
-
-    var id: String { "\(noteMIDI)-\(position.string)-\(position.fret)" }
+    let label: String
+    let tint: Color
 }
 
 private struct MarkerMotionModifier: ViewModifier {
@@ -217,15 +259,16 @@ private struct MarkerMotionModifier: ViewModifier {
     }
 }
 
-/// Every position the note can be played at, drawn identically — the
-/// resolver's ranking reaches the screen only through the accessibility
-/// value, which names the pick.
+/// Drawn identically regardless of what produced it — every note-mode
+/// position the resolver ranks, or every string in a chord's shape. Ranking
+/// and root-vs-not both reach the screen only through label/tint and the
+/// accessibility value, not through a different marker per case.
 private struct NoteMarker: View {
-    let note: MappedNote
-    private var tint: Color { NotePalette.color(for: note.name) }
+    let label: String
+    let tint: Color
 
     var body: some View {
-        Text("\(note.name)\(note.octave)")
+        Text(label)
             .font(.caption2.weight(.bold))
             .foregroundStyle(.white)
             .frame(width: 31, height: 31)
