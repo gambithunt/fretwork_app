@@ -14,9 +14,19 @@ struct ContentView: View {
             } else if let hint = state.unclearSignalMessage {
                 signalHintBanner(hint)
             }
-            TunerPanel(mode: state.detectionMode, display: state.display, chord: state.chordDisplay)
-            InputLevelPanel(level: state.display.level)
-            telemetry
+            // The three live readouts and the board below each read the
+            // audio-rate properties (`display`, `chordDisplay`, the
+            // `displayed*` derivations) from inside their *own* body rather
+            // than from this one. `@Observable` tracks reads per view body,
+            // so reading them here would make every one of those ~30
+            // updates a second invalidate this whole `VStack` — header,
+            // device pickers and detection-mode control included — none of
+            // which has anything to do with the incoming audio. Keeping the
+            // reads in leaf views is what confines each update to the view
+            // that actually shows the changed value.
+            TunerSection(state: state)
+            LevelSection(state: state)
+            TelemetrySection(state: state)
             // The strip sits under the readouts and the flip control sits
             // directly above the board it flips, so each control is adjacent
             // to what it acts on. One strip per mode, same component,
@@ -44,15 +54,7 @@ struct ContentView: View {
                 )
             }
             fretboardControls
-            // Grows to take up whatever's left in the window rather than a
-            // fixed height, but never shrinks below a size that keeps the
-            // fret labels and note markers legible — FretworkApp's minHeight
-            // is sized so the rest of this VStack plus this floor always fit.
-            // Stays mounted across both modes — Chords mode draws the
-            // detected chord's shape here instead of hiding the board, so
-            // switching modes never collapses the layout.
-            FretboardView(mode: state.detectionMode, note: state.displayedNote, positions: state.displayedPositions, chord: state.displayedChord, flipped: state.isFretboardFlipped)
-                .frame(minHeight: 260, maxHeight: .infinity)
+            BoardSection(state: state)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -190,37 +192,6 @@ struct ContentView: View {
     /// space means the row's geometry no longer depends on the number in it.
     /// Precision follows the scale: tenths matter at 2ms on the direct path,
     /// and are pure jitter at 100ms on the buffered one.
-    private var latencyReadout: some View {
-        let milliseconds = state.display.latencyMilliseconds
-        let text = milliseconds < 10
-            ? String(format: "%.1f ms", milliseconds)
-            : String(format: "%.0f ms", milliseconds)
-        return Label("999 ms", systemImage: "timer")
-            .hidden()
-            .overlay(alignment: .leading) { Label(text, systemImage: "timer") }
-    }
-
-    private var telemetry: some View {
-        HStack(spacing: 24) {
-            Label("\(state.display.bufferSize) frames", systemImage: "waveform")
-                .help("Hardware IO buffer actually in force on the input device.")
-            Divider().frame(height: 20)
-            latencyReadout
-            Divider().frame(height: 20)
-            Label(state.display.isDirectMonitoring ? "Direct" : "Buffered",
-                  systemImage: state.display.isDirectMonitoring ? "bolt.fill" : "arrow.triangle.swap")
-                .help(state.display.isDirectMonitoring
-                      ? "One device, one clock: monitoring stays inside a single render graph."
-                      : "Input and output are separate devices, so audio is buffered between them, which costs noticeable delay.")
-            if let candidate = state.directMonitoringCandidate {
-                Button("Monitor through \(candidate.name)") { state.useInputDeviceForOutput() }
-                    .buttonStyle(.link)
-                    .help("Play back through the same device the guitar comes in on. Capture and playback then share one clock, which removes most of the monitoring delay.")
-            }
-        }
-        .font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-    }
-
     // A sequential HStack with a trailing Spacer, not a leading-aligned
     // frame — same reasoning as `header`: this reserves the button its own
     // space on the left rather than relying on alignment to keep it there.
@@ -284,5 +255,92 @@ struct ContentView: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Live sections
+//
+// Each of these exists purely to own one read of the audio-rate state. They
+// take the `AppState` itself rather than the already-read values, because a
+// value read in `ContentView.body` and passed down would put the
+// `@Observable` dependency back on `ContentView` — the very thing this split
+// exists to avoid. See the note in `ContentView.body`.
+
+private struct TunerSection: View {
+    let state: AppState
+
+    var body: some View {
+        TunerPanel(mode: state.detectionMode, display: state.display, chord: state.chordDisplay)
+    }
+}
+
+private struct LevelSection: View {
+    let state: AppState
+
+    var body: some View {
+        InputLevelPanel(level: state.display.level)
+    }
+}
+
+private struct BoardSection: View {
+    let state: AppState
+
+    var body: some View {
+        // Grows to take up whatever's left in the window rather than a
+        // fixed height, but never shrinks below a size that keeps the
+        // fret labels and note markers legible — FretworkApp's minHeight
+        // is sized so the rest of the VStack plus this floor always fit.
+        // Stays mounted across both modes — Chords mode draws the
+        // detected chord's shape here instead of hiding the board, so
+        // switching modes never collapses the layout.
+        FretboardView(
+            mode: state.detectionMode,
+            note: state.displayedNote,
+            positions: state.displayedPositions,
+            chord: state.displayedChord,
+            flipped: state.isFretboardFlipped
+        )
+        .frame(minHeight: 260, maxHeight: .infinity)
+    }
+}
+
+private struct TelemetrySection: View {
+    let state: AppState
+
+    var body: some View {
+        HStack(spacing: 24) {
+            Label("\(state.display.bufferSize) frames", systemImage: "waveform")
+                .help("Hardware IO buffer actually in force on the input device.")
+            Divider().frame(height: 20)
+            latencyReadout
+            Divider().frame(height: 20)
+            Label(state.display.isDirectMonitoring ? "Direct" : "Buffered",
+                  systemImage: state.display.isDirectMonitoring ? "bolt.fill" : "arrow.triangle.swap")
+                .help(state.display.isDirectMonitoring
+                      ? "One device, one clock: monitoring stays inside a single render graph."
+                      : "Input and output are separate devices, so audio is buffered between them, which costs noticeable delay.")
+            if let candidate = state.directMonitoringCandidate {
+                Button("Monitor through \(candidate.name)") { state.useInputDeviceForOutput() }
+                    .buttonStyle(.link)
+                    .help("Play back through the same device the guitar comes in on. Capture and playback then share one clock, which removes most of the monitoring delay.")
+            }
+        }
+        .font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+    }
+
+    /// Laid out against the widest value it can show, with the live value
+    /// overlaid on top. A digit appearing or disappearing used to re-lay-out
+    /// the whole row, shoving everything to its right sideways; reserving the
+    /// space means the row's geometry no longer depends on the number in it.
+    /// Precision follows the scale: tenths matter at 2ms on the direct path,
+    /// and are pure jitter at 100ms on the buffered one.
+    private var latencyReadout: some View {
+        let milliseconds = state.display.latencyMilliseconds
+        let text = milliseconds < 10
+            ? String(format: "%.1f ms", milliseconds)
+            : String(format: "%.0f ms", milliseconds)
+        return Label("999 ms", systemImage: "timer")
+            .hidden()
+            .overlay(alignment: .leading) { Label(text, systemImage: "timer") }
     }
 }

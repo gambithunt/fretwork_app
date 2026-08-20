@@ -380,7 +380,12 @@ final class AppState {
     private func trackSignalClarity(level: Float, hasResult: Bool) {
         guard Self.decibels(level) > Self.signalPresenceFloorDB, !hasResult else {
             unclearSignalSince = nil
-            unclearSignalMessage = nil
+            // Assigning `nil` over `nil` is still a mutation as far as
+            // `@Observable` is concerned, and this runs on every published
+            // frame — so writing unconditionally would invalidate every view
+            // reading this property ~30 times a second to say nothing
+            // changed. Same reason for the guarded writes below.
+            if unclearSignalMessage != nil { unclearSignalMessage = nil }
             return
         }
         let now = ContinuousClock.now
@@ -389,9 +394,10 @@ final class AppState {
             return
         }
         if now - since >= Self.unclearSignalHoldDuration {
-            unclearSignalMessage = detectionMode == .chords
+            let message = detectionMode == .chords
                 ? "No clear chord detected. Try a cleaner strum with less noise or distortion."
                 : "No clear pitch detected. Try a single clean note, less distortion, or raise sensitivity."
+            if unclearSignalMessage != message { unclearSignalMessage = message }
         }
     }
 
@@ -411,7 +417,15 @@ final class AppState {
     }
 
     private func appendToHistory(_ match: ChordMatch?) {
-        chordHistory = Self.appending(match, to: chordHistory, limit: Self.chordHistoryLimit)
+        let updated = Self.appending(match, to: chordHistory, limit: Self.chordHistoryLimit)
+        // `appending` returns the list untouched while the same chord is
+        // still ringing, which is most of the time — see `unclearSignalMessage`
+        // above for why storing that unchanged value anyway is not free.
+        // Count plus last id is enough to tell a real append apart from a
+        // no-op: entries are only ever appended (and trimmed from the front),
+        // so an append either grows the list or, at the cap, changes its last id.
+        guard updated.count != chordHistory.count || updated.last?.id != chordHistory.last?.id else { return }
+        chordHistory = updated
     }
 
     /// Also releases the pin — a pin referencing a now-gone entry would
@@ -474,7 +488,9 @@ final class AppState {
     }
 
     private func appendToNoteHistory(_ note: MappedNote, positions: [RankedPosition]) {
-        noteHistory = Self.appending(note, positions: positions, to: noteHistory, limit: Self.noteHistoryLimit)
+        let updated = Self.appending(note, positions: positions, to: noteHistory, limit: Self.noteHistoryLimit)
+        guard updated.count != noteHistory.count || updated.last?.id != noteHistory.last?.id else { return }
+        noteHistory = updated
     }
 
     /// Debounces history logging against pitch-detector jitter around a

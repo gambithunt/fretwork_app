@@ -55,6 +55,8 @@ Layout:
 | A custom `View` that also needs `Animatable` | Mark `animatableData` `nonisolated` | Leaving it inferred — strict concurrency flags it as crossing an actor boundary, since `Animatable`'s requirement isn't itself `@MainActor` |
 | A stored property whose init needs to capture `self` | Give the property a plain default, assign its callback in `init()`'s body (see `AudioDeviceWatcher` / `AppState.deviceWatcher`) | Passing a `[weak self]`-capturing closure straight into that property's own initializer — two-phase init rejects any use of `self` before every other stored property has a value |
 | Renaming the app / product | Update `@testable import <ModuleName>` in both test files too | Leaving old imports — `PRODUCT_NAME` changes the Swift module name; the test target silently fails to build |
+| A screen mixing audio-rate readouts with static controls | Read the fast-changing `@Observable` properties inside one small leaf `View` per readout (see `TunerSection`/`LevelSection`/`TelemetrySection`/`BoardSection` in `ContentView.swift`) | Reading them in the parent's `body`. `@Observable` tracks reads per view body, so one 30Hz property read there rebuilds every sibling — device pickers and all |
+| Writing an `@Observable` property on every audio frame | Compare first and assign only on a real change (see `unclearSignalMessage`, `appendToHistory`) | Assigning unconditionally — storing an equal value still fires `withMutation` and invalidates every observer |
 
 ## Patterns
 
@@ -91,6 +93,22 @@ scattered across call sites.
   inside whose *content* (not just a numeric property) changes on that same
   cadence is exactly what glitches. Scope animations narrowly or use a proper
   content transition.
+- `.pickerStyle(.segmented)` leaks Observation registrations when it is
+  rebuilt at audio rate: measured +1800 live `ObservationRegistrar` contexts
+  per 30s at 30Hz, against +0 for the same `Picker` in its default style and
+  +0 for the menu-style `DevicePickerView`. Every leaked registration is
+  re-hashed on each subsequent property write, so per-update cost grows with
+  uptime — an app pegged at 100% after 40 minutes was ~56% of its non-idle
+  CPU in `AnyKeyPath` hashing alone, while a fresh launch sat at 13%. The fix
+  is to stop rebuilding it that often (see the Decisions rows above), not to
+  drop the control.
+- CPU that ramps with uptime rather than sitting flat is an accumulation bug,
+  not a "slow view". Compare `heap <pid>` class counts against a fresh launch
+  — that is what identified this one; `sample`'s "Sort by top of stack"
+  section gives self-time, which the call-graph tree does not.
+- A backgrounded/occluded window is occlusion-throttled to ~0% CPU, so a
+  hidden window measures clean no matter how bad the bug is. Any CPU
+  comparison has to run with the window actually composited (`onscreen`).
 
 ## Workstream Checkpoints
 
