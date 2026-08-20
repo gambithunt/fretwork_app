@@ -12,6 +12,17 @@ struct ContentView: View {
             InputLevelPanel(level: state.display.level)
             telemetry
             fretboardControls
+            // Directly above the board it controls, not wedged into the
+            // telemetry/fretboardControls block above — both this strip and
+            // the board are about "what's shown below," so keeping them
+            // adjacent keeps that causal pair visually together.
+            if state.detectionMode == .chords {
+                ChordHistoryStrip(
+                    history: state.chordHistory,
+                    pinnedID: state.pinnedChordHistoryID,
+                    onSelect: { state.pinnedChordHistoryID = $0 }
+                )
+            }
             // Grows to take up whatever's left in the window rather than a
             // fixed height, but never shrinks below a size that keeps the
             // fret labels and note markers legible — FretworkApp's minHeight
@@ -19,7 +30,7 @@ struct ContentView: View {
             // Stays mounted across both modes — Chords mode draws the
             // detected chord's shape here instead of hiding the board, so
             // switching modes never collapses the layout.
-            FretboardView(mode: state.detectionMode, note: state.display.note, positions: state.fretPositions, chord: state.chordDisplay.chord, flipped: state.isFretboardFlipped)
+            FretboardView(mode: state.detectionMode, note: state.display.note, positions: state.fretPositions, chord: state.displayedChord, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260, maxHeight: .infinity)
         }
         .padding(24)

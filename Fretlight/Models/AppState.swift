@@ -23,8 +23,31 @@ final class AppState {
     /// toggle. It also gates whether `ChordAnalysisWorker` does any work at
     /// all: an idle Notes-mode session shouldn't pay for a detector nobody
     /// is looking at.
-    var detectionMode: DetectionMode = .notes { didSet { audioEngine.setChordDetectionEnabled(detectionMode == .chords) } }
+    var detectionMode: DetectionMode = .notes {
+        didSet {
+            audioEngine.setChordDetectionEnabled(detectionMode == .chords)
+            // A pinned chord only means anything while looking at the
+            // fretboard in Chords mode — leaving that mode and coming back
+            // resumes live rather than silently reappearing with a stale
+            // pin the player likely forgot they set.
+            if detectionMode != .chords { pinnedChordHistoryID = nil }
+        }
+    }
     var chordDisplay = ChordDisplayState()
+    /// Distinct chords the player has actually strummed, most recent last.
+    /// Deduplicated against the last *appended* entry rather than the raw
+    /// worker feed — the worker republishes its locked chord every poll tick
+    /// while a chord is held (see `ChordAnalysisWorker`'s settle/silence-hold
+    /// logic), so a naive append-on-every-update would log the same chord
+    /// dozens of times per strum.
+    private(set) var chordHistory: [ChordHistoryEntry] = []
+    private static let chordHistoryLimit = 10
+    /// Set when the player taps a history chip to hold that chord's shape on
+    /// the fretboard instead of the live feed. Cleared by tapping the same
+    /// chip again, or automatically whenever detection mode leaves `.chords`
+    /// (see `detectionMode`'s didSet) — never by the next live update, or
+    /// studying a past shape would be undone by the player's own next strum.
+    var pinnedChordHistoryID: UUID?
     /// Purely a display orientation for `FretboardView` — doesn't touch the
     /// pitch pipeline or `GuitarTuning`'s string indices, just which row
     /// `BoardGeometry` draws each index at. Left un-persisted, same as
@@ -74,6 +97,7 @@ final class AppState {
         audioEngine.onChordUpdate = { [weak self] update in
             Task { @MainActor [weak self] in
                 self?.chordDisplay = update
+                self?.appendToHistory(update.chord)
             }
         }
         audioEngine.onError = { [weak self] message in
@@ -224,6 +248,30 @@ final class AppState {
         }
         if abs(smoothed - shown) >= max(0.4, shown * 0.05) { shownLatency = smoothed }
         return shownLatency ?? smoothed
+    }
+
+    private func appendToHistory(_ match: ChordMatch?) {
+        chordHistory = Self.appending(match, to: chordHistory, limit: Self.chordHistoryLimit)
+    }
+
+    /// Pure dedup+cap step, kept free of actor isolation so it's unit
+    /// -testable without standing up an `AppState`. Dedups against only the
+    /// last entry — A→B→A logs both A's, since this is a strum log, not a
+    /// "chords seen so far" set.
+    nonisolated static func appending(_ match: ChordMatch?, to history: [ChordHistoryEntry], limit: Int) -> [ChordHistoryEntry] {
+        guard let match, match.name != history.last?.match.name else { return history }
+        var result = history + [ChordHistoryEntry(match: match)]
+        if result.count > limit { result.removeFirst(result.count - limit) }
+        return result
+    }
+
+    /// What `FretboardView` should render: the pinned history entry's chord
+    /// if the player is holding one, otherwise the live feed.
+    var displayedChord: ChordMatch? {
+        if let pinnedChordHistoryID, let pinned = chordHistory.first(where: { $0.id == pinnedChordHistoryID }) {
+            return pinned.match
+        }
+        return chordDisplay.chord
     }
 
     private func resolvePositions(for note: MappedNote?) {
