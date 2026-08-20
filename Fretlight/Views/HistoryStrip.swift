@@ -46,7 +46,20 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
                         HStack(spacing: 0) {
                             ForEach(Array(history.enumerated()), id: \.element.id) { index, entry in
                                 chip(entry)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.7)))
+                                    // Its own animation, so the newcomer is
+                                    // not locked to the curve the rest of the
+                                    // row moves on — see the row animation
+                                    // below. Asymmetric on purpose: an
+                                    // arrival is an event and lands with a
+                                    // spring, a departure is bookkeeping and
+                                    // just goes.
+                                    .transition(
+                                        .asymmetric(
+                                            insertion: .scale(scale: 0.62).combined(with: .opacity)
+                                                .animation(.spring(response: 0.26, dampingFraction: 0.58)),
+                                            removal: .opacity.animation(.easeOut(duration: 0.12))
+                                        )
+                                    )
                                 if index < history.count - 1 {
                                     Spacer(minLength: 8)
                                 }
@@ -66,7 +79,20 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
                     // on the next redraw. Keying on the id sequence (not
                     // just count) also covers the ordinary case of a chip
                     // fading in at the end.
-                    .animation(.easeInOut(duration: 0.32), value: history.map(\.id))
+                    //
+                    // Sprung and delayed, because this is where the strip's
+                    // visual mass actually is. Chips are spread by count, so
+                    // once the cap is reached every arrival slides the whole
+                    // row one slot — a far bigger movement than the chip's
+                    // own. Under the single flat curve this used to share
+                    // with the newcomer, everything moved together at the
+                    // same speed and nothing read as landing. Letting the
+                    // arrival lead by a beat and the row follow with a little
+                    // overshoot is what makes it read as weight rather than
+                    // as a reflow. Kept short: entries can arrive ~90ms apart
+                    // (`AppState.noteHistorySettle`), and motion that outlasts
+                    // the gap between notes turns a fast passage into mush.
+                    .animation(.spring(response: 0.3, dampingFraction: 0.68).delay(0.05), value: history.map(\.id))
                 }
                 clearButton
         }
@@ -84,6 +110,12 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
 
     private func chip(_ entry: Entry) -> some View {
         let isPinned = entry.id == pinnedID
+        // The newest entry sits at full strength and dims to the resting 0.72
+        // when the next one supersedes it. A chip used to arrive already
+        // dimmed, which is the opposite of an arrival having weight — and
+        // this doubles as a "you are here" marker without inventing any new
+        // visual language for it.
+        let isNewest = entry.id == history.last?.id
         return Button {
             onSelect(isPinned ? nil : entry.id)
         } label: {
@@ -96,7 +128,7 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
                 .overlay(
                     Capsule().strokeBorder(.white.opacity(isPinned ? 0.9 : 0), lineWidth: 2)
                 )
-                .opacity(isPinned ? 1 : 0.72)
+                .opacity(isPinned || isNewest ? 1 : 0.72)
         }
         .buttonStyle(.plain)
         .help(isPinned ? "Showing this \(noun)'s shape — tap again to follow live" : "Hold this \(noun)'s shape on the fretboard")
