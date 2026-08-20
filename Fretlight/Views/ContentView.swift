@@ -7,7 +7,13 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 14) {
             header
-            if let error = state.errorMessage { audioErrorBanner(error) }
+            if let error = state.errorMessage {
+                audioErrorBanner(error)
+            } else if state.isReconnecting {
+                reconnectingBanner
+            } else if let hint = state.unclearSignalMessage {
+                signalHintBanner(hint)
+            }
             TunerPanel(mode: state.detectionMode, display: state.display, chord: state.chordDisplay)
             InputLevelPanel(level: state.display.level)
             telemetry
@@ -98,8 +104,8 @@ struct ContentView: View {
                 .scaledToFit()
                 .frame(height: HeaderMetrics.blockHeight)
                 .accessibilityLabel("Fretwork")
-            Label(state.errorMessage == nil ? "Listening" : "Reconnecting", systemImage: "circle.fill")
-                .font(.callout).foregroundStyle(state.errorMessage == nil ? .green : .orange)
+            Label(state.errorMessage == nil && !state.isReconnecting ? "Listening" : "Reconnecting", systemImage: "circle.fill")
+                .font(.callout).foregroundStyle(state.errorMessage == nil && !state.isReconnecting ? .green : .orange)
         }
     }
 
@@ -237,6 +243,34 @@ struct ContentView: View {
             .help("Flip the fretboard: swap which string draws at the top.")
             Spacer(minLength: 0)
         }
+    }
+
+    /// Shown for the automatic-recovery window itself, before it's known to
+    /// succeed or fail — `audioErrorBanner` only appears once that's given
+    /// up. Without this, that whole window (a device drops out, a few
+    /// retries happen a beat apart) shows nothing but a silent meter, which
+    /// reads as the app having frozen rather than as it working on it.
+    private var reconnectingBanner: some View {
+        HStack(spacing: 10) {
+            ProgressView().controlSize(.small)
+            Text("Reconnecting to audio device…").font(.callout).foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// A softer, non-error nudge: the connection is fine and audio is
+    /// coming in, but nothing is resolving a confident note/chord from it —
+    /// distinct from `audioErrorBanner`, which is about the device itself.
+    private func signalHintBanner(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "waveform.badge.exclamationmark").foregroundStyle(.secondary)
+            Text(message).font(.callout).foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func audioErrorBanner(_ message: String) -> some View {

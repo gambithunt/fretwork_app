@@ -32,6 +32,12 @@ final class AppState {
             // pin the player likely forgot they set.
             if detectionMode != .chords { pinnedChordHistoryID = nil }
             if detectionMode != .notes { pinnedNoteHistoryID = nil }
+            // The two modes read clarity from different signals (a resolved
+            // note vs. a resolved chord match), so a hint earned in one mode
+            // means nothing in the other — carrying it across a switch would
+            // either falsely persist or falsely vanish.
+            unclearSignalSince = nil
+            unclearSignalMessage = nil
         }
     }
     var chordDisplay = ChordDisplayState()
@@ -88,10 +94,38 @@ final class AppState {
     /// depends on playing history, not on the audio.
     private(set) var fretPositions: [RankedPosition] = []
     var errorMessage: String?
+    /// True from the moment `AudioEngine` starts an automatic recovery
+    /// attempt until it either succeeds (`onRecovered`) or gives up
+    /// (`onError`). Distinct from `errorMessage`: that only appears once
+    /// recovery has been exhausted, which otherwise leaves the UI showing
+    /// nothing — audio dead, meter silent, no explanation — for the whole
+    /// multi-second retry window. Surfacing this instead is what turns that
+    /// window from "looks frozen" into "visibly reconnecting".
+    var isReconnecting = false
+    /// Set when the live input has real signal but nothing is resolving a
+    /// confident note/chord from it for a sustained stretch — heavy
+    /// distortion, noise, or (in Notes mode) a strummed chord the detector
+    /// isn't meant to read. Cleared the instant a result locks in or the
+    /// signal drops back to silence. See `trackSignalClarity`.
+    var unclearSignalMessage: String?
+    private var unclearSignalSince: ContinuousClock.Instant?
+    /// Long enough that a pick attack's brief mistracking never trips this,
+    /// short enough to still read as responsive.
+    private static let unclearSignalHoldDuration = Duration.seconds(1)
+    /// Same noise floor as `InputLevelPanel`'s meter — signal has to clear
+    /// this before "no result" means anything; below it, there's simply
+    /// nothing playing.
+    private static let signalPresenceFloorDB: Double = -50
+    private static func decibels(_ level: Float) -> Double { 20 * log10(max(Double(level), 0.000_001)) }
     private let audioEngine = AudioEngine()
     private let resolver = FretPositionResolver()
     private var resolvedMIDI: Int?
     private let deviceWatcher = AudioDeviceWatcher()
+    /// Coalesces a burst of `deviceWatcher.onChange` notifications (a
+    /// multi-stream interface unplugging can fire several in quick
+    /// succession) into one rescan, and keeps the scan itself off the main
+    /// actor — see `scheduleDeviceRefresh`.
+    private var pendingDeviceRefresh: Task<Void, Never>?
     /// How often the analysis worker's stream is allowed to reach the UI.
     ///
     /// Deliberately chosen here rather than inherited from the audio, because
@@ -126,18 +160,27 @@ final class AppState {
         }
         audioEngine.onChordUpdate = { [weak self] update in
             Task { @MainActor [weak self] in
-                self?.chordDisplay = update
-                self?.appendToHistory(update.chord)
+                guard let self else { return }
+                self.chordDisplay = update
+                self.appendToHistory(update.chord)
+                if self.detectionMode == .chords { self.trackSignalClarity(level: update.level, hasResult: update.chord != nil) }
             }
         }
         audioEngine.onError = { [weak self] message in
             Task { @MainActor [weak self] in
                 self?.errorMessage = message
+                self?.isReconnecting = false
             }
         }
         audioEngine.onRecovered = { [weak self] in
             Task { @MainActor [weak self] in
                 self?.errorMessage = nil
+                self?.isReconnecting = false
+            }
+        }
+        audioEngine.onReconnecting = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.isReconnecting = true
             }
         }
         // Picks up hardware plugged in after launch — e.g. an interface
@@ -145,7 +188,7 @@ final class AppState {
         // having to notice and hit Rescan themselves.
         deviceWatcher.onChange = { [weak self] in
             Task { @MainActor [weak self] in
-                self?.refreshDevices()
+                self?.scheduleDeviceRefresh()
             }
         }
         let restoredInput = Self.restoreSelection(uidKey: "selectedInputDeviceUID", legacyIDKey: "selectedInputDeviceID", from: inputDevices)
@@ -159,9 +202,40 @@ final class AppState {
         }
     }
 
+    /// Synchronous, on the main actor — fine for an explicit user action
+    /// (launch, the Rescan button, "Refresh devices" in the error banner),
+    /// which isn't the case this is trying to protect against. The
+    /// automatic path triggered by device-change notifications goes through
+    /// `scheduleDeviceRefresh` instead.
     func refreshDevices() {
-        inputDevices = AudioDeviceEnumerator.inputDevices()
-        outputDevices = AudioDeviceEnumerator.outputDevices()
+        applyDeviceLists(inputs: AudioDeviceEnumerator.inputDevices(), outputs: AudioDeviceEnumerator.outputDevices())
+    }
+
+    /// `AudioDeviceEnumerator`'s scan does several blocking Core Audio HAL
+    /// calls, and a device disconnect is exactly when those can stall — a
+    /// driver mid-teardown, or a multi-stream interface firing several
+    /// change notifications in a burst. Doing that scan directly on the main
+    /// actor (as a naive `deviceWatcher.onChange` handler would) is what
+    /// used to read as the whole app freezing on unplug. This runs it on a
+    /// detached task instead, and debounces so a burst of notifications
+    /// coalesces into one scan rather than several stacked back to back.
+    private func scheduleDeviceRefresh() {
+        pendingDeviceRefresh?.cancel()
+        pendingDeviceRefresh = Task.detached { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            let inputs = AudioDeviceEnumerator.inputDevices()
+            let outputs = AudioDeviceEnumerator.outputDevices()
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                self?.applyDeviceLists(inputs: inputs, outputs: outputs)
+            }
+        }
+    }
+
+    private func applyDeviceLists(inputs: [AudioDevice], outputs: [AudioDevice]) {
+        inputDevices = inputs
+        outputDevices = outputs
         selectedInputDeviceID = Self.reresolve(id: selectedInputDeviceID, uid: selectedInputUID, in: inputDevices)
         selectedOutputDeviceID = Self.reresolve(id: selectedOutputDeviceID, uid: selectedOutputUID, in: outputDevices)
     }
@@ -237,6 +311,7 @@ final class AppState {
     func start() {
         guard let selectedInputDeviceID, let selectedOutputDeviceID else { return }
         errorMessage = nil
+        isReconnecting = false
         audioEngine.start(inputDeviceID: selectedInputDeviceID, outputDeviceID: selectedOutputDeviceID, monitorVolume: monitorMuted ? 0 : Float(monitorVolume))
     }
 
@@ -257,6 +332,14 @@ final class AppState {
     /// Dropping the updates in between is safe because another always follows
     /// within ~33ms; nothing here is the only carrier of a state change.
     private func publish(_ update: PitchDisplayState) {
+        // Tracked from the raw, un-throttled update rather than `display` —
+        // the throttle below exists for redraw cost, not for how quickly a
+        // "no clear pitch" hint should react to the signal actually
+        // clearing or reappearing. The pitch worker keeps running
+        // regardless of mode, so this only feeds the hint while Notes mode
+        // is actually what's on screen — `onChordUpdate` does the same for
+        // Chords mode.
+        if detectionMode == .notes { trackSignalClarity(level: update.level, hasResult: update.note != nil) }
         let now = ContinuousClock.now
         let noteChanged = update.note?.midiNote != display.note?.midiNote
         // Checked ahead of the throttle below (and using update.level, not
@@ -286,6 +369,30 @@ final class AppState {
         defer { previousNoteLevel = level }
         guard let note, note.midiNote == resolvedMIDI else { return false }
         return level > previousNoteLevel * Self.noteOnsetRatio
+    }
+
+    /// A player strumming a heavily distorted chord, a muted/percussive hit,
+    /// or just room noise can hold real signal — above the meter's own noise
+    /// floor — without either detector ever locking a result. Left silent,
+    /// that reads as the app simply not working; this turns it into an
+    /// actionable hint once it's been true long enough to be a pattern
+    /// rather than one missed frame during an attack transient.
+    private func trackSignalClarity(level: Float, hasResult: Bool) {
+        guard Self.decibels(level) > Self.signalPresenceFloorDB, !hasResult else {
+            unclearSignalSince = nil
+            unclearSignalMessage = nil
+            return
+        }
+        let now = ContinuousClock.now
+        guard let since = unclearSignalSince else {
+            unclearSignalSince = now
+            return
+        }
+        if now - since >= Self.unclearSignalHoldDuration {
+            unclearSignalMessage = detectionMode == .chords
+                ? "No clear chord detected. Try a cleaner strum with less noise or distortion."
+                : "No clear pitch detected. Try a single clean note, less distortion, or raise sensitivity."
+        }
     }
 
     /// Eased, then held until it has actually moved. The threshold is
@@ -431,5 +538,9 @@ final class AppState {
         scheduleHistoryAppend(note, positions: fretPositions)
     }
 
+    // pendingDeviceRefresh is left to run out on its own at deinit — it
+    // captures `self` weakly, so there's nothing for it to do once this
+    // instance is gone, and Task.cancel() isn't safe to call from a
+    // nonisolated deinit against a main-actor-isolated property.
     deinit { audioEngine.stop() }
 }

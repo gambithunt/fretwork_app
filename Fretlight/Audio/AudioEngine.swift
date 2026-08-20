@@ -50,6 +50,30 @@ final class AudioEngine: @unchecked Sendable {
     /// proves it can hold up.
     private static let targetBufferFrames: UInt32 = 256
 
+    /// Fixed makeup gain applied to the monitor signal only (never the
+    /// analysis/chord taps, so detection thresholds are untouched). Exists
+    /// because `AVAudioMixerNode.outputVolume` — what the monitor slider
+    /// drives — is hard-clamped to 0...1, i.e. unity gain at most: there is
+    /// no headroom above it for the slider to reach no matter how it's
+    /// mapped. GarageBand's channel strip applies its own preamp/fader gain
+    /// on top of that ceiling, which is what makes the same interface sound
+    /// louder there than through this app's monitor path even at max.
+    /// +4dB (~1.6x amplitude) is a conservative starting point chosen to
+    /// close most of that gap without a limiter in the graph to catch a
+    /// clipped transient — raise it only after measuring against real
+    /// hardware, the same way `targetBufferFrames` was tuned.
+    private static let monitorMakeupGainDB: Float = 4
+
+    private static func makeMonitorGainStage() -> AVAudioUnitEQ {
+        let stage = AVAudioUnitEQ(numberOfBands: 1)
+        // The single band exists only because AVAudioUnitEQ needs at least
+        // one; bypassing it leaves `globalGain` as the only thing this node
+        // does — a plain makeup-gain stage, not a filter.
+        stage.bands[0].bypass = true
+        stage.globalGain = monitorMakeupGainDB
+        return stage
+    }
+
     private let controlQueue = DispatchQueue(label: "com.fretlight.audio-control", qos: .userInitiated)
     private var captureEngine: AVAudioEngine?
     private var playbackEngine: AVAudioEngine?
@@ -73,6 +97,11 @@ final class AudioEngine: @unchecked Sendable {
     var onChordUpdate: (@Sendable (ChordDisplayState) -> Void)?
     var onError: (@Sendable (String) -> Void)?
     var onRecovered: (@Sendable () -> Void)?
+    /// Fired at the start of every automatic recovery attempt — before it's
+    /// known to succeed or fail — so the UI can show something during the
+    /// retry window instead of sitting silent until either `onRecovered` or
+    /// (after the circuit breaker trips) `onError`.
+    var onReconnecting: (@Sendable () -> Void)?
     private var timebase = mach_timebase_info_data_t()
     private var configChangeObservers: [NSObjectProtocol] = []
     private var currentInputDeviceID: AudioDeviceID?
@@ -171,12 +200,20 @@ final class AudioEngine: @unchecked Sendable {
         // it, so the two ends disagree.
         let mixer = engine.mainMixerNode
         let sink = CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing)
+        // The makeup-gain stage sits only on the monitor leg of the fan-out
+        // below, in series before the mixer — the sink's leg is a separate
+        // parallel connection straight off `input`, so this never touches
+        // what the detectors see.
+        let monitorGain = Self.makeMonitorGainStage()
         engine.attach(sink.node)
-        // One source, two destinations: the mixer carries what is heard, the
-        // sink feeds the detector. Neither can delay the other.
-        engine.connect(input, to: [AVAudioConnectionPoint(node: mixer, bus: 0),
+        engine.attach(monitorGain)
+        // One source, two destinations: the mixer (via the gain stage)
+        // carries what is heard, the sink feeds the detector. Neither can
+        // delay the other.
+        engine.connect(input, to: [AVAudioConnectionPoint(node: monitorGain, bus: 0),
                                    AVAudioConnectionPoint(node: sink.node, bus: 0)],
                        fromBus: 0, format: hardwareFormat)
+        engine.connect(monitorGain, to: mixer, format: hardwareFormat)
         mixer.outputVolume = monitorVolume
 
         let frames = AudioDeviceEnumerator.bufferFrameSize(deviceID).map(Int.init) ?? 512
@@ -225,8 +262,15 @@ final class AudioEngine: @unchecked Sendable {
                                        format: monitorFormat,
                                        targetBacklogFrames: frames * 2,
                                        trimThresholdFrames: frames * 6)
+        // Same makeup-gain stage as the duplex path, in series after the
+        // renderer and before the mixer — the ring it pulls from was
+        // already filled pre-gain by `CaptureSink`, so this is monitor-only
+        // here too.
+        let monitorGain = Self.makeMonitorGainStage()
         playback.attach(renderer.node)
-        playback.connect(renderer.node, to: playback.mainMixerNode, format: monitorFormat)
+        playback.attach(monitorGain)
+        playback.connect(renderer.node, to: monitorGain, format: monitorFormat)
+        playback.connect(monitorGain, to: playback.mainMixerNode, format: monitorFormat)
         playback.mainMixerNode.outputVolume = monitorVolume
 
         let analysis = makeAnalysisWorker(directMonitoring: false)
@@ -358,6 +402,7 @@ final class AudioEngine: @unchecked Sendable {
             reportConnectionFailureIfNeeded()
             return
         }
+        onReconnecting?()
         do {
             try startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: currentMonitorVolume)
         } catch {
