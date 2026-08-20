@@ -15,12 +15,26 @@ struct ContentView: View {
             // Directly above the board it controls, not wedged into the
             // telemetry/fretboardControls block above — both this strip and
             // the board are about "what's shown below," so keeping them
-            // adjacent keeps that causal pair visually together.
-            if state.detectionMode == .chords {
-                ChordHistoryStrip(
+            // adjacent keeps that causal pair visually together. One strip
+            // per mode, same component, different entry type.
+            switch state.detectionMode {
+            case .chords:
+                HistoryStrip(
                     history: state.chordHistory,
                     pinnedID: state.pinnedChordHistoryID,
+                    label: { $0.match.name },
+                    tint: { NotePalette.color(for: $0.match.root) },
+                    noun: "chord",
                     onSelect: { state.pinnedChordHistoryID = $0 }
+                )
+            case .notes:
+                HistoryStrip(
+                    history: state.noteHistory,
+                    pinnedID: state.pinnedNoteHistoryID,
+                    label: { "\($0.note.name)\($0.note.octave)" },
+                    tint: { NotePalette.color(for: $0.note.name) },
+                    noun: "note",
+                    onSelect: { state.pinnedNoteHistoryID = $0 }
                 )
             }
             // Grows to take up whatever's left in the window rather than a
@@ -30,7 +44,7 @@ struct ContentView: View {
             // Stays mounted across both modes — Chords mode draws the
             // detected chord's shape here instead of hiding the board, so
             // switching modes never collapses the layout.
-            FretboardView(mode: state.detectionMode, note: state.display.note, positions: state.fretPositions, chord: state.displayedChord, flipped: state.isFretboardFlipped)
+            FretboardView(mode: state.detectionMode, note: state.displayedNote, positions: state.displayedPositions, chord: state.displayedChord, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260, maxHeight: .infinity)
         }
         .padding(24)

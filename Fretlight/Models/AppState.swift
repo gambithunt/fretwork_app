@@ -26,11 +26,12 @@ final class AppState {
     var detectionMode: DetectionMode = .notes {
         didSet {
             audioEngine.setChordDetectionEnabled(detectionMode == .chords)
-            // A pinned chord only means anything while looking at the
-            // fretboard in Chords mode — leaving that mode and coming back
+            // A pinned chord/note only means anything while looking at the
+            // fretboard in its own mode — leaving that mode and coming back
             // resumes live rather than silently reappearing with a stale
             // pin the player likely forgot they set.
             if detectionMode != .chords { pinnedChordHistoryID = nil }
+            if detectionMode != .notes { pinnedNoteHistoryID = nil }
         }
     }
     var chordDisplay = ChordDisplayState()
@@ -48,6 +49,19 @@ final class AppState {
     /// (see `detectionMode`'s didSet) — never by the next live update, or
     /// studying a past shape would be undone by the player's own next strum.
     var pinnedChordHistoryID: UUID?
+    /// Distinct notes the player has actually fretted, most recent last.
+    /// Appended from `resolvePositions` at the same point a genuine note
+    /// change is detected, so this needs no dedup logic of its own the way
+    /// chord history does — a sustained note republishes through `publish`
+    /// far more often than it changes, but `resolvePositions` only runs its
+    /// body on an actual change.
+    private(set) var noteHistory: [NoteHistoryEntry] = []
+    private static let noteHistoryLimit = 10
+    /// Set when the player taps a note-history chip to hold that note's
+    /// position on the fretboard instead of the live feed. Same lifecycle as
+    /// `pinnedChordHistoryID` — cleared by tapping again, or by leaving
+    /// `.notes` mode.
+    var pinnedNoteHistoryID: UUID?
     /// Purely a display orientation for `FretboardView` — doesn't touch the
     /// pitch pipeline or `GuitarTuning`'s string indices, just which row
     /// `BoardGeometry` draws each index at. Left un-persisted, same as
@@ -274,6 +288,43 @@ final class AppState {
         return chordDisplay.chord
     }
 
+    /// What `FretboardView` should render in Notes mode: the pinned history
+    /// entry's note if the player is holding one, otherwise the live note.
+    var displayedNote: MappedNote? {
+        if let pinnedNoteHistoryID, let pinned = noteHistory.first(where: { $0.id == pinnedNoteHistoryID }) {
+            return pinned.note
+        }
+        return display.note
+    }
+
+    /// The positions to mark for `displayedNote` — the pinned entry's frozen
+    /// snapshot, or the live resolver output. Kept as a snapshot on the
+    /// entry rather than re-resolved here, because `FretPositionResolver` is
+    /// stateful hand-tracking and re-resolving a past note on tap would
+    /// perturb the live estimate.
+    var displayedPositions: [RankedPosition] {
+        if let pinnedNoteHistoryID, let pinned = noteHistory.first(where: { $0.id == pinnedNoteHistoryID }) {
+            return pinned.positions
+        }
+        return fretPositions
+    }
+
+    private func appendToNoteHistory(_ note: MappedNote, positions: [RankedPosition]) {
+        noteHistory = Self.appending(note, positions: positions, to: noteHistory, limit: Self.noteHistoryLimit)
+    }
+
+    /// Pure dedup+cap step, mirroring `appending(_:to:limit:)` for chords.
+    /// The dedup guard here is a defensive backstop, not the primary
+    /// mechanism — `resolvePositions` already only calls this on a genuine
+    /// midiNote change — but keeping it means this function's own contract
+    /// doesn't depend on how its one caller happens to behave.
+    nonisolated static func appending(_ note: MappedNote?, positions: [RankedPosition], to history: [NoteHistoryEntry], limit: Int) -> [NoteHistoryEntry] {
+        guard let note, note.midiNote != history.last?.note.midiNote else { return history }
+        var result = history + [NoteHistoryEntry(note: note, positions: positions)]
+        if result.count > limit { result.removeFirst(result.count - limit) }
+        return result
+    }
+
     private func resolvePositions(for note: MappedNote?) {
         guard let note else {
             fretPositions = []
@@ -283,6 +334,7 @@ final class AppState {
         guard note.midiNote != resolvedMIDI else { return }
         resolvedMIDI = note.midiNote
         fretPositions = resolver.resolve(midiNote: note.midiNote)
+        appendToNoteHistory(note, positions: fretPositions)
     }
 
     deinit { audioEngine.stop() }
