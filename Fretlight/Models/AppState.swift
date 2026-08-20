@@ -57,13 +57,16 @@ final class AppState {
     /// (see `detectionMode`'s didSet) — never by the next live update, or
     /// studying a past shape would be undone by the player's own next strum.
     var pinnedChordHistoryID: UUID?
-    /// Distinct notes the player has actually fretted, most recent last.
-    /// Appended from `resolvePositions` after a short settle window (see
-    /// `scheduleHistoryAppend`) — the raw pitch estimate can swing through a
-    /// wrong harmonic/octave for a few hops during a pluck's attack before
-    /// settling, and each swing is a genuine midiNote change, so logging
-    /// immediately on every change would turn one pluck into several
-    /// history entries.
+    /// Every note the player has actually fretted, in order — including the
+    /// same pitch hit twice in a row, which counts as two entries (this is
+    /// a strum/pick log, not a "notes seen" set). Appended from
+    /// `resolvePositions` after a short settle window (see
+    /// `scheduleHistoryAppend`) whenever either the pitch changes or
+    /// `detectRepick` catches a fresh pick attack on the same pitch. The
+    /// settle window exists because the raw pitch estimate can swing
+    /// through a wrong harmonic/octave for a few hops during a pluck's
+    /// attack before settling — each swing is its own trigger for this, so
+    /// logging immediately would turn one pluck into several entries.
     private(set) var noteHistory: [NoteHistoryEntry] = []
     /// Note labels ("A♯2") are shorter than chord labels, so the same 16
     /// that's measured safe for `chordHistoryLimit` is even more so here —
@@ -244,22 +247,45 @@ final class AppState {
     /// feeding it every frame would let one sustained note walk the resolver's
     /// hand-position estimate along the neck.
     /// Rate-limits the worker's stream to `displayInterval`, except when the
-    /// note itself changes: a new note is the one event a player is waiting to
-    /// see, so it goes through immediately and the clock restarts from there.
-    /// Everything else — level, cents, frequency — is a value the eye reads,
-    /// not an event it waits for, and can sit until the next refresh.
+    /// note itself changes, or `detectRepick` catches the same note being hit
+    /// again: both are events a player is waiting to see (the fretboard
+    /// marker, the history strip), so they go through immediately and the
+    /// clock restarts from there. Everything else — level, cents, frequency —
+    /// is a value the eye reads, not an event it waits for, and can sit until
+    /// the next refresh.
     ///
     /// Dropping the updates in between is safe because another always follows
     /// within ~33ms; nothing here is the only carrier of a state change.
     private func publish(_ update: PitchDisplayState) {
         let now = ContinuousClock.now
         let noteChanged = update.note?.midiNote != display.note?.midiNote
-        if !noteChanged, let lastPublish, now - lastPublish < Self.displayInterval { return }
+        // Checked ahead of the throttle below (and using update.level, not
+        // display.level) so a repick is never missed to the 12Hz display
+        // gate — a pick attack's level rise can be over well within 83ms.
+        let isRepick = detectRepick(level: update.level, note: update.note)
+        if !noteChanged, !isRepick, let lastPublish, now - lastPublish < Self.displayInterval { return }
         lastPublish = now
         var shown = update
         shown.latencyMilliseconds = stableLatency(update.latencyMilliseconds)
         display = shown
-        resolvePositions(for: update.note)
+        resolvePositions(for: update.note, isRepick: isRepick)
+    }
+
+    /// A repick of the *same* pitch produces no midiNote change for
+    /// `resolvePositions` to notice — so without this, hitting the exact
+    /// same note twice in a row would only ever log the first hit. Mirrors
+    /// `ChordAnalysisWorker`'s onset heuristic: a level jump to this
+    /// multiple of the previous reading is a fresh pick attack, not the
+    /// same note still ringing (which decays, it doesn't jump back up).
+    /// Same ratio, same caveat — reasoned from the shape of a pluck's
+    /// attack, not yet tuned against a real guitar.
+    private static let noteOnsetRatio: Float = 1.6
+    private var previousNoteLevel: Float = 0
+
+    private func detectRepick(level: Float, note: MappedNote?) -> Bool {
+        defer { previousNoteLevel = level }
+        guard let note, note.midiNote == resolvedMIDI else { return false }
+        return level > previousNoteLevel * Self.noteOnsetRatio
     }
 
     /// Eased, then held until it has actually moved. The threshold is
@@ -367,19 +393,23 @@ final class AppState {
         }
     }
 
-    /// Pure dedup+cap step, mirroring `appending(_:to:limit:)` for chords.
-    /// The dedup guard here is a defensive backstop, not the primary
-    /// mechanism — `resolvePositions` already only calls this on a genuine
-    /// midiNote change — but keeping it means this function's own contract
-    /// doesn't depend on how its one caller happens to behave.
+    /// Pure cap step, mirroring `appending(_:to:limit:)` for chords —
+    /// deliberately *not* deduped against the last entry the way the chord
+    /// version is. Chords have no onset detection reaching this layer, so
+    /// their dedup is the only thing standing between a held chord and
+    /// dozens of duplicate log lines. Notes are different: `resolvePositions`
+    /// only ever calls this at a genuine pitch change or a detected repick
+    /// (`detectRepick`'s onset check), both real events — including the
+    /// case this exists to support, hitting the exact same note twice in a
+    /// row, which a name-based dedup here would silently swallow.
     nonisolated static func appending(_ note: MappedNote?, positions: [RankedPosition], to history: [NoteHistoryEntry], limit: Int) -> [NoteHistoryEntry] {
-        guard let note, note.midiNote != history.last?.note.midiNote else { return history }
+        guard let note else { return history }
         var result = history + [NoteHistoryEntry(note: note, positions: positions)]
         if result.count > limit { result.removeFirst(result.count - limit) }
         return result
     }
 
-    private func resolvePositions(for note: MappedNote?) {
+    private func resolvePositions(for note: MappedNote?, isRepick: Bool = false) {
         guard let note else {
             fretPositions = []
             resolvedMIDI = nil
@@ -387,7 +417,15 @@ final class AppState {
             pendingHistoryTask = nil
             return
         }
-        guard note.midiNote != resolvedMIDI else { return }
+        guard note.midiNote != resolvedMIDI else {
+            // The pitch hasn't changed, so there's no new hand position to
+            // resolve — but a repick of it is still a new history entry.
+            // `fretPositions` is already correct for this pitch (it was set
+            // the last time the note actually changed to it), so this only
+            // needs to log again, not recompute anything.
+            if isRepick { scheduleHistoryAppend(note, positions: fretPositions) }
+            return
+        }
         resolvedMIDI = note.midiNote
         fretPositions = resolver.resolve(midiNote: note.midiNote)
         scheduleHistoryAppend(note, positions: fretPositions)

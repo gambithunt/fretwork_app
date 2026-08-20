@@ -11,14 +11,15 @@ final class NoteHistoryTests: XCTestCase {
         XCTAssertEqual(history.map(\.note.midiNote), [64])
     }
 
-    /// `resolvePositions` only calls this on a genuine midiNote change, so
-    /// this dedup is a defensive backstop rather than the primary
-    /// mechanism — but the function's own contract should still hold if
-    /// called with a repeat.
-    func testSameNoteRepeatedDoesNotDuplicate() {
+    /// Unlike the chord version, this deliberately does *not* dedup against
+    /// the last entry — `resolvePositions` only ever calls it on a genuine
+    /// pitch change or a `detectRepick`-caught onset, both real events, and
+    /// hitting the same note twice in a row is exactly the case this needs
+    /// to support (both hits should show up in the strip).
+    func testSameNoteCalledTwiceAppendsTwice() {
         var history = AppState.appending(note(64), positions: [], to: [], limit: 10)
         history = AppState.appending(note(64), positions: [], to: history, limit: 10)
-        XCTAssertEqual(history.map(\.note.midiNote), [64])
+        XCTAssertEqual(history.map(\.note.midiNote), [64, 64])
     }
 
     func testNilNoteIsANoOp() {
