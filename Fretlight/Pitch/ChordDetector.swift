@@ -69,6 +69,39 @@ final class ChordDetector: @unchecked Sendable {
     /// were.
     static let minimumConfidence: Float = 0.55
 
+    /// Cosine similarity a richer quality (a 7th, an add-tone — anything
+    /// with more than 3 chord tones) must beat the *same root's* best
+    /// simpler-quality match by, before the richer one is allowed to win.
+    ///
+    /// Deliberately scoped to "same root" rather than applied as a flat
+    /// handicap in the global ranking — an earlier version of this penalty
+    /// did that, and it broke genuine 7th-chord detection: a real Gmaj7
+    /// (G-B-D-F♯) has a B-minor triad (B-D-F♯) sitting inside it sharing 3
+    /// of its 4 notes, and a flat penalty let that unrelated *root* win
+    /// outright instead of just downgrading G's own quality. Comparing only
+    /// within the winning root avoids that — Bm was never a candidate to
+    /// begin with, it just benefited from every other root's templates
+    /// being penalized too.
+    ///
+    /// Richer chords have a structural edge that has nothing to do with
+    /// actually being played: a 7th chord's template has a slot for every
+    /// triad tone *plus* one more, so any stray energy in that one extra
+    /// pitch class gives the 7th template something to "explain" that the
+    /// plain triad's template structurally cannot. A real open G major
+    /// demonstrated where that stray energy comes from even with zero F♯
+    /// actually present: a synthetic *pure* G-B-D triad — no 7th, no
+    /// harmonics, nothing but three exact chord-tone sine waves — already
+    /// scored G major 0.80 and Gmaj7 0.86 against their own templates. Not
+    /// harmonic leakage; frequency-resolution smearing — these are low
+    /// guitar notes (98-185 Hz) where this window's bin width (5.86 Hz) is
+    /// barely finer than a semitone, so windowing sidelobes blur real
+    /// energy into neighboring pitch classes regardless of what's actually
+    /// playing. 0.1 clears that measured baseline gap with headroom; still
+    /// needs validating against real strummed recordings, same as
+    /// `minimumConfidence` — this only rules out the zero-signal case, not
+    /// what a real pick attack and string noise add on top.
+    static let complexityMargin: Float = 0.1
+
     /// Guitar's practical range is E2 (82 Hz) up; anything below is room
     /// noise/rumble, not a played note. The ceiling is deliberately low —
     /// ~2 kHz is a handful of harmonics up from the highest open string, and
@@ -121,6 +154,9 @@ final class ChordDetector: @unchecked Sendable {
         guard norm > 0 else { return nil }
         let normalized = chroma.map { $0 / norm }
 
+        // Pass 1: the unbiased raw-score winner across every root and
+        // quality — this is what decides the *root*, and nothing below
+        // second-guesses that part.
         var best: (root: Int, quality: ChordQuality, score: Float)?
         for template in templates {
             var score: Float = 0
@@ -128,7 +164,23 @@ final class ChordDetector: @unchecked Sendable {
             if best == nil || score > best!.score { best = (template.root, template.quality, score) }
         }
         guard let best, best.score >= Self.minimumConfidence else { return nil }
-        return ChordMatch(root: NoteMapper.pitchClassNames[best.root], quality: best.quality, confidence: best.score)
+
+        // Pass 2: within that same root only, prefer a simpler quality
+        // (fewer chord tones) if it scores within `complexityMargin` of the
+        // winner — the richer quality's one extra tone isn't clearly
+        // present, so default to the smaller chord rather than the one
+        // frequency-resolution smear happened to favor. Among qualifying
+        // simpler candidates, the best-scoring one wins.
+        var simplerBest: (quality: ChordQuality, score: Float)?
+        for template in templates where template.root == best.root && template.quality.intervals.count < best.quality.intervals.count {
+            var score: Float = 0
+            vDSP_dotpr(normalized, 1, template.vector, 1, &score, 12)
+            guard score >= best.score - Self.complexityMargin else { continue }
+            if simplerBest == nil || score > simplerBest!.score { simplerBest = (template.quality, score) }
+        }
+        let reportedQuality = simplerBest?.quality ?? best.quality
+        let reportedScore = simplerBest?.score ?? best.score
+        return ChordMatch(root: NoteMapper.pitchClassNames[best.root], quality: reportedQuality, confidence: reportedScore)
     }
 
     private func chromagram(of samples: [Float], sampleRate: Double) -> [Float] {
