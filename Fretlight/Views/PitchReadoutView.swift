@@ -8,15 +8,16 @@ struct TunerPanel: View {
             noteBlock
             Divider().frame(height: 96)
             VStack(spacing: 9) {
-                // Even with the underlying cents value itself smoothed
-                // (AudioAnalysisWorker), each ~33ms update is still a
-                // discrete jump — TunerGauge being Animatable lets SwiftUI
-                // interpolate the drawn needle position between updates
-                // instead of snapping, which is most of what made this
-                // read as twitchy rather than a settling needle.
+                // The needle is smoothed at the source (AudioAnalysisWorker)
+                // and the stream is rate-limited before it gets here
+                // (AppState.publish), so it no longer carries a per-update
+                // ease. That ease lasted 180ms while updates arrived every
+                // 33ms, so it restarted before it could ever finish and
+                // pinned the whole window at 60fps — measured at 10 points of
+                // a core. TunerGauge stays Animatable: the panel spring below
+                // still interpolates the needle when the note changes.
                 TunerGauge(displayCents: display.note?.cents ?? 0, isActive: display.note != nil)
                     .frame(height: 54)
-                    .animation(.easeOut(duration: 0.18), value: display.note?.cents)
                 centsReadout
             }
             .frame(maxWidth: .infinity)
@@ -25,7 +26,6 @@ struct TunerPanel: View {
         .padding(.horizontal, 32).padding(.vertical, 22)
         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.06), lineWidth: 1))
-        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: display.note?.midiNote)
     }
 
     /// Pitch class as a flat, unadorned color chip beside the letter, and the
@@ -59,14 +59,15 @@ struct TunerPanel: View {
             }
         }
         .frame(width: 172, alignment: .leading)
+        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: display.note?.midiNote)
     }
 
-    // A single Text whose *content* flips between "Listening…" and the cents
-    // readout — under the shared spring animation above — is exactly what
-    // produced the overlapping/garbled text glitch: SwiftUI has no transition
-    // to animate a plain content mutation, so old and new could render
-    // mid-swap. Branching gives each state its own identity and an explicit
-    // crossfade, same as the note text above.
+    // Branching rather than flipping one Text's content between "Listening…"
+    // and the cents readout. A plain content mutation under an active
+    // animation is what produced the overlapping/garbled text glitch, and
+    // while no animation reaches this view any more — the spring is scoped to
+    // the note block now — an identity per state is what keeps that true if
+    // one ever does.
     private var centsReadout: some View {
         Group {
             if let note = display.note {
@@ -99,10 +100,10 @@ struct TunerPanel: View {
         VStack(alignment: .trailing, spacing: 2) {
             Text(display.frequency.map { String(format: "%.2f", $0) } ?? "—")
                 .font(.system(size: 25, weight: .black, design: .monospaced))
-                // The panel-wide spring above fires whenever the note
-                // changes, and the frequency changes on that same update —
-                // without a content transition that's the same garbled
-                // in-place mutation the readouts above had to fix.
+                // Inert while no animation reaches this block, and kept for
+                // the same reason as the one on the level readout: it is what
+                // stops the digits rendering on top of each other if an
+                // animation is ever put back in scope.
                 .contentTransition(.numericText())
             Text("HERTZ")
                 .font(.caption2.weight(.bold)).tracking(1.5)

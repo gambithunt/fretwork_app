@@ -21,6 +21,18 @@ final class AppState {
     private let resolver = FretPositionResolver()
     private var resolvedMIDI: Int?
     private let deviceWatcher = AudioDeviceWatcher()
+    /// How often the analysis worker's stream is allowed to reach the UI.
+    ///
+    /// Deliberately chosen here rather than inherited from the audio, because
+    /// the two have nothing to do with each other: detection runs at ~30Hz
+    /// because YIN needs that cadence, while every published update
+    /// re-rasterises this window on the CPU — SwiftUI's display lists are not
+    /// GPU-accelerated, so the whole visible area is redrawn each time.
+    /// Measured on a 1402pt-wide board: publishing at 30Hz costs 50% of a
+    /// core, at 12Hz 27%. Nothing in a tuner readout is worth 23% of a core to
+    /// show twice as often.
+    private static let displayInterval = Duration.seconds(1.0 / 12)
+    private var lastPublish: ContinuousClock.Instant?
     /// What the user actually chose. `selectedInput/OutputDeviceID` is only a
     /// resolution of these against whatever is plugged in right now.
     private var selectedInputUID: String?
@@ -30,9 +42,7 @@ final class AppState {
         refreshDevices()
         audioEngine.onUpdate = { [weak self] update in
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.display = update
-                self.resolvePositions(for: update.note)
+                self?.publish(update)
             }
         }
         audioEngine.onError = { [weak self] message in
@@ -151,6 +161,23 @@ final class AppState {
     /// second, but only a genuine change of note is a new event to score —
     /// feeding it every frame would let one sustained note walk the resolver's
     /// hand-position estimate along the neck.
+    /// Rate-limits the worker's stream to `displayInterval`, except when the
+    /// note itself changes: a new note is the one event a player is waiting to
+    /// see, so it goes through immediately and the clock restarts from there.
+    /// Everything else — level, cents, frequency — is a value the eye reads,
+    /// not an event it waits for, and can sit until the next refresh.
+    ///
+    /// Dropping the updates in between is safe because another always follows
+    /// within ~33ms; nothing here is the only carrier of a state change.
+    private func publish(_ update: PitchDisplayState) {
+        let now = ContinuousClock.now
+        let noteChanged = update.note?.midiNote != display.note?.midiNote
+        if !noteChanged, let lastPublish, now - lastPublish < Self.displayInterval { return }
+        lastPublish = now
+        display = update
+        resolvePositions(for: update.note)
+    }
+
     private func resolvePositions(for note: MappedNote?) {
         guard let note else {
             fretPositions = []

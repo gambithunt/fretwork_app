@@ -18,11 +18,13 @@ struct InputLevelPanel: View {
                 Spacer(minLength: 24)
                 Text(String(format: "%.0f", Self.decibels(level)))
                     .font(.system(size: 19, weight: .black, design: .monospaced))
-                    // level changes ~30x/sec while listening, under the
-                    // .animation(value: level) below — a plain string swap
-                    // has no defined animation, which is what rendered as
-                    // overlapping/garbled digits. This gives SwiftUI an
-                    // actual digit-rolling transition to run instead.
+                    // Kept as a declaration of intent rather than an active
+                    // effect: the panel-wide .animation(value: level) that
+                    // once drove it is gone (it never settled, and cost
+                    // roughly 10 points of a core), and a plain string swap
+                    // with no animation in scope cannot garble. If an
+                    // animation is ever reintroduced here, this is what stops
+                    // the digits rendering on top of each other again.
                     .contentTransition(.numericText())
                 Text("DB")
                     .font(.caption2.weight(.bold)).tracking(1.4).foregroundStyle(.secondary)
@@ -33,7 +35,6 @@ struct InputLevelPanel: View {
         .frame(maxWidth: .infinity)
         .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.06), lineWidth: 1))
-        .animation(.easeOut(duration: 0.08), value: level)
         .onChange(of: level) { _, new in
             let now = Self.normalized(new)
             // Jump straight to a new peak, but only ever ease back down —
