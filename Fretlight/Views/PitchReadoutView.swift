@@ -16,13 +16,19 @@ struct TunerPanel: View {
             headlineBlock
             Divider().frame(height: 96)
             VStack(spacing: 9) {
-                // Cents only mean something for a single held pitch — in
-                // Chords mode there's no one pitch to needle at, so the
-                // gauge stays on screen (same size, same position) but
-                // inert: no needle color, dimmed, not chasing a value.
-                TunerGauge(displayCents: mode == .notes ? (display.note?.cents ?? 0) : 0, isActive: mode == .notes && display.note != nil)
-                    .frame(height: 54)
-                    .opacity(mode == .notes ? 1 : 0.25)
+                switch mode {
+                case .notes:
+                    TunerGauge(displayCents: display.note?.cents ?? 0, isActive: display.note != nil)
+                        .frame(height: 54)
+                case .chords:
+                    // The gauge is a cents needle — meaningless for a chord,
+                    // there's no one pitch to point at — so this doesn't
+                    // reuse it dimmed-and-idle. What actually belongs at
+                    // center stage in Chords mode is the chord itself: the
+                    // one thing this whole mode exists to tell you, given
+                    // the room the note-mode needle otherwise leaves empty.
+                    chordNameReadout
+                }
                 statusReadout
             }
             .frame(maxWidth: .infinity)
@@ -38,14 +44,18 @@ struct TunerPanel: View {
     private var headlineKey: String? {
         switch mode {
         case .notes: return display.note.map { String($0.midiNote) }
-        case .chords: return chord.chord?.name
+        case .chords: return chord.chord?.root
         }
     }
 
     /// Pitch class (or chord root) as a flat, unadorned color chip beside the
     /// letter, and the octave/qualifier demoted to a caption underneath —
     /// the name is the one thing worth reading across the room, so nothing
-    /// else competes with it at that weight.
+    /// else competes with it at that weight. In Chords mode this shows the
+    /// root alone, not the full chord name — the name itself now has its
+    /// own centered spot (`chordNameReadout`) where the note-mode gauge
+    /// used to be, so this block stays what it's always been: an at-a-glance
+    /// pitch-class chip, not a second copy of the headline reading.
     private var headlineBlock: some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
@@ -65,8 +75,8 @@ struct TunerPanel: View {
                         }
                     case .chords:
                         if let match = chord.chord {
-                            Text(match.name)
-                                .id(match.name)
+                            Text(match.root)
+                                .id(match.root)
                                 .transition(.scale(scale: 0.65).combined(with: .opacity))
                         } else {
                             placeholderGlyph
@@ -81,6 +91,27 @@ struct TunerPanel: View {
         }
         .frame(width: 172, alignment: .leading)
         .animation(.spring(response: 0.34, dampingFraction: 0.72), value: headlineKey)
+    }
+
+    /// Centered where the cents gauge sits in Notes mode — the chord name is
+    /// the one thing this whole mode exists to report, so it gets the same
+    /// stage the needle gets, not a corner of it.
+    private var chordNameReadout: some View {
+        Group {
+            if let match = chord.chord {
+                Text(match.name)
+                    .id(match.name)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+            } else {
+                Text("—")
+                    .foregroundStyle(.white.opacity(0.22))
+                    .transition(.opacity)
+            }
+        }
+        .font(.system(size: 40, weight: .black, design: .rounded))
+        .frame(height: 54)
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: chord.chord?.name)
     }
 
     // Dimmed: at this weight and size a full-strength placeholder shouts as
@@ -101,7 +132,7 @@ struct TunerPanel: View {
     private var subtitle: String {
         switch mode {
         case .notes: return display.note.map { "OCTAVE \($0.octave)" } ?? "NO SIGNAL"
-        case .chords: return chord.chord != nil ? "STRUMMED CHORD" : "NO SIGNAL"
+        case .chords: return chord.chord != nil ? "ROOT" : "NO SIGNAL"
         }
     }
 
