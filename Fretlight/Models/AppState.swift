@@ -42,7 +42,15 @@ final class AppState {
     /// logic), so a naive append-on-every-update would log the same chord
     /// dozens of times per strum.
     private(set) var chordHistory: [ChordHistoryEntry] = []
-    private static let chordHistoryLimit = 10
+    /// Chosen against a measurement (offscreen NSHostingView harness, this
+    /// project's usual way to size things without a real display), not a
+    /// guess: 16 chips of realistic chord names fit inside the window's own
+    /// minimum content width without scrolling; only the pathological case
+    /// of every single entry being the longest possible label
+    /// (root+"maj7"/"sus4", e.g. "C♯maj7") pushes past it, at which point
+    /// `HistoryStrip`'s scroll fallback (not a hard cap) takes over instead
+    /// of clipping.
+    private static let chordHistoryLimit = 16
     /// Set when the player taps a history chip to hold that chord's shape on
     /// the fretboard instead of the live feed. Cleared by tapping the same
     /// chip again, or automatically whenever detection mode leaves `.chords`
@@ -57,7 +65,11 @@ final class AppState {
     /// immediately on every change would turn one pluck into several
     /// history entries.
     private(set) var noteHistory: [NoteHistoryEntry] = []
-    private static let noteHistoryLimit = 10
+    /// Note labels ("A♯2") are shorter than chord labels, so the same 16
+    /// that's measured safe for `chordHistoryLimit` is even more so here —
+    /// kept equal for one consistent density between the two modes rather
+    /// than two arbitrary numbers.
+    private static let noteHistoryLimit = 16
     /// Set when the player taps a note-history chip to hold that note's
     /// position on the fretboard instead of the live feed. Same lifecycle as
     /// `pinnedChordHistoryID` — cleared by tapping again, or by leaving
@@ -267,6 +279,24 @@ final class AppState {
 
     private func appendToHistory(_ match: ChordMatch?) {
         chordHistory = Self.appending(match, to: chordHistory, limit: Self.chordHistoryLimit)
+    }
+
+    /// Also releases the pin — a pin referencing a now-gone entry would
+    /// silently keep the fretboard frozen on a chord that no longer appears
+    /// anywhere in the strip, which reads as the clear having partly failed.
+    func clearChordHistory() {
+        chordHistory = []
+        pinnedChordHistoryID = nil
+    }
+
+    /// Also cancels any in-flight debounce (see `scheduleHistoryAppend`) —
+    /// otherwise a pending append from just before the clear could land
+    /// right after it and put one entry back.
+    func clearNoteHistory() {
+        pendingHistoryTask?.cancel()
+        pendingHistoryTask = nil
+        noteHistory = []
+        pinnedNoteHistoryID = nil
     }
 
     /// Pure dedup+cap step, kept free of actor isolation so it's unit

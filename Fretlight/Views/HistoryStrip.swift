@@ -6,12 +6,13 @@ import SwiftUI
 /// again releases it. Generic over the entry type so both modes share one
 /// component instead of two near-identical views.
 ///
-/// Spread edge-to-edge with spacers between chips rather than packed to the
-/// leading edge in a horizontal scroll: the history is capped (see
-/// `AppState.chordHistoryLimit`/`noteHistoryLimit`), and the window's own
-/// minimum width comfortably fits that many chips, so there's no case where
-/// this actually needs to scroll — packing them left just left most of the
-/// row visibly unused.
+/// Chips are spread edge-to-edge across the available width with spacers,
+/// not packed to the leading edge — the caps (`AppState.chordHistoryLimit`/
+/// `noteHistoryLimit`) are sized so real-world sequences fit without
+/// scrolling, so packing them left just left most of the row visibly
+/// unused. The `ScrollView` wrapper stays as a fallback, not the primary
+/// interaction: a pathological run of the longest possible labels can still
+/// overflow the measured budget, and scrolling gracefully beats clipping.
 struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
     let history: [Entry]
     let pinnedID: UUID?
@@ -20,29 +21,54 @@ struct HistoryStrip<Entry: Identifiable>: View where Entry.ID == UUID {
     /// What's being held, for the tap-to-hold help text — "chord"/"note".
     let noun: String
     let onSelect: (UUID?) -> Void
+    let onClear: () -> Void
 
     var body: some View {
         // Collapses to nothing on a fresh session rather than showing an
         // empty track — there's nothing useful to fill the row with yet.
         if !history.isEmpty {
-            HStack(spacing: 0) {
-                ForEach(Array(history.enumerated()), id: \.element.id) { index, entry in
-                    chip(entry)
-                        .transition(.opacity.combined(with: .scale(scale: 0.7)))
-                    if index < history.count - 1 {
-                        Spacer(minLength: 8)
+            HStack(spacing: 8) {
+                GeometryReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 0) {
+                            ForEach(Array(history.enumerated()), id: \.element.id) { index, entry in
+                                chip(entry)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.7)))
+                                if index < history.count - 1 {
+                                    Spacer(minLength: 8)
+                                }
+                            }
+                        }
+                        // Pinning the row's content to at least the full
+                        // viewport width is what lets the spacers above
+                        // actually spread the chips edge-to-edge when
+                        // everything fits; content narrower than this would
+                        // otherwise just hug the leading edge inside the
+                        // ScrollView the way it did before.
+                        .frame(minWidth: proxy.size.width, alignment: .leading)
                     }
+                    // The oldest chip falls off the front the moment the cap
+                    // is exceeded (see `AppState.appending`), which without
+                    // an explicit animation would just pop out of existence
+                    // on the next redraw. Keying on the id sequence (not
+                    // just count) also covers the ordinary case of a chip
+                    // fading in at the end.
+                    .animation(.easeInOut(duration: 0.32), value: history.map(\.id))
                 }
+                clearButton
             }
-            .frame(maxWidth: .infinity)
             .frame(height: 40)
-            // The oldest chip falls off the front the moment the cap is
-            // exceeded (see `AppState.appending`), which without an explicit
-            // animation would just pop out of existence on the next redraw.
-            // Keying on the id sequence (not just count) means this also
-            // fires for the ordinary case of a chip fading in at the end.
-            .animation(.easeInOut(duration: 0.32), value: history.map(\.id))
         }
+    }
+
+    private var clearButton: some View {
+        Button(action: onClear) {
+            Image(systemName: "xmark.circle")
+        }
+        .buttonStyle(.bordered)
+        .tint(.secondary)
+        .controlSize(.small)
+        .help("Clear \(noun) history")
     }
 
     private func chip(_ entry: Entry) -> some View {

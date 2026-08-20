@@ -25,7 +25,8 @@ struct ContentView: View {
                     label: { $0.match.name },
                     tint: { NotePalette.color(for: $0.match.root) },
                     noun: "chord",
-                    onSelect: { state.pinnedChordHistoryID = $0 }
+                    onSelect: { state.pinnedChordHistoryID = $0 },
+                    onClear: { state.clearChordHistory() }
                 )
             case .notes:
                 HistoryStrip(
@@ -34,7 +35,8 @@ struct ContentView: View {
                     label: { "\($0.note.name)\($0.note.octave)" },
                     tint: { NotePalette.color(for: $0.note.name) },
                     noun: "note",
-                    onSelect: { state.pinnedNoteHistoryID = $0 }
+                    onSelect: { state.pinnedNoteHistoryID = $0 },
+                    onClear: { state.clearNoteHistory() }
                 )
             }
             // Grows to take up whatever's left in the window rather than a
