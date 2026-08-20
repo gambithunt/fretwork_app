@@ -60,6 +60,11 @@ struct RulerSlider: View {
         }
         .frame(height: 32)
         .focusable(isEnabled)
+        // The knob already draws its own focus ring (the strokeBorder
+        // above) — without this, macOS also draws its default rounded-rect
+        // focus indicator around the whole control, so a focused slider
+        // showed two rings at once.
+        .focusEffectDisabled()
         .focused($focused)
         // A native Slider takes arrow keys once focused; a custom control has
         // to say so itself, and one step here is one printed digit.
