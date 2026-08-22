@@ -17,11 +17,14 @@ APP_NAME="Fretwork"
 IDENTITY="${CODE_SIGN_IDENTITY:-Fretwork Code Signing}"
 DOWNLOAD_PREFIX="${DOWNLOAD_PREFIX:-https://downloads.fretwork.org/}"
 
+# $OUT holds only what gets published, so CI can sync it to the bucket
+# wholesale. Intermediates live beside it.
 OUT="${1:-build}"
-STAGE="$OUT/stage"
-ARCHIVE="$OUT/$APP_NAME.xcarchive"
+WORK="$OUT/../.release-work"
+STAGE="$WORK/stage"
+ARCHIVE="$WORK/$APP_NAME.xcarchive"
 
-rm -rf "$OUT/$APP_NAME.xcarchive" "$STAGE"
+rm -rf "$WORK"
 mkdir -p "$OUT" "$STAGE"
 
 echo "==> Resolving packages"
@@ -106,6 +109,6 @@ cat > "$OUT/version.json" <<JSON
 }
 JSON
 
-rm -rf "$STAGE"
+rm -rf "$WORK"
 echo "==> Done"
-ls -1 "$OUT" | grep -vE '\.xcarchive$' | sed 's/^/    /'
+ls -1 "$OUT" | sed 's/^/    /'

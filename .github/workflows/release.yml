@@ -1,0 +1,127 @@
+name: Release
+
+# Tag-triggered: `git tag v0.3.0 && git push --tags` publishes a release.
+# The tag is only the trigger — every version number comes from the built
+# app's Info.plist, so the tag can never disagree with what users install.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, sign and publish
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Import signing certificate
+        env:
+          CERT_BASE64: ${{ secrets.SIGNING_CERTIFICATE_P12 }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+
+          echo -n "$CERT_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT_PATH" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -t agg -f pkcs12
+          # Without this, codesign blocks on a GUI prompt that no one can
+          # answer on a headless runner.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+          rm -f "$CERT_PATH"
+          # A self-signed certificate is never policy-"valid", so list without
+          # -v; the identity only has to be findable by codesign.
+          security find-identity "$KEYCHAIN" | grep "Fretwork Code Signing"
+
+      - name: Fetch published releases
+        # generate_appcast rewrites the feed from the directory it is given, so
+        # the bucket's current contents have to be present or previous versions
+        # would be dropped from the appcast.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          mkdir -p build
+          aws s3 sync "s3://${{ vars.R2_BUCKET }}" build \
+            --endpoint-url "$R2_ENDPOINT" --no-progress
+
+      - name: Build release
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          DOWNLOAD_PREFIX: https://downloads.fretwork.org/
+        run: ./scripts/build-release.sh build
+
+      - name: Publish disk images
+        # Versioned filenames never change, so they can be cached forever.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          aws s3 sync build "s3://${{ vars.R2_BUCKET }}" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --exclude '*' --include '*.dmg' \
+            --content-type application/x-apple-diskimage \
+            --cache-control 'public, max-age=31536000, immutable'
+
+      - name: Publish appcast and version metadata
+        # Uploaded last and cached briefly: nothing should learn about a new
+        # version before the file it points at is actually downloadable.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          aws s3 cp build/appcast.xml "s3://${{ vars.R2_BUCKET }}/appcast.xml" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --content-type application/xml \
+            --cache-control 'public, max-age=300, must-revalidate'
+          aws s3 cp build/version.json "s3://${{ vars.R2_BUCKET }}/version.json" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --content-type application/json \
+            --cache-control 'public, max-age=300, must-revalidate'
+
+      - name: Purge the edge cache for the mutable files
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_CACHE_PURGE_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+            --data '{"files":["https://downloads.fretwork.org/appcast.xml","https://downloads.fretwork.org/version.json"]}' \
+            > /dev/null && echo "purged"
+
+      - name: Attach the disk image to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DMG=$(ls build/*.dmg | sort -V | tail -1)
+          gh release create "${{ github.ref_name }}" "$DMG" \
+            --title "${{ github.ref_name }}" \
+            --notes "See CHANGELOG.md. Download: https://downloads.fretwork.org/$(basename "$DMG")" \
+            || gh release upload "${{ github.ref_name }}" "$DMG" --clobber
