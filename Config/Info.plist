@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Sparkle. The rest of the Info.plist is still generated from the
+	     INFOPLIST_KEY_* build settings and merged into this file. -->
+	<key>SUFeedURL</key>
+	<string>https://downloads.fretwork.org/appcast.xml</string>
+	<!-- Public half of the EdDSA key pair whose private half lives in the
+	     release signer's login keychain. Sparkle refuses any update whose
+	     archive is not signed by the matching private key, which is what
+	     makes an unnotarized app safe to auto-update. -->
+	<key>SUPublicEDKey</key>
+	<string>H0sXvEgfIXV6LbVvqFvfYHVGxOYieeJl5IO85p+nxEI=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+</dict>
+</plist>

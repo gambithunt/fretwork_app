@@ -1,8 +1,18 @@
+import Sparkle
 import SwiftUI
 
 @main
 struct FretworkApp: App {
     @State private var state = AppState()
+
+    // Starting the updater here rather than lazily means the scheduled
+    // background check (SUScheduledCheckInterval in Config/Info.plist) is
+    // running from launch, not from the first time the menu is opened.
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
 
     var body: some Scene {
         WindowGroup {
@@ -19,6 +29,11 @@ struct FretworkApp: App {
                 // 700. Below this the fretboard would be forced under its floor
                 // and something would clip.
                 .frame(minWidth: 1_180, minHeight: 700)
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updaterController.updater)
+            }
         }
     }
 }
