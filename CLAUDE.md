@@ -110,6 +110,23 @@ scattered across call sites.
   hidden window measures clean no matter how bad the bug is. Any CPU
   comparison has to run with the window actually composited (`onscreen`).
 
+## Versioning
+
+Two separate fields, both in the `Fretlight` target's build settings
+(`project.pbxproj`) — kept separate because App Store Connect/notarization
+requires the build number to strictly increase across *every* upload,
+including patch rebuilds of the same marketing version:
+
+- `MARKETING_VERSION` — `0.MINOR.PATCH` (stay on `0.x` pre-1.0). Bump MINOR
+  when a feature workstream completes (e.g. chord detection); bump PATCH for
+  a bugfix-only workstream.
+- `CURRENT_PROJECT_VERSION` — plain incrementing integer. Bump +1 alongside
+  every MARKETING_VERSION bump.
+
+On any workstream that bumps the version: also add a `CHANGELOG.md` entry
+(newest on top, written from the commit's root-cause message) and tag the
+commit `vX.Y.Z` on `main`.
+
 ## Workstream Checkpoints
 
 - At the end of a completed workstream, check `git status` before reporting
@@ -120,6 +137,9 @@ scattered across call sites.
   message that states the root cause found and the fix, not just what
   changed — this file's Decisions table exists because those commit messages
   captured the reasoning.
+- If the workstream shipped a feature or fix (not a pure refactor/doc/chore),
+  bump the version per Versioning above as part of the same commit, update
+  `CHANGELOG.md`, and tag it.
 - Don't mix unrelated changes into one commit. If unrelated changes are
   already present (uncommitted work from elsewhere), leave them unstaged and
   call them out rather than folding them in.

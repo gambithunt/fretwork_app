@@ -208,11 +208,15 @@
 				ENABLE_STRICT_CONCURRENCY = complete;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				MARKETING_VERSION = 0.1.0;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright \U00a9 2026 Delon Misic. MIT licensed.";
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar input to identify notes.";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fretlight.app;
+				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.app;
 				PRODUCT_NAME = Fretwork;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
@@ -228,11 +232,15 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_CONCURRENCY = complete;
 				GENERATE_INFOPLIST_FILE = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				MARKETING_VERSION = 0.1.0;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright \U00a9 2026 Delon Misic. MIT licensed.";
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar input to identify notes.";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fretlight.app;
+				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.app;
 				PRODUCT_NAME = Fretwork;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
@@ -245,7 +253,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fretlight.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.tests;
 				PRODUCT_NAME = FretlightTests;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
@@ -259,7 +267,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.fretlight.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.tests;
 				PRODUCT_NAME = FretlightTests;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
@@ -270,12 +278,31 @@
 		A00000000000000000000025 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_COMPILATION_MODE = singlefile;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 			};
 			name = Debug;
 		};
 		A00000000000000000000026 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				GCC_OPTIMIZATION_LEVEL = s;
+				ONLY_ACTIVE_ARCH = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				DEAD_CODE_STRIPPING = YES;
+				VALIDATE_PRODUCT = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
 			};
 			name = Release;
 		};
