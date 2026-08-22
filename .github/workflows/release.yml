@@ -64,7 +64,8 @@ jobs:
         run: |
           mkdir -p build
           aws s3 sync "s3://${{ vars.R2_BUCKET }}" build \
-            --endpoint-url "$R2_ENDPOINT" --no-progress
+            --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --exclude 'Fretwork-latest.dmg'
 
       - name: Build release
         env:
@@ -85,6 +86,24 @@ jobs:
             --exclude '*' --include '*.dmg' \
             --content-type application/x-apple-diskimage \
             --cache-control 'public, max-age=31536000, immutable'
+
+      - name: Point the stable download URL at this release
+        # The website links here so it never needs redeploying for a release,
+        # and so the download still works with JavaScript disabled. Copied
+        # server-side rather than uploaded, and kept out of the build
+        # directory so generate_appcast cannot mistake it for a release.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          DMG=$(basename "$(ls build/*.dmg | sort -V | tail -1)")
+          aws s3 cp "s3://${{ vars.R2_BUCKET }}/$DMG" \
+            "s3://${{ vars.R2_BUCKET }}/Fretwork-latest.dmg" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --content-type application/x-apple-diskimage \
+            --cache-control 'public, max-age=300, must-revalidate'
 
       - name: Publish appcast and version metadata
         # Uploaded last and cached briefly: nothing should learn about a new
@@ -113,7 +132,7 @@ jobs:
             -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: application/json" \
             "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
-            --data '{"files":["https://downloads.fretwork.org/appcast.xml","https://downloads.fretwork.org/version.json"]}' \
+            --data '{"files":["https://downloads.fretwork.org/appcast.xml","https://downloads.fretwork.org/version.json","https://downloads.fretwork.org/Fretwork-latest.dmg"]}' \
             > /dev/null && echo "purged"
 
       - name: Attach the disk image to the GitHub release
