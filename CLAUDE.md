@@ -53,6 +53,8 @@ Layout:
 | A Text/Image whose displayed value changes rapidly under an active `.animation()` | `.contentTransition(.numericText())` / `.contentTransition(.symbolEffect(.replace))`, or branch with `.transition()` per state | Letting the view's content just mutate in place — produces overlapping/garbled rendering |
 | Two sibling views that need independent placement (e.g. a title and a controls row) | A sequential `HStack`/`VStack` | `ZStack` + alignment to "center" one over the other — doesn't reserve space, can genuinely overlap depending on width |
 | A custom `View` that also needs `Animatable` | Mark `animatableData` `nonisolated` | Leaving it inferred — strict concurrency flags it as crossing an actor boundary, since `Animatable`'s requirement isn't itself `@MainActor` |
+| Signing a build for distribution without an Apple Developer account | A self-signed Code Signing certificate, reused for every build | Ad-hoc (`codesign -s -`). Ad-hoc's designated requirement is a bare `cdhash`, so every rebuild is a different app to TCC and the microphone grant is re-prompted on every update. A self-signed cert's requirement is `identifier "..." and certificate leaf H"..."`, which is stable across rebuilds — measured, see Gotchas |
+| Info.plist keys that `INFOPLIST_KEY_*` cannot express (e.g. Sparkle's) | A partial `Config/Info.plist` set as `INFOPLIST_FILE`, with `GENERATE_INFOPLIST_FILE` left YES so the two merge | Turning off plist generation, or putting the file inside `Fretlight/` — that folder is a synchronized root group, so the plist would also be copied in as a resource |
 | A stored property whose init needs to capture `self` | Give the property a plain default, assign its callback in `init()`'s body (see `AudioDeviceWatcher` / `AppState.deviceWatcher`) | Passing a `[weak self]`-capturing closure straight into that property's own initializer — two-phase init rejects any use of `self` before every other stored property has a value |
 | Renaming the app / product | Update `@testable import <ModuleName>` in both test files too | Leaving old imports — `PRODUCT_NAME` changes the Swift module name; the test target silently fails to build |
 | A screen mixing audio-rate readouts with static controls | Read the fast-changing `@Observable` properties inside one small leaf `View` per readout (see `TunerSection`/`LevelSection`/`TelemetrySection`/`BoardSection` in `ContentView.swift`) | Reading them in the parent's `body`. `@Observable` tracks reads per view body, so one 30Hz property read there rebuilds every sibling — device pickers and all |
@@ -106,6 +108,24 @@ scattered across call sites.
   not a "slow view". Compare `heap <pid>` class counts against a fresh launch
   — that is what identified this one; `sample`'s "Sort by top of stack"
   section gives self-time, which the call-graph tree does not.
+- Embedding any framework requires `LD_RUNPATH_SEARCH_PATHS` to include
+  `@executable_path/../Frameworks`. These build configurations were written by
+  hand and never had it, so the first embedded framework (Sparkle) was copied
+  into the bundle correctly and dyld still aborted on launch with `Library not
+  loaded: @rpath/...`. **The test suite cannot catch this** — xctest injects
+  `DYLD_FRAMEWORK_PATH` pointing at the build products directory, where the
+  framework also sits, so tests pass against an app that cannot launch. Only
+  running the archived build directly shows it.
+- Xcode's *default* for an unset build setting is not the template's value.
+  `SWIFT_OPTIMIZATION_LEVEL` unset means `-Onone`, not `-O`, so an otherwise
+  healthy-looking Release configuration shipped an unoptimized binary for
+  months. Check with `xcodebuild -showBuildSettings`: a setting that is absent
+  from the output entirely has no value at all.
+- Sparkle's `generate_keys`/`sign_update`/`generate_appcast` are not in the
+  built product. After `xcodebuild -resolvePackageDependencies` they are at
+  `~/Library/Developer/Xcode/DerivedData/Fretlight-*/SourcePackages/artifacts/sparkle/Sparkle/bin/`.
+  `sign_update --ed-key-file -` reads the private key from stdin, which is how
+  CI signs without writing the key to disk.
 - A backgrounded/occluded window is occlusion-throttled to ~0% CPU, so a
   hidden window measures clean no matter how bad the bug is. Any CPU
   comparison has to run with the window actually composited (`onscreen`).
