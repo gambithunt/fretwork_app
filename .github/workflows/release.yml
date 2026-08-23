@@ -116,9 +116,14 @@ jobs:
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
           DMG=$(basename "$(ls build/*.dmg | sort -V | tail -1)")
+          # --metadata-directive REPLACE is required: a server-side copy
+          # otherwise inherits the source object's metadata and silently
+          # ignores --cache-control, leaving the mutable alias marked
+          # immutable for a year.
           aws s3 cp "s3://${{ vars.R2_BUCKET }}/$DMG" \
             "s3://${{ vars.R2_BUCKET }}/Fretwork-latest.dmg" \
             --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --metadata-directive REPLACE \
             --content-type application/x-apple-diskimage \
             --cache-control 'public, max-age=300, must-revalidate'
 
