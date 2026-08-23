@@ -27,15 +27,11 @@ ARCHIVE="$WORK/$APP_NAME.xcarchive"
 rm -rf "$WORK"
 mkdir -p "$OUT" "$STAGE"
 
-echo "==> Resolving packages"
-xcodebuild -project "$PROJECT" -resolvePackageDependencies -quiet
-
-# Sparkle's tools are not part of the built product; they arrive with the
-# resolved package artifact.
-SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData -type d \
-  -path "*/artifacts/sparkle/Sparkle/bin" 2>/dev/null | head -1)
-if [ -z "$SPARKLE_BIN" ]; then
-  echo "error: could not locate Sparkle's bin/ — has the package resolved?" >&2
+# Sparkle's framework and its signing tools are vendored in this repo rather
+# than resolved, so a release needs no network and no package resolution.
+SPARKLE_BIN="$PWD/Tools/sparkle"
+if [ ! -x "$SPARKLE_BIN/generate_appcast" ]; then
+  echo "error: Tools/sparkle/generate_appcast is missing or not executable" >&2
   exit 1
 fi
 

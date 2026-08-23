@@ -121,11 +121,16 @@ scattered across call sites.
   healthy-looking Release configuration shipped an unoptimized binary for
   months. Check with `xcodebuild -showBuildSettings`: a setting that is absent
   from the output entirely has no value at all.
-- Sparkle's `generate_keys`/`sign_update`/`generate_appcast` are not in the
-  built product. After `xcodebuild -resolvePackageDependencies` they are at
-  `~/Library/Developer/Xcode/DerivedData/Fretlight-*/SourcePackages/artifacts/sparkle/Sparkle/bin/`.
-  `sign_update --ed-key-file -` reads the private key from stdin, which is how
-  CI signs without writing the key to disk.
+- Sparkle is **vendored**, not a Swift package: `Frameworks/Sparkle.xcframework`
+  is linked and embedded directly, and `generate_keys`/`sign_update`/
+  `generate_appcast` live in `Tools/sparkle/`. Do not reintroduce it as an SPM
+  dependency — its binary-target cache wedged repeatedly (`already exists in
+  file system`, then a resolve that stopped with `"artifacts": []`) and took
+  the Xcode GUI build down with it while `xcodebuild` still worked.
+  `docs/releasing.md` has the upgrade procedure, including that the
+  xcframework's `DebugSymbolsPath` key must be deleted when the dSYMs are
+  stripped. `sign_update --ed-key-file -` reads the private key from stdin,
+  which is how CI signs without writing the key to disk.
 - A backgrounded/occluded window is occlusion-throttled to ~0% CPU, so a
   hidden window measures clean no matter how bad the bug is. Any CPU
   comparison has to run with the window actually composited (`onscreen`).

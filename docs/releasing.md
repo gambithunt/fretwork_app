@@ -65,6 +65,7 @@ an update exists; `generate_appcast` also keys its entries on it.
 | Select Xcode | Picks the newest installed. Release artifacts must come from the toolchain the app is developed and smoke-tested against — Xcode 16's SDK rejects an `AVAudioEngine` capture in `AudioEngine.swift` that Xcode 26's permits. |
 | Import signing certificate | Decodes the `.p12` secret into a throwaway keychain. `set-key-partition-list` is what stops `codesign` blocking on a GUI prompt no one can answer headlessly. |
 | Ensure the AWS CLI | R2 is driven through its S3-compatible API. |
+| — | There is no package-resolution step. Sparkle is vendored, so a release needs no network beyond the R2 upload. |
 | Fetch published releases | Syncs the bucket **down**. `generate_appcast` rewrites the feed from the directory it is given, so without the existing images every older version would drop out of the appcast. Excludes `Fretwork-latest.dmg`, which would otherwise be read as a duplicate release. |
 | Build release | Runs `scripts/build-release.sh` — the same script you can run locally. |
 | Publish disk images | Versioned filenames never change, so `immutable, max-age=1y`. |
@@ -137,9 +138,8 @@ hdiutil detach -quiet /tmp/fmnt
 the published image. Silence means verified:
 
 ```bash
-SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData -type d -path "*/artifacts/sparkle/Sparkle/bin" | head -1)
 SIG=$(curl -s https://downloads.fretwork.org/appcast.xml | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
-"$SPARKLE_BIN/sign_update" --verify /tmp/f.dmg "$SIG"
+./Tools/sparkle/sign_update --verify /tmp/f.dmg "$SIG"
 ```
 
 ### There is no sandbox
@@ -185,7 +185,7 @@ security export -k login.keychain-db -t identities -f pkcs12 -o ~/Desktop/fretwo
 ```
 
 ```bash
-~/Library/Developer/Xcode/DerivedData/Fretlight-*/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -x ~/Desktop/sparkle-private-key.txt
+./Tools/sparkle/generate_keys -x ~/Desktop/sparkle-private-key.txt
 ```
 
 Store both in a password manager, then delete the files and empty the Trash.
@@ -221,3 +221,45 @@ pre-warms Gatekeeper with `gktool` — so this happens on **first install only**
 never on an update. [fretwork.org/mac](https://fretwork.org/mac) walks through
 it, including the detail that the "Open Anyway" button disappears about an
 hour after the blocked launch.
+
+## Upgrading Sparkle
+
+Sparkle is **vendored**, not resolved as a Swift package:
+`Frameworks/Sparkle.xcframework` is linked and embedded directly, and its
+signing tools live in `Tools/sparkle/`. This is deliberate. SPM's binary-target
+cache repeatedly wedged itself — `already exists in file system` on the
+artifact path, then a resolution that silently stopped with `"artifacts": []`
+— and package resolution is not something a release should be able to fail on.
+Builds are now hermetic and need no network.
+
+To move to a new Sparkle version:
+
+```bash
+VERSION=2.9.7
+curl -fsSL -o /tmp/sparkle.zip \
+  "https://github.com/sparkle-project/Sparkle/releases/download/$VERSION/Sparkle-for-Swift-Package-Manager.zip"
+```
+
+Check the download against the checksum Sparkle publishes in its own
+`Package.swift` for that tag before trusting it:
+
+```bash
+shasum -a 256 /tmp/sparkle.zip
+curl -fsSL "https://raw.githubusercontent.com/sparkle-project/Sparkle/$VERSION/Package.swift" | grep checksum
+```
+
+Then replace the framework and tools:
+
+```bash
+rm -rf /tmp/sparkle && mkdir /tmp/sparkle && (cd /tmp/sparkle && unzip -q /tmp/sparkle.zip)
+rm -rf Frameworks/Sparkle.xcframework
+ditto /tmp/sparkle/Sparkle.xcframework Frameworks/Sparkle.xcframework
+rm -rf Frameworks/Sparkle.xcframework/macos-arm64_x86_64/dSYMs
+/usr/libexec/PlistBuddy -c "Delete :AvailableLibraries:0:DebugSymbolsPath" Frameworks/Sparkle.xcframework/Info.plist
+for t in generate_appcast sign_update generate_keys BinaryDelta; do ditto "/tmp/sparkle/bin/$t" "Tools/sparkle/$t"; done
+```
+
+Deleting `DebugSymbolsPath` is required: the dSYMs are 20MB of the 23MB
+download and are not worth versioning, but Xcode fails the build with
+`Missing path ... as defined by 'DebugSymbolsPath'` if the key still points at
+a directory that is not there.

@@ -9,7 +9,8 @@
 /* Begin PBXBuildFile section */
 		A00000000000000000000017 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* AVFoundation.framework */; };
 		A00000000000000000000019 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000020 /* Accelerate.framework */; };
-		SP0000000000000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = SP0000000000000000000002 /* Sparkle */; };
+		FW0000000000000000000002 /* Sparkle.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FW0000000000000000000001 /* Sparkle.xcframework */; };
+		FW0000000000000000000003 /* Sparkle.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FW0000000000000000000001 /* Sparkle.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,12 +28,27 @@
 		A00000000000000000000002 /* FretlightTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FretlightTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000018 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		A00000000000000000000020 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		FW0000000000000000000001 /* Sparkle.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Sparkle.xcframework; path = Frameworks/Sparkle.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A00000000000000000000004 /* Fretlight */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Fretlight; sourceTree = "<group>"; };
 		A00000000000000000000005 /* FretlightTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretlightTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FW0000000000000000000004 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				FW0000000000000000000003 /* Sparkle.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A00000000000000000000010 /* Frameworks */ = {
@@ -41,7 +57,7 @@
 			files = (
 				A00000000000000000000017 /* AVFoundation.framework in Frameworks */,
 				A00000000000000000000019 /* Accelerate.framework in Frameworks */,
-				SP0000000000000000000001 /* Sparkle in Frameworks */,
+				FW0000000000000000000002 /* Sparkle.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -60,6 +76,7 @@
 			children = (
 				A00000000000000000000018 /* AVFoundation.framework */,
 				A00000000000000000000020 /* Accelerate.framework */,
+				FW0000000000000000000001 /* Sparkle.xcframework */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -93,6 +110,7 @@
 				A00000000000000000000009 /* Sources */,
 				A00000000000000000000010 /* Frameworks */,
 				A00000000000000000000011 /* Resources */,
+				FW0000000000000000000004 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -102,9 +120,6 @@
 				A00000000000000000000004 /* Fretlight */,
 			);
 			name = Fretlight;
-			packageProductDependencies = (
-				SP0000000000000000000002 /* Sparkle */,
-			);
 			productName = Fretlight;
 			productReference = A00000000000000000000001 /* Fretlight.app */;
 			productType = "com.apple.product-type.application";
@@ -157,9 +172,6 @@
 				Base,
 			);
 			mainGroup = A00000000000000000000003;
-			packageReferences = (
-				SP0000000000000000000003 /* XCRemoteSwiftPackageReference "Sparkle" */,
-			);
 			productRefGroup = A00000000000000000000006 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -355,25 +367,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		SP0000000000000000000003 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.9.6;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		SP0000000000000000000002 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = SP0000000000000000000003 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A00000000000000000000028 /* Project object */;
 }
