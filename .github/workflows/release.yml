@@ -52,6 +52,12 @@ jobs:
           # -v; the identity only has to be findable by codesign.
           security find-identity "$KEYCHAIN" | grep "Fretwork Code Signing"
 
+      - name: Ensure the AWS CLI is present
+        # R2 is driven through its S3-compatible API. The runner image ships
+        # the CLI today; installing it if absent costs nothing and avoids a
+        # release failing on a toolchain change.
+        run: which aws || brew install awscli
+
       - name: Fetch published releases
         # generate_appcast rewrites the feed from the directory it is given, so
         # the bucket's current contents have to be present or previous versions
