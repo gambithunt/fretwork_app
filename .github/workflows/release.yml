@@ -18,11 +18,22 @@ permissions:
 jobs:
   release:
     name: Build, sign and publish
-    runs-on: macos-15
+    runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Select Xcode
+        # Release artifacts must come from the same toolchain the app is
+        # developed and smoke-tested against. Xcode 16's SDK does not annotate
+        # AVAudioEngine the way 26's does, so AudioEngine.swift is a hard
+        # strict-concurrency error there and a warning here.
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$LATEST" ] && sudo xcode-select -s "$LATEST"
+          xcodebuild -version
+          swift --version
 
       - name: Import signing certificate
         env:
