@@ -145,7 +145,9 @@ including patch rebuilds of the same marketing version:
 
 On any workstream that bumps the version: also add a `CHANGELOG.md` entry
 (newest on top, written from the commit's root-cause message) and tag the
-commit `vX.Y.Z` on `main`.
+commit `vX.Y.Z` on `main`. Pushing that tag publishes a real release to real
+users — `docs/releasing.md` covers the pipeline, how to test it without
+publishing, and the two unrecoverable signing keys it depends on.
 
 ## Workstream Checkpoints
 
