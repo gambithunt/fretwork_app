@@ -205,7 +205,7 @@ struct ContentView: View {
             Button {
                 state.isFretboardFlipped.toggle()
             } label: {
-                Label(state.isFretboardFlipped ? "High E on top" : "Low E on top", systemImage: "arrow.up.arrow.down")
+                Label(state.isFretboardFlipped ? "Low E on top" : "High E on top", systemImage: "arrow.up.arrow.down")
                     .font(.callout)
             }
             .buttonStyle(.bordered)

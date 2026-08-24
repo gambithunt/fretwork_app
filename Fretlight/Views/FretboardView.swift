@@ -220,9 +220,12 @@ struct FretboardView: View {
 private struct BoardGeometry {
     let board: CGRect
     let columns: Int
-    /// When true, string 0 (Low E) draws at the bottom row and string 5
-    /// (High E) at the top — every other draw call routes through `y(string:)`
-    /// so this one flag is the entire flip.
+    /// When true, string 0 (Low E) draws at the top row and string 5 (High E)
+    /// at the bottom — every other draw call routes through `y(string:)` so
+    /// this one flag is the entire flip.
+    ///
+    /// False is the default orientation: Low E at the bottom, matching how the
+    /// strings sit when you look down at the instrument in playing position.
     let flipped: Bool
 
     init(size: CGSize, frets: Int, flipped: Bool) {
@@ -237,7 +240,7 @@ private struct BoardGeometry {
         board.minX + board.width * (CGFloat(fret) + 0.5) / CGFloat(columns)
     }
     func y(string: Int) -> CGFloat {
-        let row = flipped ? 5 - string : string
+        let row = flipped ? string : 5 - string
         return board.minY + board.height * (CGFloat(row) + 0.5) / 6
     }
     func point(_ position: FretPosition) -> CGPoint {

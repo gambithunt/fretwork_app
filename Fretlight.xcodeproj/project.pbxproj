@@ -23,19 +23,6 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXFileReference section */
-		A00000000000000000000001 /* Fretlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; name = Fretlight.app; path = Fretwork.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A00000000000000000000002 /* FretlightTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FretlightTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A00000000000000000000018 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
-		A00000000000000000000020 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
-		FW0000000000000000000001 /* Sparkle.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Sparkle.xcframework; path = Frameworks/Sparkle.xcframework; sourceTree = "<group>"; };
-/* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		A00000000000000000000004 /* Fretlight */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Fretlight; sourceTree = "<group>"; };
-		A00000000000000000000005 /* FretlightTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretlightTests; sourceTree = "<group>"; };
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXCopyFilesBuildPhase section */
 		FW0000000000000000000004 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -49,6 +36,19 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A00000000000000000000001 /* Fretlight.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; name = Fretlight.app; path = Fretwork.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000002 /* FretlightTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FretlightTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000018 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		A00000000000000000000020 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		FW0000000000000000000001 /* Sparkle.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Sparkle.xcframework; path = Frameworks/Sparkle.xcframework; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A00000000000000000000004 /* Fretlight */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Fretlight; sourceTree = "<group>"; };
+		A00000000000000000000005 /* FretlightTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretlightTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A00000000000000000000010 /* Frameworks */ = {
@@ -229,16 +229,16 @@
 				ENABLE_STRICT_CONCURRENCY = complete;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Delon Misic. MIT licensed.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar input to identify notes.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.app;
@@ -258,16 +258,16 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_CONCURRENCY = complete;
 				GENERATE_INFOPLIST_FILE = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Delon Misic. MIT licensed.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar input to identify notes.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.app;
