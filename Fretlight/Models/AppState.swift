@@ -89,8 +89,9 @@ final class AppState {
     /// `BoardGeometry` draws each index at. Left un-persisted, same as
     /// `detectionMode`: a per-session display choice, not a saved setting.
     ///
-    /// False is the default board: Low E along the bottom, the way the strings
-    /// sit when you look down at the guitar you are holding.
+    /// False is the default board: Low E along the bottom, High E on top —
+    /// tablature's convention (pitch rises up the page), and the same
+    /// orientation the web app draws, so a shape looks identical in both.
     var isFretboardFlipped = false
     /// Where the current note is most likely being played, best candidate
     /// first. Derived here rather than on the analysis thread because it

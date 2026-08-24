@@ -16,8 +16,10 @@ struct RankedPosition: Hashable, Sendable, Identifiable {
 /// more likely to play the next note near the 12th than to jump to the 3rd for
 /// the same pitch. That alone resolves most ambiguity, because two positions
 /// for one pitch are never adjacent — in standard tuning the closest pair is
-/// always 4 frets apart (2 in DADGAD, the tightest of the common tunings), so
-/// the estimate only has to be accurate to a couple of frets to pick correctly.
+/// always 4 frets apart, and across every tuning offered it never closes below
+/// 2 (DADGAD, whose G and A strings sit a whole tone apart rather than the
+/// usual fourth). So the estimate only has to be accurate to a couple of frets
+/// to pick correctly.
 ///
 /// Deliberately causal. Scoring a whole phrase at once (Viterbi over the note
 /// sequence) would be more accurate, but it can only score a note once the
@@ -49,8 +51,8 @@ final class FretPositionResolver {
     /// After this long without a fretted note, the hand could be anywhere.
     private let memorySpan = Duration.seconds(2.5)
 
-    func resolve(midiNote: Int, fretCount: Int = 22, now: ContinuousClock.Instant = .now) -> [RankedPosition] {
-        let candidates = GuitarTuning.positions(forMIDI: midiNote, fretCount: fretCount)
+    func resolve(midiNote: Int, fretCount: Int = 22, tuning: Tuning = Tunings.standard, now: ContinuousClock.Instant = .now) -> [RankedPosition] {
+        let candidates = GuitarTuning.positions(forMIDI: midiNote, fretCount: fretCount, tuning: tuning)
         guard !candidates.isEmpty else { return [] }
         if let lastPlayed, now - lastPlayed > memorySpan { forget() }
         var scored: [Scored] = candidates.map { Scored(position: $0, cost: cost(of: $0)) }

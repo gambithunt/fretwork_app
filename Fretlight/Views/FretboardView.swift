@@ -224,8 +224,10 @@ private struct BoardGeometry {
     /// at the bottom — every other draw call routes through `y(string:)` so
     /// this one flag is the entire flip.
     ///
-    /// False is the default orientation: Low E at the bottom, matching how the
-    /// strings sit when you look down at the instrument in playing position.
+    /// False is the default orientation: Low E at the bottom, High E on top,
+    /// matching tablature and the web app's board. True is the player's-eye
+    /// view — the neck as it looks from above with the guitar in your hands,
+    /// where the low E is the string nearest you.
     let flipped: Bool
 
     init(size: CGSize, frets: Int, flipped: Bool) {

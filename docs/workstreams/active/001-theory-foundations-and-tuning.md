@@ -38,13 +38,19 @@ the way `src/lib/theory.ts` serves that role on the web.
 
 ## Verified findings driving this workstream
 
-1. **String order is inverted between the two apps.** Web `STANDARD_TUNING[0]`
-   is high e and `[5]` is low E (`fretwork/AGENTS.md` states this explicitly as
-   a gotcha). Mac `GuitarTuning.openMIDINotes` is `[40, 45, 50, 55, 59, 64]` —
-   string 0 is Low E. Every ported fret array is affected: chord shapes
-   (`[0, 1, 0, 2, 3, null]` for the C shape), every pentatonic pattern, every
-   triad voicing. A flipped array is still a plausible-looking shape, so this
-   will not announce itself.
+1. **String order is inverted between the two apps, in the data.** Web
+   `STANDARD_TUNING[0]` is high e and `[5]` is low E (`fretwork/AGENTS.md`
+   states this explicitly as a gotcha). Mac `GuitarTuning.openMIDINotes` is
+   `[40, 45, 50, 55, 59, 64]` — string 0 is Low E. Every ported fret array is
+   affected: chord shapes (`[0, 1, 0, 2, 3, null]` for the C shape), every
+   pentatonic pattern, every triad voicing. A reversed array is still a
+   plausible-looking shape, so this will not announce itself.
+
+   **Display orientation is a separate concern and is already handled.**
+   `BoardGeometry.y(string:)` now draws Low E at the bottom by default,
+   matching the web's `stringY`. That changes nothing here: `GuitarTuning`'s
+   indices are unaffected, so ported fret arrays still need reversing on the
+   way in. Do not treat the display fix as covering this finding.
 2. **Note naming diverges.** `NoteMapper.pitchClassNames` uses `"C♯"` (U+266F);
    the web uses `"C#"`, plus a flat table and `spellScale`'s letter-per-degree
    spelling for theory-correct names like E♯ in F♯ major. `NoteMapper`'s
@@ -179,6 +185,42 @@ the way `src/lib/theory.ts` serves that role on the web.
 - Every ported shape matches its web counterpart under a test that maps
   explicitly between the two string orders.
 - Shapes stay inside their declared fret ceiling for all 12 roots.
+
+## Phase 3c — Diatonic harmony and position helpers
+
+### Context
+
+Phase 1 explicitly deferred these, and neither half of Phase 3 claimed them, so
+as written this workstream leaves them with no home. `TriadPaths` already
+depends on the gap: the Swift port takes a single triad explicitly, where the
+web's `getTriadPath` walks all seven diatonic chords of a key. That is a
+correct partial port, not a finished one, and it must not be mistaken for done.
+
+### Files
+
+- `Fretlight/Theory/Harmony.swift`, `Fretlight/Theory/Positions.swift` (new)
+- `Fretlight/Theory/TriadPaths.swift`
+- ported tests
+
+### Tasks
+
+1. Port `MAJOR_HARMONY`, `MINOR_HARMONY`, `ROMAN_MAJOR`, `ROMAN_MINOR`, the
+   `DiatonicChord` type and `diatonicChords`.
+2. Port `CIRCLE_OF_FIFTHS`, `PROGRESSIONS`, `getProgression` and
+   `resolveProgression`.
+3. Port `keyScalePcs` and `keyPentaPcs`.
+4. Port `compactVoicing`, tuning-parameterised rather than assuming standard.
+   (`findAll` and `firstPosition` move forward into Phase 3b, which cannot
+   build interval or octave anchors without them.)
+5. Complete `TriadPaths` with the diatonic walk, keeping the single-triad
+   entry point if it still earns its place.
+
+### Exit criteria
+
+- `TriadPaths` reproduces the web's step ordering for a spot-checked key and
+  string set.
+- Nothing in `theory.ts` remains unported except what a later workstream
+  explicitly owns.
 
 ## Phase 4 — Chord discovery
 

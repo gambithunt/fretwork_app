@@ -109,11 +109,17 @@ experience preserved intact as its first screen.
 1. Lift device pickers, monitor, sensitivity and tuning into shell-level
    settings reachable from any screen, persisted through the practice-state
    document.
-2. Gate the detection workers on whether a visible screen consumes them, using
+2. Promote the fretboard flip to a persisted global preference. It is currently
+   a per-session `AppState` flag that resets on every launch, which is worse
+   than either finishing or removing it — a player who prefers the
+   player's-eye view has to re-flip it each time. With ten boards it must be
+   one preference applied everywhere, not a per-board toggle. Derive the row
+   count from the tuning rather than the hardcoded `5 - string`.
+3. Gate the detection workers on whether a visible screen consumes them, using
    the existing `setChordDetectionEnabled` pattern — `ChordAnalysisWorker` is
    already written so that an idle mode costs one `write` per render block
    rather than a running detector.
-3. Ensure gating never reaches the restart path.
+4. Ensure gating never reaches the restart path.
 
 ### Exit criteria
 

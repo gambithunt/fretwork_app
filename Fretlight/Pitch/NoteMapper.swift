@@ -11,7 +11,7 @@ enum NoteMapper {
     /// Shared with `ChordDetector`/`ChordShapeResolver`, which both need to
     /// go between a pitch class name and its index — kept in one place so
     /// the three don't drift out of sync with their own copies.
-    static let pitchClassNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]
+    static let pitchClassNames = PitchClass.chromatic.map { $0.name(.sharp) }
 
     /// Resolves a frequency to a pitch only. Where that pitch sits on the
     /// fretboard depends on the tuning and on where the hand already is —
