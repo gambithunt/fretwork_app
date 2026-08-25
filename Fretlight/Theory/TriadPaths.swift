@@ -9,6 +9,7 @@ enum TriadPathStringSet: String, CaseIterable, Sendable {
 
 struct TriadPathStep: Sendable {
     let id: String
+    let chord: DiatonicChord
     let voicing: CompactVoicing
 }
 
@@ -24,17 +25,21 @@ enum TriadPaths: Sendable {
         }
     }
 
-    /// Harmony selection belongs to the later diatonic layer, so this takes
-    /// its triad explicitly while preserving the source path's neck ordering.
-    static func path(root: PitchClass, triad: ChordDef, stringSet: TriadPathStringSet) -> [TriadPathStep] {
+    /// Every diatonic triad voicing on one three-string set, ordered so that
+    /// walking the list walks up the neck. The set is never left — staying on
+    /// three adjacent strings while the harmony moves is the whole exercise.
+    static func diatonicPath(keyRoot: PitchClass, major: Bool, stringSet: TriadPathStringSet) -> [TriadPathStep] {
         let target = stringIndices(for: stringSet)
-        return TriadVoicings.voicings(root: root, triad: triad)
-            .filter { $0.tones.map(\.position.string) == target }
-            .map { TriadPathStep(id: "\(triad.short):\($0.id)", voicing: $0) }
-            .sorted {
-                $0.voicing.minFret == $1.voicing.minFret
-                    ? $0.voicing.maxFret < $1.voicing.maxFret
-                    : $0.voicing.minFret < $1.voicing.minFret
-            }
+        return Harmony.diatonicChords(root: keyRoot, major: major).flatMap { chord in
+            guard let triad = Triads.triad(short: chord.quality) else { return [TriadPathStep]() }
+            return TriadVoicings.voicings(root: chord.root, triad: triad)
+                .filter { $0.tones.map(\.position.string) == target }
+                .map { TriadPathStep(id: "\(chord.roman):\($0.id)", chord: chord, voicing: $0) }
+        }.sorted {
+            if $0.voicing.minFret != $1.voicing.minFret { return $0.voicing.minFret < $1.voicing.minFret }
+            if $0.voicing.maxFret != $1.voicing.maxFret { return $0.voicing.maxFret < $1.voicing.maxFret }
+            if $0.chord.degree != $1.chord.degree { return $0.chord.degree < $1.chord.degree }
+            return $0.voicing.inversion < $1.voicing.inversion
+        }
     }
 }

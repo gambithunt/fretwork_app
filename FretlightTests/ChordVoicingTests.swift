@@ -51,7 +51,7 @@ final class ChordVoicingTests: XCTestCase {
 
     func testTriadPathsUseMacLowToHighStringIndices() {
         XCTAssertEqual(TriadPaths.stringIndices(for: .ead), [0, 1, 2])
-        let path = TriadPaths.path(root: PitchClass(0), triad: Triads.major, stringSet: .ead)
+        let path = TriadPaths.diatonicPath(keyRoot: PitchClass(0), major: true, stringSet: .ead)
         XCTAssertFalse(path.isEmpty)
         XCTAssertTrue(path.allSatisfy { $0.voicing.tones.map { $0.position.string } == [0, 1, 2] })
     }
