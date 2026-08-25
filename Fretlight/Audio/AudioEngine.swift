@@ -86,6 +86,7 @@ final class AudioEngine: @unchecked Sendable {
     private let analysisRing = RingBuffer()
     private let monitorRing = RingBuffer()
     private let chordRing = RingBuffer()
+#if DEBUG
     private let recordingRing = RingBuffer()
 
     /// Drives the sample-capture screen. Idle — not draining at all — until
@@ -95,6 +96,18 @@ final class AudioEngine: @unchecked Sendable {
     /// The hardware rate the graph is currently running at, so the recorder
     /// can be started later without re-deriving it from the node.
     private var currentSampleRate: Double = 0
+#endif
+
+    /// Nil in Release, where the whole recording stack is compiled out. Kept
+    /// as one accessor so the two graph-building paths stay identical between
+    /// configurations rather than sprouting conditionals of their own.
+    private var recordingRingIfAvailable: RingBuffer? {
+#if DEBUG
+        recordingRing
+#else
+        nil
+#endif
+    }
     private let sensitivity = SensitivitySettings()
     private var worker: AudioAnalysisWorker?
     private var chordWorker: ChordAnalysisWorker?
@@ -208,7 +221,7 @@ final class AudioEngine: @unchecked Sendable {
         // unit but AVAudioEngine caches the node's format and never re-reads
         // it, so the two ends disagree.
         let mixer = engine.mainMixerNode
-        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: recordingRing)
+        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: recordingRingIfAvailable)
         // The makeup-gain stage sits only on the monitor leg of the fan-out
         // below, in series before the mixer — the sink's leg is a separate
         // parallel connection straight off `input`, so this never touches
@@ -285,7 +298,7 @@ final class AudioEngine: @unchecked Sendable {
 
         let analysis = makeAnalysisWorker(directMonitoring: false)
         let chord = makeChordWorker()
-        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: monitorRing, chordRing: chordRing, recordingRing: recordingRing)
+        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: monitorRing, chordRing: chordRing, recordingRing: recordingRingIfAvailable)
         capture.attach(sink.node)
         capture.connect(input, to: sink.node, format: hardwareFormat)
         captureSink = sink
@@ -362,6 +375,7 @@ final class AudioEngine: @unchecked Sendable {
         }
     }
 
+#if DEBUG
     /// Safe to call from any thread, same as `setChordDetectionEnabled`. The
     /// recorder is a whole drain loop rather than a flag check, so it is not
     /// merely gated when disabled — it is not running at all.
@@ -386,6 +400,9 @@ final class AudioEngine: @unchecked Sendable {
         sampleRecorder.stop()
         sampleRecorder.start(sampleRate: sampleRate)
     }
+#else
+    private func startSampleRecorderIfEnabled(sampleRate: Double) {}
+#endif
 
     /// A USB interface — especially a DSP-heavy one like a modeling
     /// processor — can renegotiate its own format/sample-rate/buffer layout
@@ -493,7 +510,9 @@ final class AudioEngine: @unchecked Sendable {
         configChangeObservers.removeAll()
         worker?.stop()
         chordWorker?.stop()
+#if DEBUG
         sampleRecorder.stop()
+#endif
         captureEngine?.stop()
         captureEngine?.reset()
         playbackEngine?.stop()

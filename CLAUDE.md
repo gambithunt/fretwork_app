@@ -144,6 +144,15 @@ scattered across call sites.
   hidden window measures clean no matter how bad the bug is. Any CPU
   comparison has to run with the window actually composited (`onscreen`).
 
+- `PitchDetector` sized its `scratch` buffer from `maxTau` but `vDSP_vsub`
+  wrote `count - tau` floats into it — sized by one derived quantity, written
+  according to another. It never corrupted anything because the only caller,
+  `AudioAnalysisWorker`, passes exactly 2048 samples against a 2048-element
+  buffer: one element under the limit. The first caller to analyse a longer
+  window (take verification, at 4096) would have smashed the heap. When a
+  buffer's size and its write length come from different expressions, check
+  them against each other rather than against the one call site that exists.
+
 - Property observers do not fire for a value assigned inside the type's own
   `init`, so restoring a saved setting there never reaches its `didSet`.
   `AppState` restored `sensitivity` this way for months: the slider showed the

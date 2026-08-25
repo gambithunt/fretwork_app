@@ -13,15 +13,6 @@ struct FretboardView: View {
     /// screen row to draw each index at.
     let flipped: Bool
     private let frets = 22
-    /// The frets a real neck marks with inlays. Drawn as a darker bar behind
-    /// the whole column rather than as dots of their own — the grid is already
-    /// made of dots, so a second kind would just read as noise.
-    private static let inlayFrets: Set<Int> = [3, 5, 7, 9, 12, 15, 17, 19, 21]
-    /// Strings and fret wires are drawn at one weight and one opacity so the
-    /// board reads as a single grid rather than a set of unrelated rules. The
-    /// strings alone taper, because they actually do on the instrument.
-    private static let lineOpacity: Double = 0.16
-    private static let fretLineWidth: CGFloat = 1
 
     /// Notes mode marks every place the one detected note could be played,
     /// the resolver's pick first; chords mode marks every open-position
@@ -67,24 +58,8 @@ struct FretboardView: View {
     }
 
     var body: some View {
-        Canvas { context, size in
-            let geometry = BoardGeometry(size: size, frets: frets, flipped: flipped)
-            context.fill(
-                Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 14),
-                with: .color(Color(red: 0.085, green: 0.085, blue: 0.105))
-            )
-            context.fill(
-                Path(roundedRect: geometry.board, cornerRadius: 7),
-                with: .color(Color(red: 0.115, green: 0.115, blue: 0.14))
-            )
-            drawInlayBars(in: context, geometry: geometry)
-            drawFrets(in: context, geometry: geometry)
-            drawStrings(in: context, geometry: geometry)
-            drawFretNumbers(in: context, geometry: geometry)
-            drawStringNames(in: context, geometry: geometry)
-            drawGrid(in: context, geometry: geometry)
-        }
-        .overlay {
+        BoardCanvas(frets: frets, flipped: flipped)
+            .overlay {
             GeometryReader { proxy in
                 let geometry = BoardGeometry(size: proxy.size, frets: frets, flipped: flipped)
                 // Markers in the board's bottom half enter one string closer
@@ -98,7 +73,7 @@ struct FretboardView: View {
                 // separately-fixed position), so the two ends of the
                 // animation are exactly one string apart with nothing else
                 // able to pull it toward the board's center.
-                let midY = (geometry.y(string: 0) + geometry.y(string: 5)) / 2
+                let midY = geometry.midY
                 ForEach(activeMarkers) { marker in
                     let point = geometry.point(marker.position)
                     let startY = point.y > midY
@@ -135,125 +110,21 @@ struct FretboardView: View {
         }
     }
 
-    private func drawFretNumbers(in context: GraphicsContext, geometry: BoardGeometry) {
-        for fret in 0...frets {
-            let marked = Self.inlayFrets.contains(fret)
-            context.draw(
-                Text("\(fret)")
-                    .font(.caption2.monospacedDigit().weight(marked ? .bold : .regular))
-                    .foregroundColor(.white.opacity(marked ? 0.75 : 0.34)),
-                at: CGPoint(x: geometry.x(fret: fret), y: 13)
-            )
-        }
-    }
 
-    private func drawStringNames(in context: GraphicsContext, geometry: BoardGeometry) {
-        for string in 0..<6 {
-            context.draw(
-                Text(GuitarTuning.stringNames[string].uppercased())
-                    .font(.system(size: 9, weight: .bold)).tracking(1.1)
-                    .foregroundColor(.white.opacity(0.55)),
-                at: CGPoint(x: 30, y: geometry.y(string: string))
-            )
-        }
-    }
 
     /// A darker band filling each marked fret's whole column — the frets a
     /// real neck inlays, 3 through 21. Drawn before the lines so the grid sits
     /// on top of it rather than being interrupted by it.
-    private func drawInlayBars(in context: GraphicsContext, geometry: BoardGeometry) {
-        for fret in Self.inlayFrets {
-            let bar = CGRect(
-                x: geometry.leadingEdge(fret: fret),
-                y: geometry.board.minY,
-                width: geometry.columnWidth,
-                height: geometry.board.height
-            )
-            context.fill(Path(bar), with: .color(.black.opacity(0.30)))
-        }
-    }
 
     /// A wire at every fret, including the nut. They sit on the boundaries
     /// between columns, not through them, so each fret's dots stay inside
     /// their own space the way a stopped note sits behind its wire.
-    private func drawFrets(in context: GraphicsContext, geometry: BoardGeometry) {
-        for fret in 1...frets {
-            let x = geometry.leadingEdge(fret: fret)
-            var wire = Path()
-            wire.move(to: CGPoint(x: x, y: geometry.board.minY))
-            wire.addLine(to: CGPoint(x: x, y: geometry.board.maxY))
-            context.stroke(wire, with: .color(.white.opacity(Self.lineOpacity)), lineWidth: Self.fretLineWidth)
-        }
-    }
 
     /// Weighted low to high: the low E is the thickest string on the
     /// instrument, so it's the heaviest line here.
-    private func drawStrings(in context: GraphicsContext, geometry: BoardGeometry) {
-        for string in 0..<6 {
-            let y = geometry.y(string: string)
-            var line = Path()
-            line.move(to: CGPoint(x: geometry.board.minX, y: y))
-            line.addLine(to: CGPoint(x: geometry.board.maxX, y: y))
-            context.stroke(
-                line,
-                with: .color(.white.opacity(Self.lineOpacity)),
-                lineWidth: 1.6 - CGFloat(string) * 0.16
-            )
-        }
-    }
 
     /// Every playable position as a dot, so the board reads as a full
     /// instrument rather than an empty field waiting for one marker.
-    private func drawGrid(in context: GraphicsContext, geometry: BoardGeometry) {
-        for fret in 0...frets {
-            let x = geometry.x(fret: fret)
-            for string in 0..<6 {
-                let dot = CGRect(x: x - 2.5, y: geometry.y(string: string) - 2.5, width: 5, height: 5)
-                context.fill(Path(ellipseIn: dot), with: .color(.white.opacity(0.16)))
-            }
-        }
-    }
-}
-
-/// Shared by the Canvas and the marker overlay so the two can't drift: every
-/// coordinate either of them draws comes from here.
-private struct BoardGeometry {
-    let board: CGRect
-    let columns: Int
-    /// When true, string 0 (Low E) draws at the top row and string 5 (High E)
-    /// at the bottom — every other draw call routes through `y(string:)` so
-    /// this one flag is the entire flip.
-    ///
-    /// False is the default orientation: Low E at the bottom, High E on top,
-    /// matching tablature and the web app's board. True is the player's-eye
-    /// view — the neck as it looks from above with the guitar in your hands,
-    /// where the low E is the string nearest you.
-    let flipped: Bool
-
-    init(size: CGSize, frets: Int, flipped: Bool) {
-        board = CGRect(x: 62, y: 34, width: size.width - 62, height: size.height - 38)
-        columns = frets + 1
-        self.flipped = flipped
-    }
-
-    /// Fret 0 (open) is a column of the grid like any other, rather than a
-    /// label tucked against the nut — on a transit map every stop is a stop.
-    func x(fret: Int) -> CGFloat {
-        board.minX + board.width * (CGFloat(fret) + 0.5) / CGFloat(columns)
-    }
-    func y(string: Int) -> CGFloat {
-        let row = flipped ? string : 5 - string
-        return board.minY + board.height * (CGFloat(row) + 0.5) / 6
-    }
-    func point(_ position: FretPosition) -> CGPoint {
-        CGPoint(x: x(fret: position.fret), y: y(string: position.string))
-    }
-    var stringSpacing: CGFloat { board.height / 6 }
-    var columnWidth: CGFloat { board.width / CGFloat(columns) }
-    /// Left edge of a fret's column — where its wire sits.
-    func leadingEdge(fret: Int) -> CGFloat {
-        board.minX + board.width * CGFloat(fret) / CGFloat(columns)
-    }
 }
 
 private struct ActiveFretMarker: Identifiable {

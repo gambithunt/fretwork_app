@@ -1,3 +1,4 @@
+#if DEBUG
 import Accelerate
 import Darwin
 import Foundation
@@ -191,3 +192,4 @@ final class SampleRecorder: @unchecked Sendable {
         }
     }
 }
+#endif

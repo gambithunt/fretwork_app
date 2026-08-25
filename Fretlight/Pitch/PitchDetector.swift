@@ -29,7 +29,16 @@ final class PitchDetector: @unchecked Sendable {
         let maxTau = min(count / 2, Int(sampleRate / 65))
         let minTau = max(2, Int(sampleRate / 1_100))
         guard maxTau > minTau else { return nil }
-        if difference.count <= maxTau { difference = .init(repeating: 0, count: maxTau + 1); cmndf = difference; scratch = .init(repeating: 0, count: count) }
+        if difference.count <= maxTau { difference = .init(repeating: 0, count: maxTau + 1); cmndf = difference }
+        // `scratch` holds one lag's worth of differences — `count - tau`
+        // elements — so it is sized by the *window*, not by `maxTau`. It used
+        // to be resized only inside the branch above, which left it at its
+        // initial capacity for any window larger than `maxWindowSize` while
+        // `vDSP_vsub` below wrote `count - tau` floats into it. The only
+        // caller passes exactly 2048 against a 2048-element buffer — one
+        // element under the limit — which is the only reason this never
+        // corrupted the heap.
+        if scratch.count < count { scratch = .init(repeating: 0, count: count) }
 
         difference[0] = 0
         samples.withUnsafeBufferPointer { source in

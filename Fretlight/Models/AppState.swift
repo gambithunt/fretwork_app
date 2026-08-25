@@ -122,6 +122,17 @@ final class AppState {
     private static let signalPresenceFloorDB: Double = -50
     private static func decibels(_ level: Float) -> Double { 20 * log10(max(Double(level), 0.000_001)) }
     private let audioEngine = AudioEngine()
+
+#if DEBUG
+    /// The sample-capture screen drives the recorder directly. It is a
+    /// maintainer tool, so this is the one seam it gets rather than the
+    /// recorder's state being folded into the ordinary UI state.
+    var sampleRecorder: SampleRecorder { audioEngine.sampleRecorder }
+
+    func setSampleRecordingEnabled(_ value: Bool) {
+        audioEngine.setSampleRecordingEnabled(value)
+    }
+#endif
     private let resolver = FretPositionResolver()
     private var resolvedMIDI: Int?
     private let deviceWatcher = AudioDeviceWatcher()

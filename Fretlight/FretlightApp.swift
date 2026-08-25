@@ -33,7 +33,33 @@ struct FretworkApp: App {
         .commands {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
+#if DEBUG
+                SampleCaptureCommand()
+#endif
             }
         }
+
+#if DEBUG
+        // The sample-capture tool. Compiled out of Release entirely — it
+        // writes files, assumes a cooperative operator, and exists only to
+        // build the note library that ships as a resource.
+        Window("Sample Capture", id: SampleCaptureCommand.windowID) {
+            SampleCaptureHost(state: state)
+                .frame(minWidth: SampleCaptureView.minimumSize.width,
+                       minHeight: SampleCaptureView.minimumSize.height)
+        }
+#endif
     }
 }
+
+#if DEBUG
+private struct SampleCaptureCommand: View {
+    static let windowID = "sample-capture"
+
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Sample Capture…") { openWindow(id: Self.windowID) }
+    }
+}
+#endif

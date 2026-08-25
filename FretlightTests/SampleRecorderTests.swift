@@ -1,3 +1,4 @@
+#if DEBUG
 import XCTest
 @testable import Fretwork
 
@@ -154,3 +155,4 @@ final class SampleRecorderTests: XCTestCase {
         XCTAssertEqual(takes.value, 1)
     }
 }
+#endif
