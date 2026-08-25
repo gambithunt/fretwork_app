@@ -14,9 +14,15 @@ Layout:
 - `Fretlight/Audio/` — Core Audio plumbing: dual-engine capture/playback,
   ring buffers, device enumeration/watching, sensitivity mapping.
 - `Fretlight/Pitch/` — pure DSP/logic, no Core Audio: YIN pitch detection,
-  frequency→note mapping, tuning, fretboard-position resolution.
+  frequency→note mapping, fretboard-position resolution.
+- `Fretlight/Theory/` — music theory, ported from the web app at
+  `../fretwork`: pitch classes and naming, intervals, scales, chord formulas,
+  the 15 tunings, canonical shape data, diatonic harmony, chord discovery.
+  `Foundation` only — no Core Audio, no SwiftUI. Anything needing a note,
+  interval, scale or chord derives it from here rather than recomputing it.
 - `Fretlight/Models/AppState.swift` — the one `@MainActor @Observable` owner
   of UI state; wires Audio callbacks to published properties.
+  `PracticeState`/`PracticeStateStore` alongside it own everything persisted.
 - `Fretlight/Views/` — SwiftUI.
 
 ## Workflows
@@ -25,7 +31,7 @@ Layout:
 2. **Test**: same command with `test` in place of `build`. Kill stale app
    processes first — a leftover `Fretwork.app`/`Fretlight.app` process from a
    previous run can hang the test-host launch with no clear error:
-   `pkill -9 -f "Fretwork.app/Contents/MacOS\|Fretlight.app/Contents/MacOS"`
+   `pkill -9 -f "Fretwork.app/Contents/MacOS|Fretlight.app/Contents/MacOS"`
 3. **Smoke-test a runtime/audio change**: launch the built binary directly in
    the background, sample `ps -p <pid> -o pid,pcpu,time` twice a few seconds
    apart (CPU should be stable, not climbing — a pegged core signals a
@@ -59,6 +65,9 @@ Layout:
 | Renaming the app / product | Update `@testable import <ModuleName>` in both test files too | Leaving old imports — `PRODUCT_NAME` changes the Swift module name; the test target silently fails to build |
 | A screen mixing audio-rate readouts with static controls | Read the fast-changing `@Observable` properties inside one small leaf `View` per readout (see `TunerSection`/`LevelSection`/`TelemetrySection`/`BoardSection` in `ContentView.swift`) | Reading them in the parent's `body`. `@Observable` tracks reads per view body, so one 30Hz property read there rebuilds every sibling — device pickers and all |
 | Writing an `@Observable` property on every audio frame | Compare first and assign only on a real change (see `unclearSignalMessage`, `appendToHistory`) | Assigning unconditionally — storing an equal value still fires `withMutation` and invalidates every observer |
+| Porting a fret array or string index from `../fretwork` | Reverse it — web string 0 is the high e, this app's is the Low E — and prove it with a test asserting the *sounded pitch classes*, not the numbers | Transcribing as-is. A reversed array is still six plausible fret numbers: it compiles, it renders, and it is wrong |
+| A generator whose output is fixed fret offsets (open-chord charts, pentatonic boxes) | Take no `Tuning` parameter at all, so misuse is a compile error (see `ScaleShapes.pentatonicPosition`) | Accepting a `Tuning` it cannot honour. Those frets do not transpose, they detune — the box silently stops being the scale it claims to be. This slipped in twice |
+| Decoding a persisted settings document | Decode field by field, each with its own fallback (`PracticeState.Settings`) | Synthesised `Decodable` — one unrecognised enum case throws and takes every other setting down with it |
 
 ## Patterns
 
@@ -134,6 +143,19 @@ scattered across call sites.
 - A backgrounded/occluded window is occlusion-throttled to ~0% CPU, so a
   hidden window measures clean no matter how bad the bug is. Any CPU
   comparison has to run with the window actually composited (`onscreen`).
+
+- Property observers do not fire for a value assigned inside the type's own
+  `init`, so restoring a saved setting there never reaches its `didSet`.
+  `AppState` restored `sensitivity` this way for months: the slider showed the
+  saved value while the detector ran at its 0.5 default for the whole session,
+  until the user happened to move the control. Apply the side effect
+  explicitly after assigning, and be suspicious of any `init` that assigns a
+  property whose `didSet` does real work.
+
+- `pkill -f` takes an *extended* regex, so `\|` in its pattern is a literal
+  pipe and matches nothing. The stale-process kill in Workflows was written
+  that way and silently never killed anything; use an unescaped `|`. Verify a
+  pattern with `pgrep -f` before trusting that a `pkill` did something.
 
 ## Versioning
 

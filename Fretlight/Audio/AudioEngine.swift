@@ -86,6 +86,15 @@ final class AudioEngine: @unchecked Sendable {
     private let analysisRing = RingBuffer()
     private let monitorRing = RingBuffer()
     private let chordRing = RingBuffer()
+    private let recordingRing = RingBuffer()
+
+    /// Drives the sample-capture screen. Idle — not draining at all — until
+    /// `setSampleRecordingEnabled(true)`, so it costs nothing in normal use.
+    private(set) lazy var sampleRecorder = SampleRecorder(ring: recordingRing)
+    private var sampleRecordingEnabled = false
+    /// The hardware rate the graph is currently running at, so the recorder
+    /// can be started later without re-deriving it from the node.
+    private var currentSampleRate: Double = 0
     private let sensitivity = SensitivitySettings()
     private var worker: AudioAnalysisWorker?
     private var chordWorker: ChordAnalysisWorker?
@@ -199,7 +208,7 @@ final class AudioEngine: @unchecked Sendable {
         // unit but AVAudioEngine caches the node's format and never re-reads
         // it, so the two ends disagree.
         let mixer = engine.mainMixerNode
-        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing)
+        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: recordingRing)
         // The makeup-gain stage sits only on the monitor leg of the fan-out
         // below, in series before the mixer — the sink's leg is a separate
         // parallel connection straight off `input`, so this never touches
@@ -234,6 +243,7 @@ final class AudioEngine: @unchecked Sendable {
         observeConfigurationChanges(of: engine)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
         chord.start(sampleRate: hardwareFormat.sampleRate)
+        startSampleRecorderIfEnabled(sampleRate: hardwareFormat.sampleRate)
     }
 
     // MARK: - Split
@@ -275,7 +285,7 @@ final class AudioEngine: @unchecked Sendable {
 
         let analysis = makeAnalysisWorker(directMonitoring: false)
         let chord = makeChordWorker()
-        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: monitorRing, chordRing: chordRing)
+        let sink = CaptureSink(analysisRing: analysisRing, monitorRing: monitorRing, chordRing: chordRing, recordingRing: recordingRing)
         capture.attach(sink.node)
         capture.connect(input, to: sink.node, format: hardwareFormat)
         captureSink = sink
@@ -300,6 +310,7 @@ final class AudioEngine: @unchecked Sendable {
         observeConfigurationChanges(of: playback)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
         chord.start(sampleRate: hardwareFormat.sampleRate)
+        startSampleRecorderIfEnabled(sampleRate: hardwareFormat.sampleRate)
     }
 
     // MARK: - Shared graph pieces
@@ -349,6 +360,31 @@ final class AudioEngine: @unchecked Sendable {
             self.chordDetectionEnabled = value
             self.chordWorker?.setEnabled(value)
         }
+    }
+
+    /// Safe to call from any thread, same as `setChordDetectionEnabled`. The
+    /// recorder is a whole drain loop rather than a flag check, so it is not
+    /// merely gated when disabled — it is not running at all.
+    func setSampleRecordingEnabled(_ value: Bool) {
+        controlQueue.async { [weak self] in
+            guard let self else { return }
+            self.sampleRecordingEnabled = value
+            if value {
+                self.startSampleRecorderIfEnabled(sampleRate: self.currentSampleRate)
+            } else {
+                self.sampleRecorder.stop()
+            }
+        }
+    }
+
+    /// A graph rebuild restarts the recorder on the new rate, but only if the
+    /// capture screen had it running — a device change mid-session should not
+    /// quietly switch recording on.
+    private func startSampleRecorderIfEnabled(sampleRate: Double) {
+        currentSampleRate = sampleRate
+        guard sampleRecordingEnabled, sampleRate > 0 else { return }
+        sampleRecorder.stop()
+        sampleRecorder.start(sampleRate: sampleRate)
     }
 
     /// A USB interface — especially a DSP-heavy one like a modeling
@@ -457,6 +493,7 @@ final class AudioEngine: @unchecked Sendable {
         configChangeObservers.removeAll()
         worker?.stop()
         chordWorker?.stop()
+        sampleRecorder.stop()
         captureEngine?.stop()
         captureEngine?.reset()
         playbackEngine?.stop()

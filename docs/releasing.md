@@ -190,6 +190,19 @@ security export -k login.keychain-db -t identities -f pkcs12 -o ~/Desktop/fretwo
 
 Store both in a password manager, then delete the files and empty the Trash.
 
+## The third irreplaceable thing
+
+The recorded note-sample masters in `SampleMasters/` are not a key, but they
+are in the same category: losing them costs another session with the guitar,
+the same interface, the same gain setting, and 138 verified takes — and the
+new library will not quite match the old one, so a partial restore is worse
+than none. They are git-ignored deliberately (roughly 120 MB of 24-bit audio),
+which means nothing else is keeping a copy.
+
+Back the folder up wherever the keys go. What ships in the app bundle is a
+trimmed, converted derivative; it is not a substitute for the masters, because
+the conversion is lossy in ways a re-record cannot reproduce.
+
 ## Infrastructure
 
 - **R2 bucket** `fretwork-downloads`, custom domain `downloads.fretwork.org`

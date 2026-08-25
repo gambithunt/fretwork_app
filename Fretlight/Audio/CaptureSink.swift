@@ -27,7 +27,11 @@ final class CaptureSink {
     ///   what decides whether anything is actually draining it, so an idle
     ///   Notes-mode session costs one more `write` call per render block,
     ///   not a second detector running.
-    init(analysisRing: RingBuffer, monitorRing: RingBuffer?, chordRing: RingBuffer) {
+    /// - Parameter recordingRing: its own ring for the same reason, and on the
+    ///   same terms — `SampleRecorder` is idle unless the sample-capture
+    ///   screen has started it, so an ordinary session pays one `write` and
+    ///   nothing else.
+    init(analysisRing: RingBuffer, monitorRing: RingBuffer?, chordRing: RingBuffer, recordingRing: RingBuffer) {
         node = AVAudioSinkNode { _, frameCount, audioBufferList in
             let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: audioBufferList))
             // Channel 0 of a deinterleaved capture. Multi-channel interfaces
@@ -39,6 +43,7 @@ final class CaptureSink {
             analysisRing.write(source, count: count, captureTime: captureTime)
             monitorRing?.write(source, count: count, captureTime: captureTime)
             chordRing.write(source, count: count, captureTime: captureTime)
+            recordingRing.write(source, count: count, captureTime: captureTime)
             return noErr
         }
     }

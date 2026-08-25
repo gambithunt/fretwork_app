@@ -118,11 +118,17 @@ borrowing the correct pitch off a different string with the wrong timbre.
 ### Tasks
 
 1. Record `git status --short` and a clean test run.
-2. Fix the file-naming contract before any audio is written. Recommended:
-   `s{string}-f{fret:02}-{note}{octave}.wav`, string index in **Mac order**
-   (0 = Low E), e.g. `s0-f03-G2.wav`. Carrying the note name in the filename is
-   deliberate redundancy — it lets the build step cross-check the name against
-   the manifest's detected pitch and catch a transcription error.
+2. **Settled — the naming contract.** `s{string}-f{fret:02}-m{midi:03}.wav`,
+   string index in **Mac order** (0 = Low E): `s0-f03-m043.wav`.
+
+   The MIDI number is deliberate redundancy — string and fret already
+   determine it in standard tuning, so the build step can cross-check the name
+   against the manifest's detected pitch and catch a transcription error. It is
+   preferred over a note name (`G2`) because a name has to encode accidentals,
+   and the app spells those with Unicode `♯`/`♭`; putting those in 138
+   filenames invites mismatches between what the recorder writes and what a
+   shell, a build script or Git reports back. A zero-padded integer sorts
+   correctly and cannot be misspelled.
 3. Fix the masters location and confirm it is git-ignored. These are
    irreplaceable without another recording session, so add them to the backup
    discipline `docs/releasing.md` already establishes for the signing keys.

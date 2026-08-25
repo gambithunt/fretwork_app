@@ -284,4 +284,35 @@ correct partial port, not a finished one, and it must not be mistaken for done.
 
 ## Implementation Record
 
-_Append phase-by-phase evidence here._
+### 2026-08-25 — Complete
+
+Phases 0–6 done. Full suite green; smoke-tested per Workflows 3 with no Core
+Audio errors and CPU in the ~13% band recorded for a healthy fresh launch.
+
+**Shipped:** the `Fretlight/Theory/` layer — pitch classes and naming,
+intervals, scales with theory-correct spelling, chord formulas, all 15 tunings
+threaded through `GuitarTuning`/`FretPositionResolver`/`ChordShapeResolver`,
+canonical pentatonic and one-octave shapes, CAGED and movable chord voicings,
+triad voicings, double-stops, triad paths, interval and octave anchors,
+diatonic harmony, progressions, the circle of fifths, chord discovery, and a
+versioned `PracticeState` document replacing the loose `UserDefaults` keys.
+
+**Two live bugs found and fixed on the way:**
+
+- Restored `sensitivity` was never applied. Property observers do not fire for
+  a value assigned in the type's own `init`, so the slider showed the saved
+  value while the detector ran at its 0.5 default all session. Now in Gotchas.
+- The stale-process `pkill` documented in Workflows matched nothing — `pkill
+  -f` takes an extended regex, so its `\|` was a literal pipe. Now in Gotchas.
+
+**Recurring defect worth naming:** twice a generator of fixed fret offsets
+accepted a `Tuning` it could not honour (`ChordShapeLibrary`, then
+`ScaleShapes.pentatonicPosition`). Both now refuse one. See the Decisions row.
+
+**Deferred:** per-module reset (Phase 5). `PracticeState.Modules` is
+deliberately empty until workstream 006 adds the first module, so there is
+nothing to reset yet; build the mechanism against a real consumer.
+
+**Not bumped:** the theory layer is unreachable from the UI, but the
+sensitivity fix is user-visible — see the note in the handover about whether
+this warrants a PATCH release on its own.

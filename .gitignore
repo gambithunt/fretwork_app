@@ -21,3 +21,8 @@ xcuserdata/
 
 # Release artifacts
 /build/
+
+# Recorded note-sample masters. Irreplaceable without another session with the
+# guitar, and far too large for the repo — back them up alongside the signing
+# keys (see docs/releasing.md).
+/SampleMasters/

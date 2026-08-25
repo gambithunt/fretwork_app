@@ -154,6 +154,7 @@ final class AppState {
     /// resolution of these against whatever is plugged in right now.
     private var selectedInputUID: String?
     private var selectedOutputUID: String?
+    private let practiceState = PracticeStateStore()
 
     init() {
         refreshDevices()
@@ -195,14 +196,28 @@ final class AppState {
                 self?.scheduleDeviceRefresh()
             }
         }
-        let restoredInput = Self.restoreSelection(uidKey: "selectedInputDeviceUID", legacyIDKey: "selectedInputDeviceID", from: inputDevices)
+        let settings = practiceState.state.settings
+        let restoredInput = restoreSelection(uid: settings.inputDeviceUID, legacyIDKey: "selectedInputDeviceID", from: inputDevices)
         selectedInputUID = restoredInput?.uid
         selectedInputDeviceID = restoredInput?.id ?? inputDevices.first?.id
-        let restoredOutput = Self.restoreSelection(uidKey: "selectedOutputDeviceUID", legacyIDKey: "selectedOutputDeviceID", from: outputDevices)
+        let restoredOutput = restoreSelection(uid: settings.outputDeviceUID, legacyIDKey: "selectedOutputDeviceID", from: outputDevices)
         selectedOutputUID = restoredOutput?.uid
         selectedOutputDeviceID = restoredOutput?.id ?? outputDevices.first?.id
-        if let saved = UserDefaults.standard.object(forKey: "sensitivity") as? Double {
-            sensitivity = saved
+        sensitivity = settings.sensitivity
+        // Property observers do not fire for a value assigned inside the
+        // type's own initialiser, so restoring `sensitivity` above never
+        // reached `applySensitivity`. The slider showed the saved value while
+        // the detector kept running at its 0.5 default until the user happened
+        // to move it. Applying it explicitly here is what actually restores it.
+        applySensitivity()
+        // Persist whatever the restore resolved — which matters for the legacy
+        // numeric-ID path, where the UID is only learned by looking at the
+        // devices present. `update` writes nothing when nothing changed.
+        let inputUID = selectedInputUID
+        let outputUID = selectedOutputUID
+        practiceState.update {
+            $0.settings.inputDeviceUID = inputUID
+            $0.settings.outputDeviceUID = outputUID
         }
     }
 
@@ -258,14 +273,12 @@ final class AppState {
     /// Prefers the stable UID, falling back once to the legacy stored
     /// `AudioDeviceID` so an existing selection survives the upgrade — that ID
     /// is only trusted if it still resolves to a device that is present.
-    private static func restoreSelection(uidKey: String, legacyIDKey: String, from devices: [AudioDevice]) -> AudioDevice? {
-        if let uid = UserDefaults.standard.string(forKey: uidKey),
-           let match = devices.first(where: { $0.uid == uid }) {
+    private func restoreSelection(uid: String?, legacyIDKey: String, from devices: [AudioDevice]) -> AudioDevice? {
+        if let uid, let match = devices.first(where: { $0.uid == uid }) {
             return match
         }
-        if let legacy = UserDefaults.standard.object(forKey: legacyIDKey) as? UInt32,
+        if let legacy = practiceState.legacyDeviceID(forKey: legacyIDKey),
            let match = devices.first(where: { $0.id == legacy }) {
-            UserDefaults.standard.set(match.uid, forKey: uidKey)
             return match
         }
         return nil
@@ -291,15 +304,17 @@ final class AppState {
 
     func selectInputDevice(_ id: AudioDeviceID?) {
         selectedInputDeviceID = id
-        selectedInputUID = inputDevices.first { $0.id == id }?.uid
-        if let uid = selectedInputUID { UserDefaults.standard.set(uid, forKey: "selectedInputDeviceUID") }
+        let uid = inputDevices.first { $0.id == id }?.uid
+        selectedInputUID = uid
+        if uid != nil { practiceState.update { $0.settings.inputDeviceUID = uid } }
         start()
     }
 
     func selectOutputDevice(_ id: AudioDeviceID?) {
         selectedOutputDeviceID = id
-        selectedOutputUID = outputDevices.first { $0.id == id }?.uid
-        if let uid = selectedOutputUID { UserDefaults.standard.set(uid, forKey: "selectedOutputDeviceUID") }
+        let uid = outputDevices.first { $0.id == id }?.uid
+        selectedOutputUID = uid
+        if uid != nil { practiceState.update { $0.settings.outputDeviceUID = uid } }
         start()
     }
 
@@ -308,8 +323,9 @@ final class AppState {
     }
 
     private func applySensitivity() {
-        audioEngine.setSensitivity(sensitivity)
-        UserDefaults.standard.set(sensitivity, forKey: "sensitivity")
+        let value = sensitivity
+        audioEngine.setSensitivity(value)
+        practiceState.update { $0.settings.sensitivity = value }
     }
 
     func start() {

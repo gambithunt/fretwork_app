@@ -17,7 +17,7 @@ built against real audio than against a placeholder tone.
 
 | # | Workstream | Depends on |
 | --- | --- | --- |
-| 001 | Theory foundations and the tuning model | — |
+| ~~001~~ | ~~Theory foundations and the tuning model~~ — **complete**, see `completed/` | — |
 | 002 | Sample capture mode and the note library | — |
 | 003 | Sampled playback engine | 001, 002 |
 | 004 | General-purpose fretboard view | 001 |
@@ -25,8 +25,10 @@ built against real audio than against a placeholder tone.
 | 006 | Learning modules | 003, 004, 005 |
 | 007 | Microphone-verified guided practice | 006 |
 
-001, 002 and 004 can proceed in parallel. 002 can start immediately — it
-depends on the audio layer, which already exists.
+002 and 004 can proceed in parallel, and 002 can start immediately — it only
+depends on the audio layer, which already exists. 001 is complete: the theory
+layer, the 15 tunings and the persisted practice-state document all landed, so
+004, 005 and 006 are no longer blocked on it.
 
 ## Source of truth
 
