@@ -25,7 +25,7 @@ final class AppState {
     /// is looking at.
     var detectionMode: DetectionMode = .notes {
         didSet {
-            audioEngine.setChordDetectionEnabled(detectionMode == .chords)
+            updateDetectionGating()
             // A pinned chord/note only means anything while looking at the
             // fretboard in its own mode — leaving that mode and coming back
             // resumes live rather than silently reappearing with a stale
@@ -84,15 +84,46 @@ final class AppState {
     /// `pinnedChordHistoryID` — cleared by tapping again, or by leaving
     /// `.notes` mode.
     var pinnedNoteHistoryID: UUID?
-    /// Purely a display orientation for `FretboardView` — doesn't touch the
-    /// pitch pipeline or `GuitarTuning`'s string indices, just which row
-    /// `BoardGeometry` draws each index at. Left un-persisted, same as
-    /// `detectionMode`: a per-session display choice, not a saved setting.
+    /// Purely a display orientation for every board in the app — doesn't touch
+    /// the pitch pipeline or `GuitarTuning`'s string indices, just which row
+    /// `BoardGeometry` draws each index at.
+    ///
+    /// Persisted, unlike `detectionMode`. It was a per-session flag that reset
+    /// on every launch, which meant a player who prefers the player's-eye view
+    /// re-flipped it every time; with a board on ten module screens it has to
+    /// be one preference applied everywhere.
     ///
     /// False is the default board: Low E along the bottom, High E on top —
     /// tablature's convention (pitch rises up the page), and the same
     /// orientation the web app draws, so a shape looks identical in both.
-    var isFretboardFlipped = false
+    var isFretboardFlipped = false {
+        didSet {
+            guard isFretboardFlipped != oldValue else { return }
+            practiceState.update { $0.settings.isFretboardFlipped = isFretboardFlipped }
+        }
+    }
+
+    /// Detection costs CPU only while something is looking at it. Screens that
+    /// show no live readout leave the workers idle, using the gate
+    /// `ChordAnalysisWorker` already has — an idle worker costs one `write` per
+    /// render block rather than a running detector.
+    ///
+    /// Deliberately *not* a graph rebuild: gating must never reach
+    /// `startSynchronously`, which renegotiates the device and feeds the
+    /// debounced restart path. It only flips a flag the workers already read.
+    private func updateDetectionGating() {
+        let wanted = selectedScreen.needsDetection && detectionMode == .chords
+        isChordDetectionActive = wanted
+        audioEngine.setChordDetectionEnabled(wanted)
+    }
+
+    /// Mirrors what was last handed to the engine. Exists so the gate can be
+    /// asserted without reaching into `AudioEngine`'s own queue, where reading
+    /// the flag would race the write.
+    private(set) var isChordDetectionActive = false
+
+    var isChordDetectionActiveForTesting: Bool { isChordDetectionActive }
+    var persistedFretboardFlipForTesting: Bool { practiceState.state.settings.isFretboardFlipped }
     /// Where the current note is most likely being played, best candidate
     /// first. Derived here rather than on the analysis thread because it
     /// depends on playing history, not on the audio.
@@ -122,6 +153,9 @@ final class AppState {
     private static let signalPresenceFloorDB: Double = -50
     private static func decibels(_ level: Float) -> Double { 20 * log10(max(Double(level), 0.000_001)) }
     private let audioEngine = AudioEngine()
+    /// How many times the audio graph has been built this session. Navigation
+    /// must never move this — see `AppShellNavigationTests`.
+    var graphBuildCount: Int { audioEngine.graphBuildCount }
 
 #if DEBUG
     /// The sample-capture screen drives the recorder directly. It is a
@@ -149,6 +183,18 @@ final class AppState {
         return nil
     }
 #endif
+    /// Which screen the shell is showing. Plain view state that happens to
+    /// live on the one `@Observable` owner, per `CLAUDE.md` — not persisted:
+    /// the web app deliberately always opens on home rather than restoring the
+    /// last module, and reopening on a screen the player has forgotten they
+    /// left open is worse than a consistent starting point.
+    var selectedScreen: AppScreen = .listen {
+        didSet {
+            guard selectedScreen != oldValue else { return }
+            updateDetectionGating()
+        }
+    }
+
     private let resolver = FretPositionResolver()
     private var resolvedMIDI: Int?
     private let deviceWatcher = AudioDeviceWatcher()
@@ -231,6 +277,10 @@ final class AppState {
         selectedOutputUID = restoredOutput?.uid
         selectedOutputDeviceID = restoredOutput?.id ?? outputDevices.first?.id
         sensitivity = settings.sensitivity
+        // Restored the same way, and safe to assign directly: this one's
+        // `didSet` only writes the value back, so a missed observer costs
+        // nothing. `sensitivity` below is the opposite case.
+        isFretboardFlipped = settings.isFretboardFlipped
         // Property observers do not fire for a value assigned inside the
         // type's own initialiser, so restoring `sensitivity` above never
         // reached `applySensitivity`. The slider showed the saved value while

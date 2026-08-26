@@ -212,7 +212,14 @@ final class AudioEngine: @unchecked Sendable {
         }
     }
 
+    /// How many times the render graph has been built. Every build tears down
+    /// the previous engines and renegotiates the device, so this is the number
+    /// that must not move when a user merely navigates between screens —
+    /// `AppShellNavigationTests` asserts exactly that.
+    private(set) var graphBuildCount = 0
+
     private func startSynchronously(inputDeviceID: AudioDeviceID, outputDeviceID: AudioDeviceID, monitorVolume: Float) throws {
+        graphBuildCount += 1
         // A genuinely new device selection (as opposed to our own recovery
         // logic retrying the same pair) gets a clean slate on the circuit
         // breaker below — it's a deliberate action, not another symptom of

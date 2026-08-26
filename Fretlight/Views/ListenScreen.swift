@@ -66,10 +66,6 @@ struct ListenScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(red: 0.035, green: 0.045, blue: 0.047))
         .preferredColorScheme(.dark)
-        .task {
-            try? await Task.sleep(for: .milliseconds(100))
-            state.start()
-        }
     }
 
     // Every block in the top bar is laid out the same way: a fixed-height
@@ -361,6 +357,19 @@ struct ContentView: View {
     @Bindable var state: AppState
 
     var body: some View {
-        ListenScreen(state: state)
+        AppShell(state: state)
+            // The engine is started here, once, for the window's lifetime —
+            // not from `ListenScreen`, where this used to live. A screen's
+            // `.task` re-runs every time that screen reappears, and
+            // `AppState.start()` is a full stop-and-rebuild of the graph, so
+            // leaving it there would have made every visit to the listening
+            // screen restart audio: a re-prompt for the microphone, a dropped
+            // direct-monitoring path, and a new trigger for the very restart
+            // path `AudioEngine` debounces and rate-limits because an uncapped
+            // restart loop was once a real bug.
+            .task {
+                try? await Task.sleep(for: .milliseconds(100))
+                state.start()
+            }
     }
 }

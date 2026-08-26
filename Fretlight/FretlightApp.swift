@@ -18,15 +18,22 @@ struct FretworkApp: App {
         WindowGroup {
             ContentView(state: state)
                 // Both measured, not guessed (via an off-screen NSHostingView
-                // render). minWidth: the header's own natural width — logo,
-                // input/output pickers, rescan, monitor, sensitivity, all laid
-                // out in one row with no wrapping — measures 1159pt at its
-                // tightest; 1180 leaves headroom so real-world font/Dynamic
-                // Type variance can't bring anything close to crowding.
+                // render). minWidth is now *composed*, because the window holds
+                // a sidebar beside the screen: the listening screen's own
+                // natural width — logo, input/output pickers, rescan, monitor,
+                // sensitivity, all in one row with no wrapping — measures
+                // 1159pt at its tightest, and `AppShell.sidebarMinimumWidth`
+                // adds 200, so 1359 is the floor; 1380 leaves headroom so
+                // real-world font/Dynamic Type variance can't crowd anything.
                 // minHeight: the whole stack, including the fretboard's own
-                // 260pt floor (see ContentView), measures 772pt, rounded up to
+                // 260pt floor (see ListenScreen), measures 772pt, rounded up to
                 // 800. Below this the fretboard is forced under its floor and
                 // something clips.
+                //
+                // Composed rather than measured whole because `NSHostingView`
+                // reports 0 x 0 for a `NavigationSplitView` off-screen — an
+                // assertion against that number passes however wrong it is.
+                // `WindowSizeTests` pins both the composition and the 0 x 0.
                 //
                 // The height was 700, justified by a 682pt measurement that had
                 // since gone stale — the screen had grown to 772 and the
@@ -35,7 +42,7 @@ struct FretworkApp: App {
                 // when the screen outgrew it. `WindowSizeTests` now re-measures
                 // on every run; if it fails, re-derive these numbers rather
                 // than raising them until it passes.
-                .frame(minWidth: 1_180, minHeight: 800)
+                .frame(minWidth: 1_380, minHeight: 800)
         }
         .commands {
             CommandGroup(after: .appInfo) {

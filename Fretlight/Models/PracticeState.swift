@@ -53,6 +53,18 @@ extension PracticeState {
         /// the whole reason a selection can be restored at all.
         var inputDeviceUID: String?
         var outputDeviceUID: String?
+        /// Board orientation, applied to every board in the app.
+        ///
+        /// Was a per-session `AppState` flag that reset on every launch, which
+        /// is the worst of both worlds: a player who prefers the player's-eye
+        /// view had to re-flip it each time, and with ten module boards coming
+        /// it has to be one preference applied everywhere rather than a toggle
+        /// per board.
+        ///
+        /// False is the default board: Low E along the bottom, High E on top —
+        /// tablature's convention, and the orientation the web app draws, so a
+        /// shape looks identical in both.
+        var isFretboardFlipped = false
 
         init() {}
     }
@@ -67,7 +79,7 @@ extension PracticeState {
 
 extension PracticeState.Settings: Codable {
     private enum CodingKeys: String, CodingKey {
-        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID
+        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID, isFretboardFlipped
     }
 
     init(from decoder: any Decoder) throws {
@@ -86,6 +98,9 @@ extension PracticeState.Settings: Codable {
         }
         inputDeviceUID = (try? container.decodeIfPresent(String.self, forKey: .inputDeviceUID)) ?? nil
         outputDeviceUID = (try? container.decodeIfPresent(String.self, forKey: .outputDeviceUID)) ?? nil
+        if let value = (try? container.decodeIfPresent(Bool.self, forKey: .isFretboardFlipped)) ?? nil {
+            isFretboardFlipped = value
+        }
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -94,5 +109,6 @@ extension PracticeState.Settings: Codable {
         try container.encode(sensitivity, forKey: .sensitivity)
         try container.encodeIfPresent(inputDeviceUID, forKey: .inputDeviceUID)
         try container.encodeIfPresent(outputDeviceUID, forKey: .outputDeviceUID)
+        try container.encode(isFretboardFlipped, forKey: .isFretboardFlipped)
     }
 }
