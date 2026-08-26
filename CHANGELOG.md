@@ -2,6 +2,30 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.3.0 — 2026-08-26
+
+- The app now plays real recorded guitar. Every position on the neck — six
+  strings, frets 0 to 22 — was captured DI from one instrument in one session
+  and ships in the app, so a reference note sounds like a guitar rather than
+  like a synthesiser approximating one. In standard tuning nothing is
+  resampled: each position plays its own recording.
+- The other fourteen tunings shift the nearest recording from the *same*
+  string rather than borrowing the right pitch off a different one, which keeps
+  each string's character. Even Drop A, the furthest stretch in the set, plays
+  77% of the neck from untouched recordings.
+- Notes can be played polyphonically, with a new note on a string releasing
+  whatever was ringing on it, as a real guitar does.
+- Monitor level and playback level are now independent controls, so turning
+  your own signal down no longer turns the app's playback down with it. Monitor
+  mute is now an attenuation to -96 dB rather than a hard disconnect;
+  inaudible, but it is not a true zero if you are watching a meter.
+- Fixed clicks and timing jitter in the recorded library. The recorder's onset
+  detector fires late on a soft attack, which left a third of the takes
+  trimmed into their own transient and a spread of up to 15 ms in where a note
+  began. Onsets are re-measured when the library is built, so notes now start
+  in time with each other, and a short attack fade removes the step out of
+  silence that every take began on.
+
 ## 0.2.0 — 2026-08-22
 
 - Added in-app updates via Sparkle 2.9.6, with a "Check for Updates…" item in

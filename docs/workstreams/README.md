@@ -19,7 +19,7 @@ built against real audio than against a placeholder tone.
 | --- | --- | --- |
 | ~~001~~ | ~~Theory foundations and the tuning model~~ — **complete**, see `completed/` | — |
 | ~~002~~ | ~~Sample capture mode and the note library~~ — **complete**, see `completed/` | — |
-| 003 | Sampled playback engine | 001, 002 |
+| ~~003~~ | ~~Sampled playback engine~~ — **complete**, see `completed/` | 001, 002 |
 | ~~004~~ | ~~General-purpose fretboard view~~ — **complete**, see `completed/` | 001 |
 | 005 | Multi-module app shell | 001 |
 | 006 | Learning modules | 003, 004, 005 |
@@ -31,7 +31,10 @@ is done, so all 138 positions exist as real DI audio and ship in the bundle at
 `Fretlight/Resources/NoteSamples/`. That was the one piece of human time that
 could not be parallelised, and it unblocks 003.
 
-003 and 005 are both clear to start, and are independent of each other.
+005 is clear to start. 003 is complete: the note library plays back
+polyphonically in all fifteen tunings, monitor and playback levels are
+independent, and the sequencer, strum and cancellation are ported from the web
+app — but nothing in the UI reaches it yet, which is 006's job.
 
 ## Source of truth
 

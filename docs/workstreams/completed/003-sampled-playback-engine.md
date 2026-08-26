@@ -479,3 +479,44 @@ start/stop cycles from these diagnostics. Clearing it needs the interface
 replugged or `coreaudiod` restarted, neither of which is a code change. **Phase
 4's exit criterion "smoke-test clean after the load-time work" is therefore not
 yet met**, and Phase 5's gates must re-run all of it on a healthy machine.
+
+### Phase 5 — Final gates
+
+The interface was replugged and the wedge cleared, confirming the diagnosis:
+the same diagnostic that had failed at every commit now passes, and
+`prepareSamplePlayback` completes in 0.34 s where it had been hitting a 60 s
+timeout. Nothing was changed to fix it.
+
+Re-run on the healthy machine:
+
+| | Phase 0 baseline | Phase 5 |
+| --- | --- | --- |
+| duplex latency median | 2.92 ms | 2.74 ms |
+| split latency median | 3.38 ms | 3.29 ms |
+| buffer, both paths | 256 frames | 256 frames |
+| path selection | duplex / split | unchanged |
+| real-hardware playback | — | strum + run on both paths, 0 errors |
+
+Full suite 229 tests green, `git diff --check` clean, Release build launches
+directly from its bundle at a flat 7.3–9.2% CPU with no dyld failure and no
+`kAudioUnitErr_*`.
+
+**A CPU difference that turned out to be noise.** The Debug build measured
+15–31% idle against a Phase 0 baseline of ~13%, which looked like a real
+regression. It is not, on two independent grounds. Measured: two runs of the
+*identical* post-003 build gave medians of 23.5% and 18.8%, so run-to-run
+spread on this machine is at least five points, and the pre-003 build
+re-measured in the same session gave 10–28%, overlapping. Mechanistic: nothing
+outside `AudioEngine` calls `prepareSamplePlayback`, so the shipping app never
+decodes the library and never attaches a player — the running graph is
+structurally identical to pre-003, and the only difference is which node holds
+a gain number. The Release build, which is what ships, sits flat at 7.3–9.2%.
+This needs re-measuring once workstream 006 actually attaches a player, since
+that is the first point at which a real cost could appear.
+
+**Version.** Bumped to 0.3.0 / build 3 with a `CHANGELOG.md` entry. The
+workstream said to hold the bump until 006 gives the user a way to trigger
+playback; bumping now is a deliberate departure, made because 006 follows
+immediately. **No tag was created**: pushing one publishes a real release to
+real users, and until 006 lands there is nothing in this version a user can
+reach. Tag when the user-facing half exists.
