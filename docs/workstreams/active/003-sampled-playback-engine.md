@@ -417,3 +417,65 @@ and pushing one above nominal is the one direction that can clip.
 factory rather than a stored property, because building one captures `self` in
 a closure and a stored property cannot do that during initialisation — the
 two-phase-init trap `CLAUDE.md` records against `AudioDeviceWatcher`.
+
+### Phase 4 — Tuning support and non-standard positions
+
+`TuningSampleMap` resolves any position in any tuning to a recorded take plus a
+frequency ratio, with one table per tuning built on first use and cached.
+
+**The cached table is the mapping, not resampled audio.** The workstream said
+"resample by the pitch difference, at load" and "cache per-tuning tables"; taken
+literally that is 85 MB of audio per tuning, 1.2 GB across fifteen. Each entry
+caches the source fret and a ratio instead, and Phase 2's per-voice rate does
+the shift. The detune from Phase 3 multiplies into the same ratio, so a detuned
+note in Drop A is one number, not two lookups.
+
+**"Nearest position on the same string" is a clamp.** A string tuned down *n*
+semitones plays everything from its *n*th fret upward from a real take; only the
+frets below have nowhere to come from, and they stretch fret 0. This is why the
+shift is taken from the same string rather than from whichever string holds the
+right pitch: that would be the right note with the wrong instrument, since
+gauge, winding and pickup position are most of what makes a low E sound like a
+low E instead of the A string played high.
+
+**Standard tuning provably takes the unresampled path** — every one of its 138
+positions resolves to its own take at a ratio of exactly 1, asserted rather than
+assumed. That is the whole return on recording every fret.
+
+The audible limit this phase asks to record, measured across all fifteen:
+
+| Tuning | Worst shift | Positions shifted |
+| --- | --- | --- |
+| Drop A | −7 st | 32 / 138 (77% real takes) |
+| Drop B | −5 st | 20 / 138 |
+| Standard C | −4 st | 24 / 138 |
+| Drop C | −4 st | 14 / 138 |
+| Open C | ±4 st | 9 / 138 |
+| Modal C6 | −4 st | 7 / 138 |
+| Open A | −3 st | 6 / 138 |
+| Standard D, Open D/G/E, DADGAD, Double Drop D, Drop D | ≤2 st | 2–12 / 138 |
+| **Standard** | **0** | **0 / 138 — every position is its own take** |
+
+Drop A is the worst case in the set, as the workstream predicted: its open low
+string is the recorded low E stretched down a fifth (ratio 0.6674). Even there,
+77% of the neck is untouched audio, and the shifted positions are all in the
+first few frets of a detuned string. `testDropAIsTheWorstCaseAndIsSevenSemitones`
+fails if a tuning is ever added that stretches further, so this note cannot go
+stale silently.
+
+Tests assert **sounded pitch**, not fret numbers, for the reason `CLAUDE.md`
+gives about porting fret arrays: a wrong table is still six plausible fret
+numbers that compile and render exactly like a right one.
+
+**The hardware smoke test for this phase is outstanding.** Partway through it
+the machine's audio stack wedged: the diagnostic reported no telemetry at all
+(n=0 samples) and `prepareSamplePlayback` never completed, both explained by the
+control queue blocking inside a Core Audio call. It is not a regression from
+this phase — the same diagnostic fails identically at the Phase 3 commit, which
+measured clean an hour earlier, and the built app sits at 0.0% CPU where it
+previously ran at ~13%. `usbaudiod` was at 7.3% with nothing playing. The likely
+cause is the interface's HAL state after several dozen rapid engine
+start/stop cycles from these diagnostics. Clearing it needs the interface
+replugged or `coreaudiod` restarted, neither of which is a code change. **Phase
+4's exit criterion "smoke-test clean after the load-time work" is therefore not
+yet met**, and Phase 5's gates must re-run all of it on a healthy machine.

@@ -503,6 +503,19 @@ final class AudioEngine: @unchecked Sendable {
         }
     }
 
+    /// Sounds a position as it would ring in `tuning`, taking the take from the
+    /// same string and shifting it by the pitch difference. In standard tuning
+    /// this is a direct lookup with no shift at all — see `TuningSampleMap`.
+    func playSample(string: Int, fret: Int, tuning: Tuning, gain: Float = 1) {
+        guard let resolution = TuningSampleMap.resolve(tuning: tuning, string: string, fret: fret) else { return }
+        playSample(
+            string: string,
+            fret: resolution.fret,
+            rateMultiplier: resolution.rateMultiplier,
+            gain: gain
+        )
+    }
+
     /// A sequencer that sounds its notes through this engine.
     ///
     /// A factory rather than a stored property: building one needs `self` in a
@@ -510,9 +523,18 @@ final class AudioEngine: @unchecked Sendable {
     /// initialisation — the two-phase-init trap `CLAUDE.md` records against
     /// `AudioDeviceWatcher`. Nothing here needs a single shared instance, so
     /// the caller owns its own and cancellation stays scoped to it.
-    func makeSequencer() -> NoteSequencer {
+    /// - Parameter tuning: how the notes it plays should be pitched. The
+    ///   sequencer's own detune multiplies with the tuning's shift, so a
+    ///   detuned note in Drop A is one ratio, not two lookups.
+    func makeSequencer(tuning: Tuning = Tunings.standard) -> NoteSequencer {
         NoteSequencer { [weak self] position, rate, gain in
-            self?.playSample(string: position.string, fret: position.fret, rateMultiplier: rate, gain: gain)
+            guard let resolution = TuningSampleMap.resolve(tuning: tuning, string: position.string, fret: position.fret) else { return }
+            self?.playSample(
+                string: position.string,
+                fret: resolution.fret,
+                rateMultiplier: resolution.rateMultiplier * rate,
+                gain: gain
+            )
         }
     }
 
