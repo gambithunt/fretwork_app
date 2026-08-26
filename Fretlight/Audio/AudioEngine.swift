@@ -125,7 +125,47 @@ final class AudioEngine: @unchecked Sendable {
     /// tested directly rather than only through a rendered graph.
     static func monitorGainDBForTesting(_ volume: Float) -> Float { monitorGainDB(forVolume: volume) }
 
+    /// Fast state changes only — volume, sensitivity, detector gating, note
+    /// triggers. **Nothing on this queue may block**, which is why building the
+    /// graph moved off it: see `graphQueue`.
     private let controlQueue = DispatchQueue(label: "com.fretlight.audio-control", qos: .userInitiated)
+
+    /// Everything that binds, builds or tears down a graph.
+    ///
+    /// Separate from `controlQueue` because these calls can block *for as long
+    /// as a device takes to answer*, and a device that never answers blocks
+    /// them forever. Measured: with an interface unplugged mid-session,
+    /// `AVAudioEngine.inputNode` sat in `AudioDeviceCreateIOProcID` waiting on
+    /// a `mach_msg` reply from coreaudiod for over 90 seconds and did not
+    /// return. While that shared one queue with the rest of the control
+    /// surface, every later action — changing device, moving the monitor
+    /// slider, playing a note, hitting Retry — queued silently behind it and
+    /// did nothing. The window stayed responsive, which made it look like the
+    /// app was fine and the audio had simply gone quiet.
+    private let graphQueue = DispatchQueue(label: "com.fretlight.audio-graph", qos: .userInitiated)
+
+    /// Runs the watchdog below. Its own queue so it cannot be delayed by
+    /// whatever it is watching.
+    private let watchdogQueue = DispatchQueue(label: "com.fretlight.audio-watchdog", qos: .utility)
+
+    /// Guards the handful of references `controlQueue` reads that `graphQueue`
+    /// writes. Held only for a pointer read or write, never across a Core Audio
+    /// call.
+    private let stateLock = NSLock()
+
+    /// A graph build that has not finished. Bumped when one starts and when one
+    /// finishes, so the watchdog and any abandoned build can tell whether the
+    /// work they belong to still matters.
+    private var buildGeneration = 0
+    private var buildInFlight = false
+
+    /// How long a build may take before the UI is told something is wrong.
+    /// Well past a healthy build, which is milliseconds.
+    private static let buildSlowSeconds = 4.0
+    /// And how long before it is called a failure. The device is not coming
+    /// back on its own at this point; the player needs to know rather than
+    /// waiting at a silent app.
+    private static let buildStuckSeconds = 15.0
     private var captureEngine: AVAudioEngine?
     private var playbackEngine: AVAudioEngine?
     private var inputNode: AVAudioInputNode?
@@ -197,10 +237,13 @@ final class AudioEngine: @unchecked Sendable {
 
     init() { mach_timebase_info(&timebase) }
 
-    /// Device negotiation can block inside Core Audio; never perform it on the main actor.
+    /// Device negotiation can block inside Core Audio; never perform it on the
+    /// main actor, and never on `controlQueue`.
     func start(inputDeviceID: AudioDeviceID, outputDeviceID: AudioDeviceID, monitorVolume: Float) {
-        controlQueue.async { [weak self] in
+        let generation = beginBuild()
+        graphQueue.async { [weak self] in
             guard let self else { return }
+            defer { self.endBuild(generation) }
             // This is an explicit user action, so it should always clear the
             // previous recovery circuit breaker — even when the same device is
             // selected again via the Retry button.
@@ -210,6 +253,76 @@ final class AudioEngine: @unchecked Sendable {
             do { try self.startSynchronously(inputDeviceID: inputDeviceID, outputDeviceID: outputDeviceID, monitorVolume: monitorVolume) }
             catch { self.onError?(error.localizedDescription) }
         }
+    }
+
+    /// Marks a build as started and arms the watchdog.
+    ///
+    /// The watchdog exists because a build that never returns used to produce
+    /// no signal at all: no error, no state change, just an app that never
+    /// started listening. It reports rather than cancels — a `mach_msg` waiting
+    /// on coreaudiod cannot be cancelled from here — so the player learns that
+    /// the device is not answering and can pick another one, which now works
+    /// because the control surface is no longer stuck behind the build.
+    private func beginBuild() -> Int {
+        stateLock.lock()
+        buildGeneration += 1
+        buildInFlight = true
+        let generation = buildGeneration
+        stateLock.unlock()
+
+        watchdogQueue.asyncAfter(deadline: .now() + Self.buildSlowSeconds) { [weak self] in
+            guard let self, self.isBuildStillRunning(generation) else { return }
+            self.onReconnecting?()
+        }
+        watchdogQueue.asyncAfter(deadline: .now() + Self.buildStuckSeconds) { [weak self] in
+            guard let self, self.isBuildStillRunning(generation) else { return }
+            self.onError?("The selected audio device is not responding. Try another device, or disconnect and reconnect it.")
+        }
+        return generation
+    }
+
+    /// `currentMonitorVolume` is written by `setMonitorVolume` on
+    /// `controlQueue` and read by graph builds on `graphQueue`.
+    private func monitorVolumeSnapshot() -> Float {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return currentMonitorVolume
+    }
+
+    private func setSamplePlayer(_ player: SamplePlayer?) {
+        stateLock.lock()
+        samplePlayer = player
+        stateLock.unlock()
+    }
+
+    private func currentSamplePlayer() -> SamplePlayer? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return samplePlayer
+    }
+
+    private func setMonitorLevelStage(_ stage: AVAudioUnitEQ?) {
+        stateLock.lock()
+        monitorLevel = stage
+        stateLock.unlock()
+    }
+
+    private func currentMonitorLevelStage() -> AVAudioUnitEQ? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return monitorLevel
+    }
+
+    private func endBuild(_ generation: Int) {
+        stateLock.lock()
+        if generation == buildGeneration { buildInFlight = false }
+        stateLock.unlock()
+    }
+
+    private func isBuildStillRunning(_ generation: Int) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return buildInFlight && generation == buildGeneration
     }
 
     /// How many times the render graph has been built. Every build tears down
@@ -240,7 +353,9 @@ final class AudioEngine: @unchecked Sendable {
         stopSynchronously()
         currentInputDeviceID = inputDeviceID
         currentOutputDeviceID = outputDeviceID
+        stateLock.lock()
         currentMonitorVolume = monitorVolume
+        stateLock.unlock()
 
         // Before any engine binds: changing this restarts IO for every client
         // attached to the device, so it must not happen underneath a running
@@ -320,7 +435,7 @@ final class AudioEngine: @unchecked Sendable {
 
         captureEngine = engine
         inputNode = input
-        monitorLevel = monitorGain
+        setMonitorLevelStage(monitorGain)
         observeConfigurationChanges(of: engine)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
         chord.start(sampleRate: hardwareFormat.sampleRate)
@@ -390,7 +505,7 @@ final class AudioEngine: @unchecked Sendable {
         playbackEngine = playback
         inputNode = input
         monitorRenderer = renderer
-        monitorLevel = monitorGain
+        setMonitorLevelStage(monitorGain)
         observeConfigurationChanges(of: capture)
         observeConfigurationChanges(of: playback)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
@@ -447,7 +562,7 @@ final class AudioEngine: @unchecked Sendable {
     ///
     /// Safe to call repeatedly; the library is decoded once.
     func prepareSamplePlayback(completion: (@Sendable (String?) -> Void)? = nil) {
-        controlQueue.async { [weak self] in
+        graphQueue.async { [weak self] in
             guard let self else { return }
             if self.sampleLibrary != nil {
                 completion?(nil)
@@ -462,7 +577,9 @@ final class AudioEngine: @unchecked Sendable {
                 // so the player is attached on the next build; force one only
                 // if something is actually running.
                 if let inputID = self.currentInputDeviceID, let outputID = self.currentOutputDeviceID {
-                    try? self.startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: self.currentMonitorVolume)
+                    let generation = self.beginBuild()
+                    defer { self.endBuild(generation) }
+                    try? self.startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: self.monitorVolumeSnapshot())
                 }
                 completion?(nil)
             } catch {
@@ -482,7 +599,7 @@ final class AudioEngine: @unchecked Sendable {
         guard let library = sampleLibrary,
               let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
         else {
-            samplePlayer = nil
+            setSamplePlayer(nil)
             return
         }
         let player = SamplePlayer(library: library, format: format)
@@ -492,8 +609,11 @@ final class AudioEngine: @unchecked Sendable {
         // conforms to AVAudioMixing, so its contribution to the mixer is a
         // per-input-bus volume rather than another gain node. See
         // `monitorGainDB` for why the monitor leg cannot do the same.
-        (player.node as? AVAudioMixing)?.volume = samplePlaybackVolume
-        samplePlayer = player
+        stateLock.lock()
+        let volume = samplePlaybackVolume
+        stateLock.unlock()
+        (player.node as? AVAudioMixing)?.volume = volume
+        setSamplePlayer(player)
     }
 
     /// Sounds one position through the output device. No-op until
@@ -506,7 +626,7 @@ final class AudioEngine: @unchecked Sendable {
     /// costs a dispatch, not a wait on audio.
     func playSample(string: Int, fret: Int, rateMultiplier: Double = 1, gain: Float = 1) {
         controlQueue.async { [weak self] in
-            self?.samplePlayer?.play(string: string, fret: fret, rateMultiplier: rateMultiplier, gain: gain)
+            self?.currentSamplePlayer()?.play(string: string, fret: fret, rateMultiplier: rateMultiplier, gain: gain)
         }
     }
 
@@ -547,16 +667,19 @@ final class AudioEngine: @unchecked Sendable {
 
     /// Releases every sounding note. Not a hard stop — see `SamplePlayer`.
     func stopSamplePlayback() {
-        controlQueue.async { [weak self] in self?.samplePlayer?.stopAll() }
+        controlQueue.async { [weak self] in self?.currentSamplePlayer()?.stopAll() }
     }
 
     /// Playback level, independent of the monitor slider and of monitor mute.
     func setSamplePlaybackVolume(_ value: Float) {
         controlQueue.async { [weak self] in
             guard let self else { return }
-            self.samplePlaybackVolume = min(max(value, 0), 1)
-            if let node = self.samplePlayer?.node as? AVAudioMixing {
-                node.volume = self.samplePlaybackVolume
+            let clamped = min(max(value, 0), 1)
+            self.stateLock.lock()
+            self.samplePlaybackVolume = clamped
+            self.stateLock.unlock()
+            if let node = self.currentSamplePlayer()?.node as? AVAudioMixing {
+                node.volume = clamped
             }
         }
     }
@@ -620,7 +743,7 @@ final class AudioEngine: @unchecked Sendable {
     }
 
     private func scheduleRestart(for engine: AVAudioEngine) {
-        controlQueue.async { [weak self] in
+        graphQueue.async { [weak self] in
             guard let self else { return }
             // Notifications from an engine that has already been stopped are
             // normal during teardown. They must not start a fresh recovery
@@ -635,7 +758,7 @@ final class AudioEngine: @unchecked Sendable {
             // Rebuild after the device has finished its own configuration
             // change. This is the recovery path that keeps the input tap
             // alive on interfaces which renegotiate mid-stream.
-            self.controlQueue.asyncAfter(deadline: .now() + 0.5, execute: work)
+            self.graphQueue.asyncAfter(deadline: .now() + 0.5, execute: work)
         }
     }
 
@@ -652,8 +775,10 @@ final class AudioEngine: @unchecked Sendable {
             return
         }
         onReconnecting?()
+        let generation = beginBuild()
+        defer { endBuild(generation) }
         do {
-            try startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: currentMonitorVolume)
+            try startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: monitorVolumeSnapshot())
         } catch {
             reportConnectionFailureIfNeeded()
         }
@@ -690,13 +815,16 @@ final class AudioEngine: @unchecked Sendable {
     func setMonitorVolume(_ value: Float) {
         controlQueue.async { [weak self] in
             guard let self else { return }
-            self.currentMonitorVolume = min(max(value, 0), 1)
-            self.monitorLevel?.globalGain = Self.monitorGainDB(forVolume: self.currentMonitorVolume)
+            let clamped = min(max(value, 0), 1)
+            self.stateLock.lock()
+            self.currentMonitorVolume = clamped
+            self.stateLock.unlock()
+            self.currentMonitorLevelStage()?.globalGain = Self.monitorGainDB(forVolume: clamped)
         }
     }
 
     func stop() {
-        controlQueue.async { [weak self] in self?.stopSynchronously() }
+        graphQueue.async { [weak self] in self?.stopSynchronously() }
     }
 
     private func stopSynchronously() {
@@ -718,8 +846,8 @@ final class AudioEngine: @unchecked Sendable {
         monitorRenderer = nil
         captureSink = nil
         inputNode = nil
-        monitorLevel = nil
-        samplePlayer = nil
+        setMonitorLevelStage(nil)
+        setSamplePlayer(nil)
         captureEngine = nil
         playbackEngine = nil
     }

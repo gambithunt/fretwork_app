@@ -176,6 +176,18 @@ scattered across call sites.
   explicitly after assigning, and be suspicious of any `init` that assigns a
   property whose `didSet` does real work.
 
+- Graph building lives on `graphQueue`, never `controlQueue`. A device that
+  stops answering blocks `AVAudioEngine.inputNode` inside
+  `AudioDeviceCreateIOProcID` for as long as it likes — measured at 90+ seconds
+  with an interface unplugged mid-session, and it never returned. While those
+  shared one queue, every later control action queued silently behind it:
+  changing device, monitor level, playing a note, and Retry all did nothing,
+  while the window stayed responsive and made it look like audio had merely
+  gone quiet. A watchdog reports at 4s (reconnecting) and 15s (error), because
+  a `mach_msg` waiting on coreaudiod cannot be cancelled from here — the fix is
+  to keep the rest of the app working and tell the player, not to abort the
+  call. Anything added to `controlQueue` must be non-blocking.
+
 - Core Audio can reach a state where the app hangs **indefinitely** on
   startup, blocked in `mach_msg` inside `AudioDeviceCreateIOProcID` while
   binding a device — `AudioEngine.startSynchronously` never returns, so the
@@ -183,7 +195,9 @@ scattered across call sites.
   look unrelated but share this cause: the app at 0% CPU with a window that
   never populates, `prepareSamplePlayback` hitting its timeout, and any test
   touching `AppState()` taking exactly 60s (device enumeration blocking).
-  Clear it with `sudo killall coreaudiod` or by replugging the interface.
+  Clear it with `sudo killall coreaudiod` or by replugging the interface. Since
+  the queue split above, this degrades to "no audio, with an error" rather than
+  a silently dead control surface.
   **`pkill -9` on the app is not the cause** — that was the obvious theory and
   it was tested directly: three launch/`SIGKILL` cycles left audio working
   every time, as did three clean-quit cycles. It has not been reproduced on
