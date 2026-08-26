@@ -1,5 +1,5 @@
 {
-  "format": "alac",
+  "format": "aac",
   "positions": [
     {
       "string": 0,
@@ -423,7 +423,7 @@
       "targetMIDI": 56,
       "filename": "s2-f06-m056.m4a",
       "sampleRate": 44100,
-      "frameCount": 131447
+      "frameCount": 131493
     },
     {
       "string": 2,
@@ -431,7 +431,7 @@
       "targetMIDI": 57,
       "filename": "s2-f07-m057.m4a",
       "sampleRate": 44100,
-      "frameCount": 145215
+      "frameCount": 145217
     },
     {
       "string": 2,
@@ -535,7 +535,7 @@
       "targetMIDI": 70,
       "filename": "s2-f20-m070.m4a",
       "sampleRate": 44100,
-      "frameCount": 164057
+      "frameCount": 164059
     },
     {
       "string": 2,
@@ -543,7 +543,7 @@
       "targetMIDI": 71,
       "filename": "s2-f21-m071.m4a",
       "sampleRate": 44100,
-      "frameCount": 163801
+      "frameCount": 163803
     },
     {
       "string": 2,
@@ -551,7 +551,7 @@
       "targetMIDI": 72,
       "filename": "s2-f22-m072.m4a",
       "sampleRate": 44100,
-      "frameCount": 131896
+      "frameCount": 131898
     },
     {
       "string": 3,
@@ -567,7 +567,7 @@
       "targetMIDI": 56,
       "filename": "s3-f01-m056.m4a",
       "sampleRate": 44100,
-      "frameCount": 156136
+      "frameCount": 156138
     },
     {
       "string": 3,
@@ -591,7 +591,7 @@
       "targetMIDI": 59,
       "filename": "s3-f04-m059.m4a",
       "sampleRate": 44100,
-      "frameCount": 154624
+      "frameCount": 154846
     },
     {
       "string": 3,
@@ -623,7 +623,7 @@
       "targetMIDI": 63,
       "filename": "s3-f08-m063.m4a",
       "sampleRate": 44100,
-      "frameCount": 150997
+      "frameCount": 150999
     },
     {
       "string": 3,
@@ -631,7 +631,7 @@
       "targetMIDI": 64,
       "filename": "s3-f09-m064.m4a",
       "sampleRate": 44100,
-      "frameCount": 173834
+      "frameCount": 173836
     },
     {
       "string": 3,
@@ -647,7 +647,7 @@
       "targetMIDI": 66,
       "filename": "s3-f11-m066.m4a",
       "sampleRate": 44100,
-      "frameCount": 174945
+      "frameCount": 174947
     },
     {
       "string": 3,
@@ -655,7 +655,7 @@
       "targetMIDI": 67,
       "filename": "s3-f12-m067.m4a",
       "sampleRate": 44100,
-      "frameCount": 80917
+      "frameCount": 80919
     },
     {
       "string": 3,
@@ -663,7 +663,7 @@
       "targetMIDI": 68,
       "filename": "s3-f13-m068.m4a",
       "sampleRate": 44100,
-      "frameCount": 85962
+      "frameCount": 85964
     },
     {
       "string": 3,
@@ -671,7 +671,7 @@
       "targetMIDI": 69,
       "filename": "s3-f14-m069.m4a",
       "sampleRate": 44100,
-      "frameCount": 157264
+      "frameCount": 157266
     },
     {
       "string": 3,
@@ -679,7 +679,7 @@
       "targetMIDI": 70,
       "filename": "s3-f15-m070.m4a",
       "sampleRate": 44100,
-      "frameCount": 146026
+      "frameCount": 146028
     },
     {
       "string": 3,
@@ -687,7 +687,7 @@
       "targetMIDI": 71,
       "filename": "s3-f16-m071.m4a",
       "sampleRate": 44100,
-      "frameCount": 115295
+      "frameCount": 115297
     },
     {
       "string": 3,
@@ -695,7 +695,7 @@
       "targetMIDI": 72,
       "filename": "s3-f17-m072.m4a",
       "sampleRate": 44100,
-      "frameCount": 99780
+      "frameCount": 99782
     },
     {
       "string": 3,
@@ -703,7 +703,7 @@
       "targetMIDI": 73,
       "filename": "s3-f18-m073.m4a",
       "sampleRate": 44100,
-      "frameCount": 103455
+      "frameCount": 103457
     },
     {
       "string": 3,
@@ -711,7 +711,7 @@
       "targetMIDI": 74,
       "filename": "s3-f19-m074.m4a",
       "sampleRate": 44100,
-      "frameCount": 80549
+      "frameCount": 80551
     },
     {
       "string": 3,
@@ -719,7 +719,7 @@
       "targetMIDI": 75,
       "filename": "s3-f20-m075.m4a",
       "sampleRate": 44100,
-      "frameCount": 80648
+      "frameCount": 80650
     },
     {
       "string": 3,
@@ -727,7 +727,7 @@
       "targetMIDI": 76,
       "filename": "s3-f21-m076.m4a",
       "sampleRate": 44100,
-      "frameCount": 85573
+      "frameCount": 85575
     },
     {
       "string": 3,
@@ -735,7 +735,7 @@
       "targetMIDI": 77,
       "filename": "s3-f22-m077.m4a",
       "sampleRate": 44100,
-      "frameCount": 89599
+      "frameCount": 89601
     },
     {
       "string": 4,
@@ -807,7 +807,7 @@
       "targetMIDI": 67,
       "filename": "s4-f08-m067.m4a",
       "sampleRate": 44100,
-      "frameCount": 158286
+      "frameCount": 158288
     },
     {
       "string": 4,
@@ -815,7 +815,7 @@
       "targetMIDI": 68,
       "filename": "s4-f09-m068.m4a",
       "sampleRate": 44100,
-      "frameCount": 132238
+      "frameCount": 132328
     },
     {
       "string": 4,
@@ -823,7 +823,7 @@
       "targetMIDI": 69,
       "filename": "s4-f10-m069.m4a",
       "sampleRate": 44100,
-      "frameCount": 168923
+      "frameCount": 168925
     },
     {
       "string": 4,
@@ -855,7 +855,7 @@
       "targetMIDI": 73,
       "filename": "s4-f14-m073.m4a",
       "sampleRate": 44100,
-      "frameCount": 145408
+      "frameCount": 146026
     },
     {
       "string": 4,
@@ -863,7 +863,7 @@
       "targetMIDI": 74,
       "filename": "s4-f15-m074.m4a",
       "sampleRate": 44100,
-      "frameCount": 133957
+      "frameCount": 133959
     },
     {
       "string": 4,
@@ -871,7 +871,7 @@
       "targetMIDI": 75,
       "filename": "s4-f16-m075.m4a",
       "sampleRate": 44100,
-      "frameCount": 87040
+      "frameCount": 87218
     },
     {
       "string": 4,
@@ -879,7 +879,7 @@
       "targetMIDI": 76,
       "filename": "s4-f17-m076.m4a",
       "sampleRate": 44100,
-      "frameCount": 125952
+      "frameCount": 126570
     },
     {
       "string": 4,
@@ -887,7 +887,7 @@
       "targetMIDI": 77,
       "filename": "s4-f18-m077.m4a",
       "sampleRate": 44100,
-      "frameCount": 117499
+      "frameCount": 117545
     },
     {
       "string": 4,
@@ -895,7 +895,7 @@
       "targetMIDI": 78,
       "filename": "s4-f19-m078.m4a",
       "sampleRate": 44100,
-      "frameCount": 110464
+      "frameCount": 110466
     },
     {
       "string": 4,
@@ -903,7 +903,7 @@
       "targetMIDI": 79,
       "filename": "s4-f20-m079.m4a",
       "sampleRate": 44100,
-      "frameCount": 138024
+      "frameCount": 138114
     },
     {
       "string": 4,
@@ -911,7 +911,7 @@
       "targetMIDI": 80,
       "filename": "s4-f21-m080.m4a",
       "sampleRate": 44100,
-      "frameCount": 118590
+      "frameCount": 118900
     },
     {
       "string": 4,
@@ -919,7 +919,7 @@
       "targetMIDI": 81,
       "filename": "s4-f22-m081.m4a",
       "sampleRate": 44100,
-      "frameCount": 97280
+      "frameCount": 97458
     },
     {
       "string": 5,
@@ -1007,7 +1007,7 @@
       "targetMIDI": 74,
       "filename": "s5-f10-m074.m4a",
       "sampleRate": 44100,
-      "frameCount": 139264
+      "frameCount": 139442
     },
     {
       "string": 5,
@@ -1015,7 +1015,7 @@
       "targetMIDI": 75,
       "filename": "s5-f11-m075.m4a",
       "sampleRate": 44100,
-      "frameCount": 119940
+      "frameCount": 119942
     },
     {
       "string": 5,
@@ -1023,7 +1023,7 @@
       "targetMIDI": 76,
       "filename": "s5-f12-m076.m4a",
       "sampleRate": 44100,
-      "frameCount": 135306
+      "frameCount": 135308
     },
     {
       "string": 5,
@@ -1047,7 +1047,7 @@
       "targetMIDI": 79,
       "filename": "s5-f15-m079.m4a",
       "sampleRate": 44100,
-      "frameCount": 115175
+      "frameCount": 115177
     },
     {
       "string": 5,
@@ -1055,7 +1055,7 @@
       "targetMIDI": 80,
       "filename": "s5-f16-m080.m4a",
       "sampleRate": 44100,
-      "frameCount": 136192
+      "frameCount": 136678
     },
     {
       "string": 5,
@@ -1063,7 +1063,7 @@
       "targetMIDI": 81,
       "filename": "s5-f17-m081.m4a",
       "sampleRate": 44100,
-      "frameCount": 135168
+      "frameCount": 135434
     },
     {
       "string": 5,
@@ -1071,7 +1071,7 @@
       "targetMIDI": 82,
       "filename": "s5-f18-m082.m4a",
       "sampleRate": 44100,
-      "frameCount": 166651
+      "frameCount": 166697
     },
     {
       "string": 5,
@@ -1079,7 +1079,7 @@
       "targetMIDI": 83,
       "filename": "s5-f19-m083.m4a",
       "sampleRate": 44100,
-      "frameCount": 156431
+      "frameCount": 156433
     },
     {
       "string": 5,
@@ -1087,7 +1087,7 @@
       "targetMIDI": 84,
       "filename": "s5-f20-m084.m4a",
       "sampleRate": 44100,
-      "frameCount": 138240
+      "frameCount": 138594
     },
     {
       "string": 5,
@@ -1095,7 +1095,7 @@
       "targetMIDI": 85,
       "filename": "s5-f21-m085.m4a",
       "sampleRate": 44100,
-      "frameCount": 121179
+      "frameCount": 121181
     },
     {
       "string": 5,
@@ -1103,7 +1103,7 @@
       "targetMIDI": 86,
       "filename": "s5-f22-m086.m4a",
       "sampleRate": 44100,
-      "frameCount": 116736
+      "frameCount": 116870
     }
   ]
 }

@@ -18,17 +18,20 @@ built against real audio than against a placeholder tone.
 | # | Workstream | Depends on |
 | --- | --- | --- |
 | ~~001~~ | ~~Theory foundations and the tuning model~~ — **complete**, see `completed/` | — |
-| 002 | Sample capture mode and the note library | — |
+| ~~002~~ | ~~Sample capture mode and the note library~~ — **complete**, see `completed/` | — |
 | 003 | Sampled playback engine | 001, 002 |
 | ~~004~~ | ~~General-purpose fretboard view~~ — **complete**, see `completed/` | 001 |
 | 005 | Multi-module app shell | 001 |
 | 006 | Learning modules | 003, 004, 005 |
 | 007 | Microphone-verified guided practice | 006 |
 
-002 and 004 can proceed in parallel, and 002 can start immediately — it only
-depends on the audio layer, which already exists. 001 is complete: the theory
-layer, the 15 tunings and the persisted practice-state document all landed, so
-004, 005 and 006 are no longer blocked on it.
+001, 002 and 004 are complete. The theory layer, the 15 tunings and the
+persisted practice-state document all landed in 001; 002's recording session
+is done, so all 138 positions exist as real DI audio and ship in the bundle at
+`Fretlight/Resources/NoteSamples/`. That was the one piece of human time that
+could not be parallelised, and it unblocks 003.
+
+003 and 005 are both clear to start, and are independent of each other.
 
 ## Source of truth
 

@@ -70,6 +70,8 @@ Layout:
 | Decoding a persisted settings document | Decode field by field, each with its own fallback (`PracticeState.Settings`) | Synthesised `Decodable` — one unrecognised enum case throws and takes every other setting down with it |
 | Refactoring a view that must look unchanged | Render it off-screen to PNGs before and after and compare pixels (`DetectionBoardSnapshotTests`, gated on `TEST_RUNNER_FRETWORK_SNAPSHOT_DIR`) | Reading the diff and calling it equivalent. The detection board's rewrite looked right and was placing every dot wrongly; only the pixels said so |
 | Placing a view that also carries a `.transition(.modifier(...))` | Let the transition's identity state position it, and nothing else | Adding `.position` on top. Both apply, the dot lands where neither asked, and it is invisible in a static reading of the code |
+| Aligning recorded samples on their attack | Re-measure the onset from the audio at build time (`scripts/build-sample-library.sh`) | Trusting the mark the recorder wrote. A noise-floor-derived threshold fires late on a soft attack, so a fixed rewind lands *inside* the transient — measured across 138 real takes, onsets ranged 0–43 ms against a nominal 15 |
+| Choosing a lossy codec for sampled audio | Decode both builds back to PCM, correlate to find the offset, and check it is 0 before comparing anything else | Judging on bitrate or on an SNR figure alone. Encoder priming shifting the attack is what disqualifies a codec for a sampled instrument, and an SNR computed at the wrong offset hides it |
 
 ## Patterns
 
@@ -174,6 +176,22 @@ scattered across call sites.
   pipe and matches nothing. The stale-process kill in Workflows was written
   that way and silently never killed anything; use an unescaped `|`. Verify a
   pattern with `pgrep -f` before trusting that a `pkill` did something.
+
+- Resources under `Fretlight/` land **flat** in `Contents/Resources/`, because
+  it is a `PBXFileSystemSynchronizedRootGroup` rather than a folder reference.
+  The bundled note library lives at `Fretlight/Resources/NoteSamples/` in the
+  repo and reaches the app as 138 bare `.m4a` files plus `index.json` beside
+  everything else. Look them up by filename; a `subdirectory:` argument to
+  `Bundle.url(forResource:)` finds nothing. Nothing had to be added to
+  `project.pbxproj` for them to ship, which also means nothing warns you if a
+  file lands there by accident.
+
+- A take's *recorded* peak and its *shipped* peak are different numbers.
+  Accepted takes are normalised to `TakeVerifier.normalizedPeak` on write,
+  while the manifest deliberately stores the raw peak so pick force stays
+  reviewable. 60 of the 138 masters are `peakFlagged`; that is a note about
+  the performance, not a defect in the library. Don't re-record on the flag
+  alone — check whether the thing it measures survives normalisation.
 
 ## Versioning
 

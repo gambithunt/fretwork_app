@@ -37,7 +37,16 @@ HIGHEST_FRET=22
 OPEN_MIDI=(40 45 50 55 59 64)
 
 DEFAULT_OUTPUT_DIR="$REPO_ROOT/Fretlight/Resources/NoteSamples"
-DEFAULT_FORMAT="alac"
+# AAC, chosen on measurement against the real masters rather than on the
+# lossless-is-safer instinct. Decoded back to PCM and compared sample-for-
+# sample against the ALAC build of the same takes: alignment is exact (best
+# correlation at offset 0, so afconvert's priming introduces no attack-timing
+# skew), and the codec's error RMS lands at -59 to -74 dBFS — 22 to 37 dB
+# below the noise floor already present in each take's own pre-onset window.
+# The error is buried under noise the recording carries anyway, and the
+# library drops from 37.6 MB to 12.5 MB. Re-run with --format alac to rebuild
+# losslessly if a future take is ever judged to suffer.
+DEFAULT_FORMAT="aac"
 # Masters are captured with a generous ~6s tail on purpose (workstream 002,
 # Phase 0 recording parameters: "trim at build, not at record time"). This is
 # the shared ceiling every bundled take is trimmed to, so a long-ringing low
@@ -50,6 +59,14 @@ DEFAULT_TRIM_SECONDS=4.0
 # cut anything off — a take that already decayed to silence before the cap
 # can still end on a hard stop from the recorder's own decay-threshold cutoff.
 DEFAULT_FADE_MS=60
+# Where every take's attack is placed, measured from the start of the file.
+# Matches TakeVerifier.preOnsetSeconds (0.015) — the margin the recorder aims
+# for — so a take the recorder got right passes through this alignment
+# unchanged, and only the ones it got wrong move.
+ALIGN_MARGIN_MS=15
+# Short enough not to soften a pluck, long enough to remove the step out of
+# silence that every master starts on. See the fade block below.
+HEAD_FADE_MS=2
 # 192 kbps mono AAC is the figure workstream 002's Phase 0 sizing note used
 # ("~13 MB as 192 kbps mono AAC"); kept as the default so --format aac's
 # output size is comparable to that estimate.
@@ -67,13 +84,13 @@ Options:
   --output DIR         Where to write the bundled library.
                         Default: ${DEFAULT_OUTPUT_DIR#$REPO_ROOT/}
   --format alac|aac     Bundle codec. Default: $DEFAULT_FORMAT
-                        ALAC is lossless and the safe default. The ALAC vs AAC
-                        trade needs real guitar transients to judge by ear,
-                        which do not exist yet (see docs/workstreams/active/
-                        002-sample-capture-and-library.md, Phase 4) — so this
-                        has not been measured, only estimated. Re-run with
-                        --format aac once real masters exist and compare the
-                        total size this script prints against the ALAC run's.
+                        Measured against the real masters, not estimated: AAC
+                        aligns exactly (no priming skew on the attack) and its
+                        error sits 22-37 dB below each take's own recorded
+                        noise floor, at a third of ALAC's size. See the
+                        DEFAULT_FORMAT comment above and Phase 4 of
+                        docs/workstreams/active/002-sample-capture-and-library.md.
+                        ALAC remains available for a lossless rebuild.
   --trim-seconds N      Shared ceiling every take is trimmed to, in seconds.
                         Default: $DEFAULT_TRIM_SECONDS
   --fade-ms N           Release fade applied at the tail of every take, in
@@ -159,7 +176,7 @@ echo "==> Validating masters in $MASTERS_DIR"
 # previously-committed library — the swap into $OUTPUT_DIR below only happens
 # once this has fully succeeded.
 python3 - "$MASTERS_DIR" "$FINAL" "$WORK" "$FORMAT" "$TRIM_SECONDS" "$FADE_MS" "$AAC_BITRATE" \
-  "$STRING_COUNT" "$HIGHEST_FRET" "${OPEN_MIDI[@]}" <<'PY'
+  "$ALIGN_MARGIN_MS" "$HEAD_FADE_MS" "$STRING_COUNT" "$HIGHEST_FRET" "${OPEN_MIDI[@]}" <<'PY'
 import json
 import math
 import re
@@ -169,7 +186,7 @@ import wave
 from pathlib import Path
 
 (masters_dir, output_dir, work_dir, fmt, trim_seconds, fade_ms, aac_bitrate,
- strings, highest_fret, *open_midi) = sys.argv[1:]
+ align_margin_ms, head_fade_ms, strings, highest_fret, *open_midi) = sys.argv[1:]
 
 masters_dir = Path(masters_dir)
 output_dir = Path(output_dir)
@@ -177,6 +194,14 @@ work_dir = Path(work_dir)
 trim_seconds = float(trim_seconds)
 fade_ms = float(fade_ms)
 aac_bitrate = int(aac_bitrate)
+ALIGN_MARGIN_MS = float(align_margin_ms)
+HEAD_FADE_MS = float(head_fade_ms)
+
+# What fraction of a take's own loudest opening block counts as the attack
+# having started. 0.1 (-20 dB relative) sits above the recorded noise floor on
+# every take measured, and below the shoulder of even the slowest wound-string
+# attack, so it marks the transient rather than the noise or the peak.
+ONSET_FRACTION = 0.1
 strings = int(strings)
 highest_fret = int(highest_fret)
 open_midi = [int(x) for x in open_midi]
@@ -279,7 +304,43 @@ print(f"All {len(expected_positions)} positions present and verified.")
 trimmed_dir = work_dir / "trimmed"
 trimmed_dir.mkdir(parents=True, exist_ok=True)
 
+def measure_onset(samples, rate):
+    """Frame index where the attack actually begins.
+
+    The recorder already trimmed each master to a fixed margin ahead of the
+    onset *it* detected, but its threshold is derived from the noise floor and
+    fires late on a soft attack — measured across a real 138-take session, 93
+    takes landed on the intended margin while 33 sat at 0-2ms (the rewind had
+    landed mid-transient) and a dozen sat as late as 43ms. That is up to 15ms
+    of jitter in where a note starts, which a sampled playback engine
+    triggering on a grid renders as sloppy timing.
+
+    Re-measuring here rather than trusting the recorder's mark: walk 1ms
+    blocks and take the first one reaching a fixed fraction of the loudest
+    block in the take's opening. Deliberately relative to the take's own level
+    rather than to an absolute dBFS figure, because every take is normalised
+    to the same peak but their attacks differ in slope by string and fret.
+    """
+    block = max(1, int(round(rate * 0.001)))
+    blocks = []
+    for start in range(0, min(len(samples), int(rate * 0.25)), block):
+        seg = samples[start:start + block]
+        if not seg:
+            break
+        blocks.append(math.sqrt(sum(v * v for v in seg) / len(seg)))
+    if not blocks:
+        return 0
+    ceiling = max(blocks)
+    if ceiling <= 0:
+        return 0
+    for i, v in enumerate(blocks):
+        if v > ceiling * ONSET_FRACTION:
+            return i * block
+    return 0
+
+
 positions = []
+onset_reports = []
 for s, f in expected_positions:
     row = by_position[(s, f)]
     src = masters_dir / expected_filename(s, f)
@@ -297,22 +358,53 @@ for s, f in expected_positions:
         )
         sys.exit(1)
 
+    full_scale = float(2 ** (8 * sw - 1))
+    samples = [
+        int.from_bytes(raw[i * sw:(i + 1) * sw], byteorder="little", signed=True) / full_scale
+        for i in range(nframes)
+    ]
+
+    # Align every take so its attack begins the same distance into the file.
+    # A take whose onset sits later than the common margin is cut down to it;
+    # one that sits earlier is padded with silence. Padding cannot restore a
+    # transient the recorder already trimmed away — that audio is not in the
+    # master — but alignment is what playback needs, and a truncated attack
+    # padded to the common margin is still in time with its neighbours.
+    margin_frames = int(round(rate * ALIGN_MARGIN_MS / 1000.0))
+    onset = measure_onset(samples, rate)
+    shift = onset - margin_frames
+    if shift > 0:
+        samples = samples[shift:]
+    elif shift < 0:
+        samples = [0.0] * (-shift) + samples
+    onset_reports.append((s, f, onset * 1000.0 / rate, shift * 1000.0 / rate))
+
     max_frames = int(round(rate * trim_seconds))
-    trimmed_frames = min(nframes, max_frames)
-    data = bytearray(raw[: trimmed_frames * sw])
+    trimmed_frames = min(len(samples), max_frames)
+    samples = samples[:trimmed_frames]
+
+    # Fade both ends. The tail fade is the long one, keeping a take from
+    # ending on the discontinuity the trim above (or the recorder's own decay
+    # cutoff) leaves behind. The head fade is short and exists for the
+    # mirror-image reason: every master starts at a nonzero sample, and the
+    # worst measured at +0.124 (-18 dBFS) — an instant step out of silence
+    # that plays as a click. A couple of milliseconds removes the step without
+    # perceptibly softening a plucked transient.
+    head_frames = min(int(round(rate * HEAD_FADE_MS / 1000.0)), trimmed_frames)
+    for i in range(head_frames):
+        samples[i] *= (i + 1) / head_frames
 
     fade_frames = min(int(round(rate * fade_ms / 1000.0)), trimmed_frames)
-    if fade_frames > 0:
-        start = trimmed_frames - fade_frames
-        max_val = 2 ** (8 * sw - 1) - 1
-        min_val = -(2 ** (8 * sw - 1))
-        for i in range(fade_frames):
-            idx = start + i
-            gain = 1.0 - (i + 1) / fade_frames
-            off = idx * sw
-            value = int.from_bytes(data[off:off + sw], byteorder="little", signed=True)
-            value = max(min_val, min(max_val, int(round(value * gain))))
-            data[off:off + sw] = value.to_bytes(sw, byteorder="little", signed=True)
+    for i in range(fade_frames):
+        idx = trimmed_frames - fade_frames + i
+        samples[idx] *= 1.0 - (i + 1) / fade_frames
+
+    max_val = 2 ** (8 * sw - 1) - 1
+    min_val = -(2 ** (8 * sw - 1))
+    data = bytearray(trimmed_frames * sw)
+    for i, v in enumerate(samples):
+        value = max(min_val, min(max_val, int(round(v * full_scale))))
+        data[i * sw:(i + 1) * sw] = value.to_bytes(sw, byteorder="little", signed=True)
 
     basename = f"s{s}-f{f:02d}-m{row['targetMIDI']:03d}"
     dest = trimmed_dir / f"{basename}.wav"
@@ -331,7 +423,16 @@ for s, f in expected_positions:
         "basename": basename,
     })
 
-print(f"Trimmed and faded {len(positions)} takes (max {trim_seconds:.1f}s, {fade_ms:.0f}ms release fade).")
+shifted = [r for r in onset_reports if abs(r[3]) >= 1.0]
+print(
+    f"Trimmed and faded {len(positions)} takes (max {trim_seconds:.1f}s, "
+    f"{HEAD_FADE_MS:.0f}ms attack fade, {fade_ms:.0f}ms release fade)."
+)
+print(
+    f"Aligned every attack to {ALIGN_MARGIN_MS:.0f}ms in; "
+    f"{len(shifted)} take(s) needed a shift of 1ms or more "
+    f"(largest {max((abs(r[3]) for r in onset_reports), default=0.0):.0f}ms)."
+)
 
 # ---- convert every trimmed take to the bundle format ----
 print(f"==> Converting to {fmt} (.m4a)")

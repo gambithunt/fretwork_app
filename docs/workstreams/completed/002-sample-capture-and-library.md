@@ -292,4 +292,78 @@ borrowing the correct pitch off a different string with the wrong timbre.
 
 ## Implementation Record
 
-_Append phase-by-phase evidence here._
+### Phase 5 — The recording session
+
+All 138 positions recorded DI in standard tuning, 24-bit mono at 44.1 kHz
+(the interface's rate; the Phase 0 note anticipated 48 kHz, which is not a
+problem — the rate is carried per-position in the manifest and the index, so
+nothing downstream assumes one). Masters total 82 MB in `SampleMasters/`,
+git-ignored per `docs/releasing.md`.
+
+Validation against the naming contract passes with zero errors: 138 rows, no
+missing position, no duplicate, no orphaned file, and every filename's encoded
+MIDI number agrees with both the string/fret it also encodes and the
+manifest's `targetMIDI`.
+
+Pitch verification: worst take is 22.9 cents from target, median 6.9 — inside
+the 25-cent window `TakeVerifier.centsWindow` sets, and the distribution is
+what a real instrument does rather than what a tuner does, which is the
+reasoning that widened that constant from 10.
+
+**Flagged takes reviewed: 60 of 138 flagged for peak deviation, all accepted.**
+The flag records *raw pick force*, which genuinely varied over the session,
+but every accepted take is normalised to `TakeVerifier.normalizedPeak` (0.8)
+before it is written — so the flag describes the performance, not the artifact.
+Measured across the written masters, peaks land at 0.56–0.80. No take was
+re-recorded on this basis.
+
+### Phase 4 — Library build step
+
+**ALAC vs AAC, measured rather than estimated.** The script's own help text
+recorded that this decision was waiting on real transients. With them:
+
+| | ALAC | AAC 192k mono |
+| --- | --- | --- |
+| Library size | 37.62 MB | 12.53 MB |
+| Sample alignment vs lossless | — | exact (best correlation at offset 0) |
+| Error RMS | — | −59 to −74 dBFS |
+| Margin below each take's own noise floor | — | 22–37 dB |
+
+Method: decode both builds of the same take back to PCM, align by maximising
+SNR over ±2500 samples, then compare. Alignment came out at offset 0 on every
+take tested, so `afconvert`'s encoder priming introduces no attack-timing skew
+— the thing that would actually have disqualified a lossy format here. The
+error sits well under noise the recording already carries. **AAC is now the
+script default**; `--format alac` still rebuilds losslessly.
+
+**Two defects found in the masters and fixed at build time**, which is where
+Phase 0 deliberately put trimming:
+
+1. **Onset jitter.** The recorder trims to a fixed 15 ms ahead of the onset it
+   detects, but its threshold is derived from the noise floor and fires late on
+   a soft attack. Measured across the session: 93 takes landed on the intended
+   margin, 33 sat at 0–2 ms (the rewind had landed *inside* the transient), and
+   a dozen sat as late as 43 ms. Up to 15 ms of jitter in where a note begins,
+   which workstream 003 would render as sloppy timing whenever it triggers
+   samples on a grid. The build step now re-measures each onset itself and
+   shifts every take to a common margin. After: 131 of 138 land at exactly
+   15 ms, 5 at 16 ms, 1 at 19 ms, 1 at 8 ms.
+2. **Head clicks.** Every master starts on a nonzero sample — the worst at
+   +0.124, a −18 dBFS step straight out of silence. The script faded the tail
+   and not the head. A 2 ms attack fade now mirrors the release fade; the
+   largest first sample across the shipped library dropped from −18 dBFS to
+   −68 dBFS.
+
+Neither is recoverable by re-recording alone, and neither needed the guitar to
+fix. Note that padding restores *alignment*, not audio: a take whose transient
+the recorder already trimmed away is still truncated, it is merely truncated in
+time with its neighbours now.
+
+**Bundle wiring needed no `project.pbxproj` change** — `Fretlight/` is a
+`PBXFileSystemSynchronizedRootGroup`, so the library was picked up as a
+resource automatically. It lands **flat in `Contents/Resources/`**, not under a
+`NoteSamples/` subdirectory; verified by inspecting the built app (138 `.m4a` +
+`index.json`). Workstream 003's loader must look files up by bare filename.
+Built app: 21 MB.
+
+Gates: `xcodebuild ... test` **TEST SUCCEEDED**, `git diff --check` clean.
