@@ -205,8 +205,64 @@ with a long name silently widened the minimum window. Caught by
 `WindowSizeTests` failing when the GP-200 was unplugged mid-session. The summary
 is now width-capped and truncates in the middle.
 
+### Interlude — the launch hang, fixed
+
+Phase 1's gates could not be run against the real app because it hung on
+launch. The diagnosis in workstream 005 was incomplete: the *UI* was fine — the
+main thread sat idle in the normal AppKit event loop the whole time — but
+`AVAudioEngine.inputNode` was parked in `AudioDeviceCreateIOProcID` waiting on
+a `mach_msg` reply from coreaudiod that never came, measured at over 90 seconds
+with the interface unplugged mid-session.
+
+The damage was that graph building shared `controlQueue` with the entire
+control surface, so everything behind it stopped working **silently**: changing
+device, monitor level, playing a note, and even Retry. The window stayed
+responsive, which is exactly why it read as "audio went quiet" rather than "the
+app is broken".
+
+Graph build and teardown moved to their own queue, leaving `controlQueue`
+non-blocking, so the player can still select a different device while a bad one
+hangs — which is the action that actually recovers the app. A watchdog reports
+at 4s (reconnecting) and 15s (error naming the device). It reports rather than
+cancels, because a `mach_msg` waiting on coreaudiod cannot be aborted from
+here.
+
+Verified against the real misbehaving device: the graph queue sits stuck while
+the control queue stays free, and control operations complete in 0.002s during
+a stuck build. Worth knowing: binding a device id that cannot resolve *also*
+hangs rather than erroring, so the watchdog is the only thing that reports at
+all, not a backstop for an exotic case.
+
+### Phase 2 — Intervals
+
+`IntervalsModuleModel` plus `IntervalsModuleScreen`. The theory was already
+there from workstream 001 — `Intervals` (feel, uses, exercise) and
+`IntervalShapes` (anchors) — so this phase is mostly presentation and the rules
+for keeping an anchor valid.
+
+The module's idea is that an interval is a *shape under the hand*: the same
+fifth is a different physical move depending on which string the root is on. So
+the board draws three tiers — every root you could anchor on, recessed; the
+chosen root, full size; and the notes it reaches, marked in the interval's
+colour rather than the note's, because there they mean "a fifth away" rather
+than "a G".
+
+The rule that needed care is **re-anchoring**. A saved anchor can become
+unreachable when the root, interval or tuning changes, and the module must snap
+to the nearest playable one rather than going blank. Tests cover all three
+changes across every root and every interval.
+
+The interval's `short` is persisted rather than its index, so a catalogue that
+gains an interval cannot silently re-point a saved selection, and an unknown
+value falls back the same way the rest of the document does.
+
+17 tests, including that every marked target is exactly the interval above the
+anchored root **in pitch** — not merely in pitch class, since the module is
+about a physical distance — and that no position is ever drawn twice across all
+tiers.
+
 ### Status
 
-Suite **286 passing, 0 failures**. Phases 2–10 (Intervals, Octaves, Triads,
-Chords, Pentatonic, Scales, Harmonizing, Note association, Circle of fifths) and
-Phase 11's final gates remain.
+Suite **306 passing, 0 failures**. Phases 3–10 (Octaves, Triads, Chords,
+Pentatonic, Scales, Harmonizing, Note association, Circle of fifths) and Phase
+11's final gates remain.

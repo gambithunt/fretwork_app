@@ -74,16 +74,60 @@ extension PracticeState {
     /// a build that does not know about a module cannot wipe its neighbours.
     struct Modules: Codable, Equatable, Sendable {
         var notes = Notes()
+        var intervals = Intervals()
 
         init() {}
 
-        private enum CodingKeys: String, CodingKey { case notes }
+        private enum CodingKeys: String, CodingKey { case notes, intervals }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.init()
             if let stored = (try? container.decodeIfPresent(Notes.self, forKey: .notes)) ?? nil {
                 notes = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Intervals.self, forKey: .intervals)) ?? nil {
+                intervals = stored
+            }
+        }
+
+        /// Intervals: which root, which interval, and where on the neck the
+        /// player last anchored it.
+        ///
+        /// The anchor is stored as `"string:fret"` like the Notes board, and it
+        /// matters because an interval shape means nothing in the abstract —
+        /// the point of the module is where it sits under the hand.
+        struct Intervals: Codable, Equatable, Sendable {
+            var rootPitchClass: Int = 0
+            /// The interval's `short`, not its index: an index would silently
+            /// re-point at a different interval if the catalogue ever gained
+            /// one.
+            var intervalShort: String = "P5"
+            var anchor: String = "1:3"
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey { case rootPitchClass, intervalShort, anchor }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let stored = (try? container.decodeIfPresent(Int.self, forKey: .rootPitchClass)) ?? nil {
+                    rootPitchClass = ((stored % 12) + 12) % 12
+                }
+                if let stored = (try? container.decodeIfPresent(String.self, forKey: .intervalShort)) ?? nil,
+                   Intervals.isKnown(stored) {
+                    intervalShort = stored
+                }
+                if let stored = (try? container.decodeIfPresent(String.self, forKey: .anchor)) ?? nil {
+                    anchor = stored
+                }
+            }
+
+            /// A retired interval name falls back rather than leaving the
+            /// module pointing at nothing.
+            static func isKnown(_ short: String) -> Bool {
+                Fretwork.Intervals.all.contains { $0.short == short }
             }
         }
 
