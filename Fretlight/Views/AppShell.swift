@@ -45,7 +45,22 @@ struct AppShell: View {
                 ModulePlaceholderScreen(module: module)
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    isShowingSettings.toggle()
+                } label: {
+                    Label("Settings", systemImage: "slider.horizontal.3")
+                }
+                .help("Devices, monitoring, tuning and board orientation")
+                .popover(isPresented: $isShowingSettings, arrowEdge: .bottom) {
+                    GlobalSettingsView(state: state)
+                }
+            }
+        }
     }
+
+    @State private var isShowingSettings = false
 
     private func row(for screen: AppScreen) -> some View {
         Label(screen.title, systemImage: screen.symbol)

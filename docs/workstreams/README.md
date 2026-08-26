@@ -21,7 +21,7 @@ built against real audio than against a placeholder tone.
 | ~~002~~ | ~~Sample capture mode and the note library~~ — **complete**, see `completed/` | — |
 | ~~003~~ | ~~Sampled playback engine~~ — **complete**, see `completed/` | 001, 002 |
 | ~~004~~ | ~~General-purpose fretboard view~~ — **complete**, see `completed/` | 001 |
-| 005 | Multi-module app shell | 001 |
+| ~~005~~ | ~~Multi-module app shell~~ — **complete**, see `completed/` | 001 |
 | 006 | Learning modules | 003, 004, 005 |
 | 007 | Microphone-verified guided practice | 006 |
 
@@ -31,10 +31,12 @@ is done, so all 138 positions exist as real DI audio and ship in the bundle at
 `Fretlight/Resources/NoteSamples/`. That was the one piece of human time that
 could not be parallelised, and it unblocks 003.
 
-005 is clear to start. 003 is complete: the note library plays back
-polyphonically in all fifteen tunings, monitor and playback levels are
-independent, and the sequencer, strum and cancellation are ported from the web
-app — but nothing in the UI reaches it yet, which is 006's job.
+Everything 006 depends on is now in place. 003 plays the note library
+polyphonically in all fifteen tunings with independent monitor and playback
+levels, and 005 gives the ten modules a shell to live in, global settings
+reachable from any screen, and detection that idles when no visible screen
+consumes it. 006 is the remaining work: ten module screens and the two session
+engines they share.
 
 ## Source of truth
 

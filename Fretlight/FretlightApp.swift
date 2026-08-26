@@ -18,13 +18,18 @@ struct FretworkApp: App {
         WindowGroup {
             ContentView(state: state)
                 // Both measured, not guessed (via an off-screen NSHostingView
-                // render). minWidth is now *composed*, because the window holds
-                // a sidebar beside the screen: the listening screen's own
-                // natural width — logo, input/output pickers, rescan, monitor,
-                // sensitivity, all in one row with no wrapping — measures
-                // 1159pt at its tightest, and `AppShell.sidebarMinimumWidth`
-                // adds 200, so 1359 is the floor; 1380 leaves headroom so
-                // real-world font/Dynamic Type variance can't crowd anything.
+                // render). minWidth is *composed*, because the window holds a
+                // sidebar beside the screen: the listening screen measures
+                // 727pt at its tightest and `AppShell.sidebarMinimumWidth` adds
+                // 200, so 927 is the floor; 950 leaves headroom so real-world
+                // font/Dynamic Type variance can't crowd anything.
+                //
+                // It was 1359 until the global settings — devices, monitor,
+                // sensitivity, tuning, board orientation — moved out of this
+                // screen's header and into the shell's toolbar. Seven controls
+                // in one non-wrapping row were what made the window wide; the
+                // window got 430pt narrower by putting them where every screen
+                // can reach them anyway.
                 // minHeight: the whole stack, including the fretboard's own
                 // 260pt floor (see ListenScreen), measures 772pt, rounded up to
                 // 800. Below this the fretboard is forced under its floor and
@@ -42,7 +47,7 @@ struct FretworkApp: App {
                 // when the screen outgrew it. `WindowSizeTests` now re-measures
                 // on every run; if it fails, re-derive these numbers rather
                 // than raising them until it passes.
-                .frame(minWidth: 1_380, minHeight: 800)
+                .frame(minWidth: 950, minHeight: 800)
         }
         .commands {
             CommandGroup(after: .appInfo) {

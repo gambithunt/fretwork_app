@@ -96,6 +96,21 @@ final class AppState {
     /// False is the default board: Low E along the bottom, High E on top —
     /// tablature's convention (pitch rises up the page), and the same
     /// orientation the web app draws, so a shape looks identical in both.
+    /// The tuning every board in the app draws, and the one sample playback
+    /// pitches against. Global rather than per-screen: an instrument has one
+    /// tuning at a time, and a shape shown in Drop D on one screen and standard
+    /// on the next would be teaching two different instruments.
+    ///
+    /// Persisted. The document has carried `tuningID` since workstream 001, but
+    /// until now nothing read it back — the field was written and never used.
+    var tuning: Tuning = Tunings.standard {
+        didSet {
+            guard tuning != oldValue else { return }
+            let id = tuning.id
+            practiceState.update { $0.settings.tuningID = id }
+        }
+    }
+
     var isFretboardFlipped = false {
         didSet {
             guard isFretboardFlipped != oldValue else { return }
@@ -281,6 +296,7 @@ final class AppState {
         // `didSet` only writes the value back, so a missed observer costs
         // nothing. `sensitivity` below is the opposite case.
         isFretboardFlipped = settings.isFretboardFlipped
+        tuning = Tunings.tuning(id: settings.tuningID)
         // Property observers do not fire for a value assigned inside the
         // type's own initialiser, so restoring `sensitivity` above never
         // reached `applySensitivity`. The slider showed the saved value while

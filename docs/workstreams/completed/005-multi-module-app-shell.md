@@ -151,4 +151,116 @@ experience preserved intact as its first screen.
 
 ## Implementation Record
 
-_Append phase-by-phase evidence here._
+### Phase 0 — Baseline
+
+Re-measuring the listening screen found a **pre-existing defect**: it needed
+772pt of height against a declared window minimum of 700, so the window could
+be dragged 72pt below what its contents fit in, forcing the fretboard under its
+own 260pt floor. The 700 was derived honestly (682, rounded up) but the
+derivation lived only in a source comment, so nothing failed when the screen
+later grew. That is the real lesson: **a measured constant with no test is a
+guess as soon as anything around it changes.** `WindowSizeTests` now re-renders
+through an off-screen `NSHostingView` on every run.
+
+### Phase 1 — Extract the listening screen
+
+`ContentView`'s body moved verbatim into `ListenScreen`, with `ContentView`
+kept as a thin container. The leaf-view split and its explanatory comments moved
+with it untouched.
+
+### Phase 2 — Navigation shell
+
+`AppShell` wraps a `NavigationSplitView` around Listen plus the ten modules.
+`LearningModule` mirrors `../fretwork/src/lib/modules/catalog.json` — ids,
+titles, blurbs and order — and `LearningModuleTests` compares against that file
+directly, skipping when the web repo is not checked out beside this one. It
+earned its place immediately by catching a blurb reconstructed from truncated
+terminal output.
+
+**Audio start moved to `ContentView`.** It was in `ListenScreen`'s `.task`,
+which was correct while that was the only screen: a screen's `.task` re-runs
+every time the screen reappears, and `AppState.start()` is a full
+stop-and-rebuild of the graph. Left there, every return to Listen would have
+renegotiated the device, re-prompted for the microphone, dropped the
+direct-monitoring path, and fed the restart path `AudioEngine` debounces and
+attempt-caps because an uncapped restart loop was once a real bug.
+`AudioEngine.graphBuildCount` now counts builds and
+`AppShellNavigationTests` asserts navigation never moves it.
+
+**`NSHostingView` cannot measure a `NavigationSplitView` off-screen** — it
+reports 0 x 0, so "the declared minimum contains the shell" passed no matter how
+wrong the number was. A vacuous assertion is worse than none, so the 0 x 0 is
+now pinned by its own test and the minimum is *composed* from parts that can be
+measured: the sidebar's declared floor plus the widest detail screen.
+
+### Phase 3 — Global settings and worker gating
+
+Devices, rescan, monitor, sensitivity, tuning and board orientation moved out of
+the listening screen's header into `GlobalSettingsView`, reachable from the
+shell's toolbar on every screen. The header keeps a read-only summary of the
+signal path — the first thing to check when nothing is detected — and the
+detection-mode control, which is that screen's own mode rather than a setting.
+
+That move paid for itself in window size: seven controls in one non-wrapping row
+were what made the window wide. The listening screen went from **1159pt to
+727pt**, and the window minimum from 1359 to 927, rounded to **950 x 800**.
+
+**Tuning became a real setting.** The document has carried `tuningID` since
+workstream 001, but nothing ever read it back — the field was written and never
+used. `AppState.tuning` now restores from it and persists changes.
+
+**Board orientation moved into the document.** It was a per-session flag that
+reset every launch, so a player who prefers the player's-eye view re-flipped it
+each time; with a board on ten module screens it has to be one preference
+applied everywhere. Decoding follows the existing field-by-field pattern, so a
+document without the field — or with a malformed one — keeps every other
+setting.
+
+The tuning-derived row count this phase also asks for turned out to be **already
+done**: `BoardGeometry` takes `strings` and every caller passes
+`tuning.openMIDINotes.count`. Recorded rather than redone.
+
+**Detection gating** flips the flag the workers already read, never a graph
+rebuild — `testGatingNeverRebuildsTheGraph` asserts that, because reaching
+`startSynchronously` from a screen change is exactly the failure this phase
+exists to avoid.
+
+### Phase 4 — Module placeholders and routing
+
+All ten register with real title, blurb and board ceiling from the mirrored
+catalogue. **Decision on restoring the last screen: it is not restored.** The
+app always opens on Listen, matching the web app's deliberate choice to always
+open home; reopening on a screen the player has forgotten they left is worse
+than a consistent starting point. `testTheSelectedScreenIsNotPersisted` pins it,
+including that the document has no field for it at all.
+
+### Phase 5 — Final gates
+
+Full suite **249 tests green**. Release build launches directly from its bundle
+with no dyld failure, audio running (two live `com.apple.audio.IOThread.client`
+threads).
+
+Soaked for three minutes with the window composited: `ObservationRegistrar`
+count flat at 27 throughout, memory flat at ~89 MB, CPU 6–10%. No accumulation.
+
+**Version held**, as the phase instructs: this is a structural change with no
+learning content behind it yet. 0.3.0 already covers the playback engine and
+nothing here is a separate user-facing feature.
+
+#### A long detour worth not repeating
+
+Three times this session the app hung on launch, blocked in `mach_msg` inside
+`AudioDeviceCreateIOProcID` waiting for a coreaudiod reply — 0% CPU, an empty
+window, `prepareSamplePlayback` timing out, and any test touching `AppState()`
+taking exactly 60s. The obvious theory was that `pkill -9` (which `CLAUDE.md`'s
+workflow 3 recommends) left the device claimed. **Tested directly and it is
+false**: three launch/`SIGKILL` cycles left audio working every time, as did
+three clean-quit cycles, and the tests that had taken 60s each ran in 0.001s
+once the condition cleared. It has not been reproduced on demand. Clear it with
+`sudo killall coreaudiod` or by replugging, and do not go hunting it again.
+
+Two measurement traps came out of that detour and are now in `CLAUDE.md`: CPU
+alone is not a liveness signal for this app (a composited window with audio
+running measured 0.0%, and an occluded one always does), and the app has **no
+timeout** on that Core Audio call, which is a genuine robustness gap rather than
+only a local nuisance.

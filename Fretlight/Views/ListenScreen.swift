@@ -113,22 +113,32 @@ struct ListenScreen: View {
         }
     }
 
+    /// What is left in the header after workstream 005 moved the global
+    /// settings — devices, monitor, sensitivity, tuning, board orientation —
+    /// into the shell's toolbar, where every screen can reach them.
+    ///
+    /// Detection mode stays: it is the listening screen's own mode, meaningless
+    /// on a module screen, and it is the one control here that changes what
+    /// this screen shows rather than how the app is set up.
     private var signalPath: some View {
         HStack(alignment: .top, spacing: 14) {
-            labeled("INPUT") {
-                DevicePickerView(title: "INPUT", devices: state.inputDevices, selection: state.selectedInputDeviceID, onSelect: state.selectInputDevice)
-            }
-            labeled("") {
-                Image(systemName: "arrow.right").foregroundStyle(.secondary)
-            }
-            labeled("OUTPUT") {
-                DevicePickerView(title: "OUTPUT", devices: state.outputDevices, selection: state.selectedOutputDeviceID, onSelect: state.selectOutputDevice)
-            }
-            labeled("") { rescanButton }
-            labeled("MONITOR") { monitorControl }
-            labeled("SENSITIVITY") { sensitivityControl }
+            labeled("SIGNAL") { devicePathSummary }
             labeled("DETECT") { detectionModeControl }
         }
+    }
+
+    /// The chosen path, read-only. The pickers themselves are in the shell's
+    /// settings now, but which devices are in use is the first thing to check
+    /// when nothing is being detected, so it stays visible on this screen.
+    private var devicePathSummary: some View {
+        HStack(spacing: 6) {
+            Text(state.inputDevices.first { $0.id == state.selectedInputDeviceID }?.name ?? "No input")
+            Image(systemName: "arrow.right").foregroundStyle(.secondary)
+            Text(state.outputDevices.first { $0.id == state.selectedOutputDeviceID }?.name ?? "No output")
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
 
     // Caption above control, both on their shared fixed rows. An empty label
@@ -145,28 +155,6 @@ struct ListenScreen: View {
         }
     }
 
-    private var rescanButton: some View {
-        Button { state.refreshDevices() } label: {
-            Image(systemName: "arrow.clockwise")
-        }
-        .buttonStyle(.bordered)
-        .tint(.secondary)
-        .help("Rescan for input/output devices connected since launch")
-    }
-
-    private var monitorControl: some View {
-        HStack(spacing: 8) {
-            Button { state.monitorMuted.toggle() } label: {
-                Image(systemName: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
-            }
-            .buttonStyle(.bordered)
-            .tint(.secondary)
-            .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
-            RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
-                .frame(width: 118)
-        }
-    }
-
     private var detectionModeControl: some View {
         Picker("Detection mode", selection: $state.detectionMode) {
             ForEach(DetectionMode.allCases, id: \.self) { mode in
@@ -177,15 +165,6 @@ struct ListenScreen: View {
         .labelsHidden()
         .frame(width: 130)
         .help("Notes: tune one string at a time. Chords: name what's strummed.")
-    }
-
-    private var sensitivityControl: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(.secondary)
-            RulerSlider(value: $state.sensitivity)
-                .frame(width: 118)
-                .help("Strict: fewer false triggers on noisy signal. Lenient: catches weaker or quieter notes.")
-        }
     }
 
     /// Laid out against the widest value it can show, with the live value

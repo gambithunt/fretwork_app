@@ -176,6 +176,27 @@ scattered across call sites.
   explicitly after assigning, and be suspicious of any `init` that assigns a
   property whose `didSet` does real work.
 
+- Core Audio can reach a state where the app hangs **indefinitely** on
+  startup, blocked in `mach_msg` inside `AudioDeviceCreateIOProcID` while
+  binding a device — `AudioEngine.startSynchronously` never returns, so the
+  control queue is stuck and nothing else it owns runs either. Symptoms that
+  look unrelated but share this cause: the app at 0% CPU with a window that
+  never populates, `prepareSamplePlayback` hitting its timeout, and any test
+  touching `AppState()` taking exactly 60s (device enumeration blocking).
+  Clear it with `sudo killall coreaudiod` or by replugging the interface.
+  **`pkill -9` on the app is not the cause** — that was the obvious theory and
+  it was tested directly: three launch/`SIGKILL` cycles left audio working
+  every time, as did three clean-quit cycles. It has not been reproduced on
+  demand, so do not spend a session hunting it; recognise it, clear it, move
+  on. Note that the app has no timeout on that call, which is a real
+  robustness gap rather than only a local nuisance.
+
+- CPU alone is not a liveness signal for this app. A composited window with
+  audio running measured 0.0% while `sample` showed two live
+  `com.apple.audio.IOThread.client` threads, and an *occluded* window measures
+  0.0% no matter what. To know whether audio is actually running, look for
+  those threads in `sample <pid>`, not at `ps`.
+
 - `pkill -f` takes an *extended* regex, so `\|` in its pattern is a literal
   pipe and matches nothing. The stale-process kill in Workflows was written
   that way and silently never killed anything; use an unescaped `|`. Verify a

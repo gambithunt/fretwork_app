@@ -13,7 +13,7 @@ import XCTest
 @MainActor
 final class WindowSizeTests: XCTestCase {
     /// What `FretlightApp`'s `WindowGroup` declares.
-    private let declared = CGSize(width: 1_380, height: 800)
+    private let declared = CGSize(width: 950, height: 800)
 
     func testTheDeclaredMinimumStillContainsTheListeningScreen() {
         let view = ListenScreen(state: AppState())
