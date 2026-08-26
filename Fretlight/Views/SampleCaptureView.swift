@@ -141,7 +141,7 @@ struct SampleCaptureView: View {
 
 // MARK: - Leaf views
 //
-// Each reads one slice of state. The split is the same one `ContentView` uses
+// Each reads one slice of state. The split is the same one `ListenScreen` uses
 // and exists for the same reason: `@Observable` invalidates per view body, so
 // a read in the parent would rebuild everything below it.
 

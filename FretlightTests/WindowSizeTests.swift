@@ -16,7 +16,7 @@ final class WindowSizeTests: XCTestCase {
     private let declared = CGSize(width: 1_180, height: 800)
 
     func testTheDeclaredMinimumStillContainsTheListeningScreen() {
-        let view = ContentView(state: AppState())
+        let view = ListenScreen(state: AppState())
         let fitting = NSHostingView(rootView: view).fittingSize
 
         XCTAssertGreaterThanOrEqual(

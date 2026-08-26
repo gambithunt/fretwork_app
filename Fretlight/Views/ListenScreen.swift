@@ -1,7 +1,13 @@
 import SwiftUI
 import CoreAudio
 
-struct ContentView: View {
+/// The app's original and default screen: device selection, live detection
+/// readouts, history and the fretboard.
+///
+/// Extracted verbatim from `ContentView` when the app gained more than one
+/// screen (workstream 005). Nothing about it changed in the move — including
+/// the leaf-view split below, which is load-bearing rather than stylistic.
+struct ListenScreen: View {
     @Bindable var state: AppState
 
     var body: some View {
@@ -262,9 +268,9 @@ struct ContentView: View {
 //
 // Each of these exists purely to own one read of the audio-rate state. They
 // take the `AppState` itself rather than the already-read values, because a
-// value read in `ContentView.body` and passed down would put the
-// `@Observable` dependency back on `ContentView` — the very thing this split
-// exists to avoid. See the note in `ContentView.body`.
+// value read in `ListenScreen.body` and passed down would put the
+// `@Observable` dependency back on `ListenScreen` — the very thing this split
+// exists to avoid. See the note in `ListenScreen.body`.
 
 private struct TunerSection: View {
     let state: AppState
@@ -342,5 +348,19 @@ private struct TelemetrySection: View {
         return Label("999 ms", systemImage: "timer")
             .hidden()
             .overlay(alignment: .leading) { Label(text, systemImage: "timer") }
+    }
+}
+
+/// The window's root view.
+///
+/// A container rather than the screen itself, so the app can grow more screens
+/// without `FretlightApp` reaching past it. Workstream 005 Phase 2 replaces the
+/// body with a navigation shell; until then it is the listening screen and
+/// nothing else, which keeps this phase a pure move.
+struct ContentView: View {
+    @Bindable var state: AppState
+
+    var body: some View {
+        ListenScreen(state: state)
     }
 }
