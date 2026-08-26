@@ -378,3 +378,42 @@ board — reading the diff is not evidence for a mixer either:
 **On real hardware**, both graph paths: a six-string strum plus a twelve-note
 run, zero errors, latency unchanged from Phase 0/1 (duplex 2.89 ms, split
 3.77 ms). CPU during playback 10–17% with one 49% spike at library load.
+
+### Phase 3 — Musical layer
+
+`NoteSequencer` ports `playSequence`, `strum` and the per-note variation from
+`src/lib/audio.ts`, with the web contract kept intact: the gap default of
+0.55 s, 25 ms between notes in a sequence's closing strum against 30 ms in a
+standalone one, the 150 ms pause before that strum, and `onHit` reporting -1 as
+the index for a strummed note rather than its place in the run.
+
+Cancellation uses the generation-token pattern from the web's
+`guided-session.ts`: `stop` and every new run bump a counter, and work already
+in flight does nothing if the counter has moved. Starting a run cancels the one
+before it, so two sequences cannot interleave.
+
+**The clock is injectable, and that is the point.** A sequencer tested against
+a real clock can only be tested by waiting and then looking, which cannot
+distinguish "cancelled" from "not fired yet" — the exact bug this pattern
+exists to prevent. `ManualClock` runs the schedule by hand, so
+`testAStoppedSequenceEmitsNothingFurther` first asserts that work *is* still
+queued, then advances ten seconds and asserts nothing came out of it.
+
+Writing that clock surfaced a Swift trap worth recording: **closures have no
+identity**. The first version found the next due item and then located it in the
+pending array by comparing `$0.work as AnyObject === next.work as AnyObject`.
+Boxing a closure with `as AnyObject` produces a *new* box every time, so the
+match never succeeded, every scheduled item was silently skipped, and the
+result was a clock that ran nothing. It failed in a revealing pattern — every
+"expected something to fire" test failed while every cancellation test passed,
+because a clock that fires nothing looks exactly like perfect cancellation.
+Items are identified by a serial number now.
+
+Per-note variation is ±2.5 cents of detune and up to 6% of level reduction.
+Gain jitter only ever reduces, never boosts: the takes are normalised to 0.8
+and pushing one above nominal is the one direction that can clip.
+
+`AudioEngine.makeSequencer()` returns a sequencer wired to the engine. A
+factory rather than a stored property, because building one captures `self` in
+a closure and a stored property cannot do that during initialisation — the
+two-phase-init trap `CLAUDE.md` records against `AudioDeviceWatcher`.

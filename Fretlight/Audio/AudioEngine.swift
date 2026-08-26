@@ -503,6 +503,19 @@ final class AudioEngine: @unchecked Sendable {
         }
     }
 
+    /// A sequencer that sounds its notes through this engine.
+    ///
+    /// A factory rather than a stored property: building one needs `self` in a
+    /// closure, and a stored property cannot capture `self` during
+    /// initialisation — the two-phase-init trap `CLAUDE.md` records against
+    /// `AudioDeviceWatcher`. Nothing here needs a single shared instance, so
+    /// the caller owns its own and cancellation stays scoped to it.
+    func makeSequencer() -> NoteSequencer {
+        NoteSequencer { [weak self] position, rate, gain in
+            self?.playSample(string: position.string, fret: position.fret, rateMultiplier: rate, gain: gain)
+        }
+    }
+
     /// Releases every sounding note. Not a hard stop — see `SamplePlayer`.
     func stopSamplePlayback() {
         controlQueue.async { [weak self] in self?.samplePlayer?.stopAll() }
