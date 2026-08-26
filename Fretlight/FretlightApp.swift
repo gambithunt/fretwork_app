@@ -20,15 +20,22 @@ struct FretworkApp: App {
                 // Both measured, not guessed (via an off-screen NSHostingView
                 // render). minWidth: the header's own natural width — logo,
                 // input/output pickers, rescan, monitor, sensitivity, all laid
-                // out in one row with no wrapping — is 1105pt at its tightest;
-                // 1180 leaves headroom so real-world font/Dynamic Type variance
-                // can't bring anything close to crowding. minHeight: the whole
-                // stack, including the fretboard's own 260pt floor (see
-                // ContentView), fits in exactly 682pt — the dot-matrix input
-                // meter is what raised it from the previous 659 — rounded up to
-                // 700. Below this the fretboard would be forced under its floor
-                // and something would clip.
-                .frame(minWidth: 1_180, minHeight: 700)
+                // out in one row with no wrapping — measures 1159pt at its
+                // tightest; 1180 leaves headroom so real-world font/Dynamic
+                // Type variance can't bring anything close to crowding.
+                // minHeight: the whole stack, including the fretboard's own
+                // 260pt floor (see ContentView), measures 772pt, rounded up to
+                // 800. Below this the fretboard is forced under its floor and
+                // something clips.
+                //
+                // The height was 700, justified by a 682pt measurement that had
+                // since gone stale — the screen had grown to 772 and the
+                // window would still let you drag it down to 700. The comment
+                // was the only record of the measurement, so nothing failed
+                // when the screen outgrew it. `WindowSizeTests` now re-measures
+                // on every run; if it fails, re-derive these numbers rather
+                // than raising them until it passes.
+                .frame(minWidth: 1_180, minHeight: 800)
         }
         .commands {
             CommandGroup(after: .appInfo) {
