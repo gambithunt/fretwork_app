@@ -54,7 +54,9 @@ Layout:
 | Situation | Use | Avoid |
 | --- | --- | --- |
 | Routing audio to independently-chosen input and output devices | Two separate `AVAudioEngine` instances (`AudioEngine.swift`) | One engine's `inputNode`+`outputNode` — they share one AUHAL, so `kAudioOutputUnitProperty_CurrentDevice` can only bind one physical device |
-| Feeding captured audio back out for monitoring | `AVAudioPlayerNode` + scheduled buffers (`AudioMonitorWorker`) | `AVAudioSourceNode`'s render callback — hit `kAudioUnitErr_InvalidElement` (-10877) consistently on real interfaces here |
+| Feeding audio out — monitoring or sample playback | An `AVAudioSourceNode` render callback (`MonitorRenderer`, `SamplePlayer`), pulling exactly the frames the device is about to play | `AVAudioPlayerNode` + scheduled buffers. This row used to say the opposite, blaming the source node for `kAudioUnitErr_InvalidElement` (-10877). That diagnosis was wrong: the -10877 was a polling loop busy-spinning hard enough to starve Core Audio's real-time thread, and it happened regardless of the device. With the spin gone, pulling works — and pulling removes the ~46ms queue the pushing design needed. The hazard is a busy-spinning consumer, never the source node |
+| A second signal joining the graph's shared mixer | Give each leg its own level, and leave `mainMixerNode.outputVolume` at unity | Driving the slider from the mixer's *output*. That works only while the mixer has one input; the moment a second one arrives, one control governs both |
+| A per-leg level on a node feeding a mixer | `AVAudioMixing.volume` if the leg ends in a source-type node (`AVAudioSourceNode`, `AVAudioPlayerNode`, `AVAudioInputNode`, `AVAudioMixerNode`) — it is free, being mixing work already being done | A dedicated `AVAudioMixerNode` as a fader: measured idle CPU 13% → 30%, because it is a full converting mixer and two in series convert twice. Effects (`AVAudioUnitEQ`, `AVAudioUnitDelay`) do **not** conform to `AVAudioMixing`, so `as? AVAudioMixing` on one silently does nothing — it compiles, it runs, and the control just stops working |
 | A background loop polling a shared buffer/queue | Check the throttle/cap condition *before* consuming, and sleep on every non-productive path | Consuming then discarding on a failed post-check — an unyielding busy-spin that once starved the real Core Audio I/O thread |
 | A Text/Image whose displayed value changes rapidly under an active `.animation()` | `.contentTransition(.numericText())` / `.contentTransition(.symbolEffect(.replace))`, or branch with `.transition()` per state | Letting the view's content just mutate in place — produces overlapping/garbled rendering |
 | Two sibling views that need independent placement (e.g. a title and a controls row) | A sequential `HStack`/`VStack` | `ZStack` + alignment to "center" one over the other — doesn't reserve space, can genuinely overlap depending on width |
@@ -98,7 +100,9 @@ scattered across call sites.
 - Don't add a second consumer to `RingBuffer` — it's strictly single-producer/
   single-consumer; a second reader corrupts the shared read cursor. Give each
   consumer its own `RingBuffer` instance fed from the same tap (see how
-  `AudioEngine` feeds both `AudioAnalysisWorker` and `AudioMonitorWorker`).
+  `AudioEngine` feeds `AudioAnalysisWorker`, `ChordAnalysisWorker`, the split
+  path's `MonitorRenderer` and — in DEBUG — `SampleRecorder`, each from its own
+  ring).
 - Don't restart/reconnect audio on every Core Audio device-change
   notification with no cooldown — a failing device can turn one notification
   into an infinite restart loop. Debounce and cap attempts (see
