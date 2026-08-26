@@ -64,15 +64,66 @@ final class AudioEngine: @unchecked Sendable {
     /// hardware, the same way `targetBufferFrames` was tuned.
     private static let monitorMakeupGainDB: Float = 4
 
-    private static func makeMonitorGainStage() -> AVAudioUnitEQ {
+    /// - Parameter volume: the monitor slider, 0...1. Folded into the same
+    ///   `globalGain` as the fixed makeup gain — see `monitorGainDB`.
+    private static func makeMonitorGainStage(volume: Float) -> AVAudioUnitEQ {
         let stage = AVAudioUnitEQ(numberOfBands: 1)
         // The single band exists only because AVAudioUnitEQ needs at least
         // one; bypassing it leaves `globalGain` as the only thing this node
-        // does — a plain makeup-gain stage, not a filter.
+        // does — a plain gain stage, not a filter.
         stage.bands[0].bypass = true
-        stage.globalGain = monitorMakeupGainDB
+        stage.globalGain = monitorGainDB(forVolume: volume)
         return stage
     }
+
+    /// Silence, expressed as a `globalGain`. `AVAudioUnitEQ` clamps
+    /// `globalGain` to -96 dB, so this is as far down as the stage goes.
+    private static let monitorSilenceGainDB: Float = -96
+
+    /// Applies the monitor slider to the monitor leg's own makeup-gain stage,
+    /// rather than to the shared mixer's output.
+    ///
+    /// The slider used to drive `mainMixerNode.outputVolume` directly, which
+    /// worked only while monitoring was that mixer's single input. Sample
+    /// playback is a second input to the same mixer and must not be governed
+    /// by the monitor slider — nor silenced by monitor mute — so the level has
+    /// to move off the shared output and onto the leg it belongs to.
+    ///
+    /// Two other placements were tried first and both are worse:
+    ///
+    /// - **A dedicated `AVAudioMixerNode` on the leg**, carrying the slider on
+    ///   its `outputVolume`. Measured: idle CPU went from a steady ~13% to
+    ///   ~30%, same machine, same devices, same occlusion state. An
+    ///   `AVAudioMixerNode` is a full converting mixer rather than a fader, and
+    ///   on a multi-channel interface (the GP-200 presents six input channels)
+    ///   putting two in series makes the graph do that conversion twice.
+    /// - **`AVAudioMixing.volume` on the leg's last node**, which is the
+    ///   per-input-bus level on the destination mixer and would have been free.
+    ///   `AVAudioUnitEQ` does not conform to `AVAudioMixing` — only source-type
+    ///   nodes do (`AVAudioSourceNode`, `AVAudioPlayerNode`, `AVAudioInputNode`,
+    ///   `AVAudioMixerNode`); effects do not. Because the level was applied
+    ///   through a conditional cast, this failed *silently*: it compiled, it
+    ///   ran, and the slider simply stopped doing anything. `MonitorLevelTests`
+    ///   exists to make that failure loud.
+    ///
+    /// So the slider multiplies into the gain stage that is already there. The
+    /// mapping is the same product as before — slider amplitude times the fixed
+    /// makeup gain — just expressed in dB because that is the knob this node
+    /// has.
+    ///
+    /// **Mute is -96 dB, not true zero.** Against a monitor signal peaking
+    /// around -6 dBFS that leaves roughly -98 dBFS, which is below the analog
+    /// noise floor of any interface this runs through and inaudible at any sane
+    /// monitor gain — but it is attenuation, not a disconnect, and worth
+    /// knowing when reading a meter rather than listening.
+    private static func monitorGainDB(forVolume volume: Float) -> Float {
+        guard volume > 0 else { return monitorSilenceGainDB }
+        return max(monitorSilenceGainDB, monitorMakeupGainDB + 20 * log10(volume))
+    }
+
+    /// The mapping above is the whole of Phase 1's behaviour change, so it is
+    /// tested directly rather than only through a rendered graph.
+    static func monitorGainDBForTesting(_ volume: Float) -> Float { monitorGainDB(forVolume: volume) }
 
     private let controlQueue = DispatchQueue(label: "com.fretlight.audio-control", qos: .userInitiated)
     private var captureEngine: AVAudioEngine?
@@ -80,9 +131,9 @@ final class AudioEngine: @unchecked Sendable {
     private var inputNode: AVAudioInputNode?
     private var monitorRenderer: MonitorRenderer?
     private var captureSink: CaptureSink?
-    /// Carries monitor volume. In duplex mode this is the single engine's main
-    /// mixer; in split mode it is the playback engine's.
-    private var monitorMixer: AVAudioMixerNode?
+    /// The monitor leg's gain stage, carrying both the fixed makeup gain and
+    /// the slider. Never the shared mixer's output. See `monitorGainDB`.
+    private var monitorLevel: AVAudioUnitEQ?
     private let analysisRing = RingBuffer()
     private let monitorRing = RingBuffer()
     private let chordRing = RingBuffer()
@@ -226,7 +277,7 @@ final class AudioEngine: @unchecked Sendable {
         // below, in series before the mixer — the sink's leg is a separate
         // parallel connection straight off `input`, so this never touches
         // what the detectors see.
-        let monitorGain = Self.makeMonitorGainStage()
+        let monitorGain = Self.makeMonitorGainStage(volume: monitorVolume)
         engine.attach(sink.node)
         engine.attach(monitorGain)
         // One source, two destinations: the mixer (via the gain stage)
@@ -236,7 +287,10 @@ final class AudioEngine: @unchecked Sendable {
                                    AVAudioConnectionPoint(node: sink.node, bus: 0)],
                        fromBus: 0, format: hardwareFormat)
         engine.connect(monitorGain, to: mixer, format: hardwareFormat)
-        mixer.outputVolume = monitorVolume
+        // Neutral output: the slider rides the monitor leg's own input bus,
+        // and this mixer is about to become a summing point for sample
+        // playback as well.
+        mixer.outputVolume = 1
 
         let frames = AudioDeviceEnumerator.bufferFrameSize(deviceID).map(Int.init) ?? 512
         let analysis = makeAnalysisWorker(directMonitoring: true)
@@ -252,7 +306,7 @@ final class AudioEngine: @unchecked Sendable {
 
         captureEngine = engine
         inputNode = input
-        monitorMixer = mixer
+        monitorLevel = monitorGain
         observeConfigurationChanges(of: engine)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
         chord.start(sampleRate: hardwareFormat.sampleRate)
@@ -289,12 +343,13 @@ final class AudioEngine: @unchecked Sendable {
         // renderer and before the mixer — the ring it pulls from was
         // already filled pre-gain by `CaptureSink`, so this is monitor-only
         // here too.
-        let monitorGain = Self.makeMonitorGainStage()
+        let monitorGain = Self.makeMonitorGainStage(volume: monitorVolume)
         playback.attach(renderer.node)
         playback.attach(monitorGain)
         playback.connect(renderer.node, to: monitorGain, format: monitorFormat)
         playback.connect(monitorGain, to: playback.mainMixerNode, format: monitorFormat)
-        playback.mainMixerNode.outputVolume = monitorVolume
+        // Neutral, for the same reason as the duplex path above.
+        playback.mainMixerNode.outputVolume = 1
 
         let analysis = makeAnalysisWorker(directMonitoring: false)
         let chord = makeChordWorker()
@@ -318,7 +373,7 @@ final class AudioEngine: @unchecked Sendable {
         playbackEngine = playback
         inputNode = input
         monitorRenderer = renderer
-        monitorMixer = playback.mainMixerNode
+        monitorLevel = monitorGain
         observeConfigurationChanges(of: capture)
         observeConfigurationChanges(of: playback)
         analysis.start(sampleRate: hardwareFormat.sampleRate, bufferSize: frames)
@@ -485,7 +540,7 @@ final class AudioEngine: @unchecked Sendable {
     }
 
     /// Safe to call from any thread — SensitivitySettings does its own
-    /// locking, unlike currentMonitorVolume/monitorMixer below which need
+    /// locking, unlike currentMonitorVolume/monitorLevel below which need
     /// the control queue's serialization.
     func setSensitivity(_ value: Double) {
         sensitivity.value = value
@@ -495,7 +550,7 @@ final class AudioEngine: @unchecked Sendable {
         controlQueue.async { [weak self] in
             guard let self else { return }
             self.currentMonitorVolume = min(max(value, 0), 1)
-            self.monitorMixer?.outputVolume = self.currentMonitorVolume
+            self.monitorLevel?.globalGain = Self.monitorGainDB(forVolume: self.currentMonitorVolume)
         }
     }
 
@@ -522,7 +577,7 @@ final class AudioEngine: @unchecked Sendable {
         monitorRenderer = nil
         captureSink = nil
         inputNode = nil
-        monitorMixer = nil
+        monitorLevel = nil
         captureEngine = nil
         playbackEngine = nil
     }

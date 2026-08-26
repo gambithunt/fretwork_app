@@ -238,4 +238,87 @@ callbacks, strums, cancellation, and slight per-note variation.
 
 ## Implementation Record
 
-_Append phase-by-phase evidence here._
+### Phase 0 — Baseline
+
+Worktree clean at the start (`git status --short` empty; workstream 002
+committed as `8416545`). Full suite green.
+
+Measured by driving the real `AudioEngine` against real hardware from a
+throwaway diagnostic in the test target, rather than by reading the telemetry
+row off a screenshot. `xcodebuild` does not surface a test's stdout and the
+`.xcresult` carries no console log, so the diagnostic writes its report to the
+path in `TEST_RUNNER_FRETWORK_BASELINE_REPORT` — the same forwarding
+convention `DetectionBoardSnapshotTests` already uses. Anything not prefixed
+`TEST_RUNNER_` never reaches the test process.
+
+| Path | Device(s) | Buffer | Latency median | min | max |
+| --- | --- | --- | --- | --- | --- |
+| duplex / direct | GP-200 Audio | 256 frames | 2.92 ms | 0.82 | 5.89 |
+| split / buffered | CalDigit in → CalDigit out (separate IDs) | 256 frames | 3.38 ms | 1.77 | 7.02 |
+
+The split figure is a genuine split-path measurement: macOS gives the
+CalDigit's input and output separate `AudioDeviceID`s, so `startSplit` runs
+even though one physical box is at both ends.
+
+Note on what this number is: `latencyMilliseconds` is capture-to-detection —
+the figure the telemetry row shows — not the monitoring path's own delay. It
+is the user-visible regression bar, which is what Phase 0 asks for.
+
+Idle CPU, Debug build, sampled three times over 21 s: 39.8% (launch), then
+13.9%, then 12.7%. Falling and then flat, not climbing. No `-10877` or other
+`kAudioUnitErr_*` in the log. Measured with the window occluded behind the
+terminal, so later comparisons must be taken the same way to be like-for-like
+(see `CLAUDE.md` on occlusion throttling). Re-measured later over six samples
+to confirm it was not a lucky run: 13.8 / 13.6 / 11.9 / 14.1 / 10.7 / 13.5.
+
+### Phase 1 — Separate monitor level from the shared mixer
+
+The slider now rides the monitor leg's own gain stage (`monitorGainDB`), and
+`mainMixerNode.outputVolume` is pinned at unity on both paths, free to take
+sample playback as a second input.
+
+**Two placements were tried and rejected first, both on evidence.**
+
+1. *A dedicated `AVAudioMixerNode` on the monitor leg*, carrying the slider on
+   its `outputVolume`. The obvious design, and it worked — but idle CPU went
+   from a steady ~13% to ~30%, sampled six times each way on the same machine,
+   same devices, same occlusion state, and confirmed by stashing the change and
+   re-measuring the baseline rather than trusting the first run. An
+   `AVAudioMixerNode` is a full converting mixer, not a fader; the GP-200
+   presents six input channels, so two mixers in series do that conversion
+   twice. **This is exactly the failure `CLAUDE.md` warns about in the
+   segmented-picker row** — the control was fine, the cost was in how often and
+   how much work it made something else do.
+2. *`AVAudioMixing.volume` on the leg's last node* — the per-input-bus level on
+   the destination mixer, which would have been free. `AVAudioUnitEQ` does not
+   conform to `AVAudioMixing`. Probed empirically: `AVAudioSourceNode`,
+   `AVAudioPlayerNode`, `AVAudioInputNode` and `AVAudioMixerNode` conform;
+   `AVAudioUnitEQ` and `AVAudioUnitDelay` do not, connected or otherwise.
+   Because the level was applied through `as? AVAudioMixing`, this failed
+   **silently**: it compiled, it ran, monitoring still worked, and the slider
+   simply did nothing. Nothing in a build log or a diff showed it.
+   `MonitorLevelTests` was written to catch exactly that and did.
+
+So the slider folds into the `globalGain` the stage already had:
+`makeup + 20·log10(volume)`, clamped at -96 dB. The one behavioural difference
+from before is that **mute is now -96 dB rather than a true zero** — roughly
+-98 dBFS against a monitor signal peaking at -6, inaudible through any real
+output, but attenuation rather than a disconnect. Recorded here because it is
+visible on a meter even though it is not audible.
+
+Also pinned while measuring: `mainMixerNode` applies an equal-power pan law to
+a mono input, so a monitor level renders at 1/√2 of the number on the slider.
+That predates this change, but it is why a rendered level does not equal the
+slider, and `testTheMainMixerPansMonoInputDownThreeDB` now says so.
+
+| | Phase 0 | Phase 1 |
+| --- | --- | --- |
+| duplex latency median | 2.92 ms | 2.41 ms |
+| split latency median | 3.38 ms | 3.82 ms |
+| buffer, both paths | 256 frames | 256 frames |
+| path selection | duplex / split as expected | unchanged |
+| idle CPU | 10.7–14.1% | 8.7–13.5% |
+
+Latency moves in both directions run to run, so these are within noise rather
+than an improvement or a regression. Suite green, `git diff --check` clean, no
+`kAudioUnitErr_*` in the smoke-test log.
