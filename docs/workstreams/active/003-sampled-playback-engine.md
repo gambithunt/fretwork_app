@@ -322,3 +322,59 @@ slider, and `testTheMainMixerPansMonoInputDownThreeDB` now says so.
 Latency moves in both directions run to run, so these are within noise rather
 than an improvement or a regression. Suite green, `git diff --check` clean, no
 `kAudioUnitErr_*` in the smoke-test log.
+
+### Phase 2 — Voice pool and render callback
+
+`NoteSampleLibrary` decodes the bundled library; `SamplePlayer` mixes a
+ten-voice pool inside one `AVAudioSourceNode`; `AudioEngine` attaches a player
+to whichever engine owns the output device on both graph paths.
+
+**Playback rate rather than load-time resampling.** The workstream anticipated
+resampling per tuning at load and caching the result. That would be 85 MB per
+tuning across fifteen tunings. Each voice instead carries a fractional read
+position advanced by a rate, and one linear interpolation per frame covers all
+three things that need it: a 44.1 kHz library on a graph running at another
+rate, a non-standard tuning's pitch shift, and Phase 3's per-note detune. This
+does not breach "no resampling in the callback" — that rule is about
+allocation, locks and blocking, and an interpolation is a multiply-add. What
+Phase 4 will cache is the *resolution table* (position → take + ratio), not a
+second copy of the audio.
+
+**The player's level is free; the monitor's was not.** `AVAudioSourceNode`
+conforms to `AVAudioMixing`, so playback level is a per-input-bus volume on the
+shared mixer — the exact mechanism Phase 1 could not use, because the monitor
+leg ends in an effect rather than a source node.
+
+**Memory.** The decoded library is 22,271,479 frames — **85 MB** as float32,
+which is what a 138-take sampler costs. Loading it is gated behind
+`prepareSamplePlayback()` so a user who never triggers a note pays nothing,
+matching how chord detection and sample recording are gated.
+
+The first implementation decoded every take into its own array and copied into
+the shared block afterwards, holding two full copies at once: measured at
+**+175 MB of RSS** against the app's 119 MB baseline. Decoding straight into
+the shared block brought that to **+91 MB** (119 → 210 MB). The index's
+`frameCount` sizes the block but is never trusted as a write length — each read
+is clamped to the space reserved for it — so a stale index is an error rather
+than an overrun. That is the `PitchDetector` scratch-buffer bug from
+`CLAUDE.md` avoided in the other direction.
+
+Load takes 3.3 s cold, 0.4 s warm.
+
+**Verified by offline rendering**, per the `CLAUDE.md` row about the detection
+board — reading the diff is not evidence for a mixer either:
+
+- all 138 positions present, each sounding the MIDI note its string and fret
+  imply (this is the string-order inversion guard)
+- a played note renders the recorded take sample-for-sample
+- an idle player emits exact silence; an unrecorded position is refused
+- six strings sound together; a second note on a string releases the first
+- a steal leaves no step in the output (largest sample-to-sample jump stays
+  under half the signal peak, where a hard cut would step by the amplitude)
+- voice exhaustion steals the oldest and never exceeds the pool
+- `stopAll` releases every voice and renders to silence
+- a rate multiplier of 2 runs through the take in half the frames
+
+**On real hardware**, both graph paths: a six-string strum plus a twelve-note
+run, zero errors, latency unchanged from Phase 0/1 (duplex 2.89 ms, split
+3.77 ms). CPU during playback 10–17% with one 49% spike at library load.

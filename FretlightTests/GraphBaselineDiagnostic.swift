@@ -70,6 +70,66 @@ final class GraphBaselineDiagnostic: XCTestCase {
         ))
     }
 
+    /// Phase 2: the player attached to a real device, not an offline graph.
+    /// Confirms the render block is actually being pulled (voices retire on
+    /// their own) and that nothing in the graph errors.
+    private func measurePlayback(inputID: AudioDeviceID, outputID: AudioDeviceID, label: String) {
+        let engine = AudioEngine()
+        let errors = UnsafeMutableTransferBox<[String]>([])
+        engine.onError = { errors.value.append($0) }
+        engine.start(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: 0.5)
+        Thread.sleep(forTimeInterval: 1.5)
+
+        let prepared = expectation(description: "library")
+        let loadError = UnsafeMutableTransferBox<String?>(nil)
+        let started = Date()
+        engine.prepareSamplePlayback { message in
+            loadError.value = message
+            prepared.fulfill()
+        }
+        wait(for: [prepared], timeout: 60)
+        let loadSeconds = Date().timeIntervalSince(started)
+        if let message = loadError.value {
+            report("PLAYBACK \(label): LOAD FAILED \(message)")
+            engine.stop()
+            return
+        }
+        Thread.sleep(forTimeInterval: 1.0)
+
+        // A six-string strum, then a fast run, which is what exercises voice
+        // stealing and the pool ceiling together.
+        for string in 0..<6 {
+            engine.playSample(string: string, fret: 0)
+            Thread.sleep(forTimeInterval: 0.03)
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+        for fret in 0..<12 {
+            engine.playSample(string: fret % 6, fret: fret)
+            Thread.sleep(forTimeInterval: 0.08)
+        }
+        Thread.sleep(forTimeInterval: 3.0)
+
+        engine.stop()
+        Thread.sleep(forTimeInterval: 0.5)
+        report(String(
+            format: "PLAYBACK %@: library loaded in %.2fs, errors=%d %@",
+            label, loadSeconds, errors.value.count, errors.value.first ?? ""
+        ))
+    }
+
+    func testPlaybackOnRealHardware() throws {
+        let inputs = AudioDeviceEnumerator.inputDevices()
+        let outputs = AudioDeviceEnumerator.outputDevices()
+        if let duplex = inputs.first(where: { input in
+            outputs.contains { $0.id == input.id } && AudioDeviceEnumerator.isDuplexCapable(input.id)
+        }) {
+            measurePlayback(inputID: duplex.id, outputID: duplex.id, label: "duplex(\(duplex.name))")
+        }
+        if let input = inputs.first, let output = outputs.first(where: { $0.id != input.id }) {
+            measurePlayback(inputID: input.id, outputID: output.id, label: "split(\(input.name) -> \(output.name))")
+        }
+    }
+
     func testBaseline() throws {
         let inputs = AudioDeviceEnumerator.inputDevices()
         let outputs = AudioDeviceEnumerator.outputDevices()

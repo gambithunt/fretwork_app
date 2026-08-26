@@ -134,6 +134,13 @@ final class AudioEngine: @unchecked Sendable {
     /// The monitor leg's gain stage, carrying both the fixed makeup gain and
     /// the slider. Never the shared mixer's output. See `monitorGainDB`.
     private var monitorLevel: AVAudioUnitEQ?
+    /// Decoded once and reused across graph rebuilds; nil until
+    /// `prepareSamplePlayback` runs.
+    private var sampleLibrary: NoteSampleLibrary?
+    /// Rebuilt on every graph build, because a node belongs to its engine.
+    private var samplePlayer: SamplePlayer?
+    /// Playback level, deliberately separate from `currentMonitorVolume`.
+    private var samplePlaybackVolume: Float = 1
     private let analysisRing = RingBuffer()
     private let monitorRing = RingBuffer()
     private let chordRing = RingBuffer()
@@ -287,10 +294,10 @@ final class AudioEngine: @unchecked Sendable {
                                    AVAudioConnectionPoint(node: sink.node, bus: 0)],
                        fromBus: 0, format: hardwareFormat)
         engine.connect(monitorGain, to: mixer, format: hardwareFormat)
-        // Neutral output: the slider rides the monitor leg's own input bus,
-        // and this mixer is about to become a summing point for sample
-        // playback as well.
+        // Neutral output: the monitor slider rides the monitor leg's own gain
+        // stage, leaving this mixer a summing point for sample playback too.
         mixer.outputVolume = 1
+        attachSamplePlayerIfAvailable(to: engine, mixer: mixer, sampleRate: hardwareFormat.sampleRate)
 
         let frames = AudioDeviceEnumerator.bufferFrameSize(deviceID).map(Int.init) ?? 512
         let analysis = makeAnalysisWorker(directMonitoring: true)
@@ -350,6 +357,9 @@ final class AudioEngine: @unchecked Sendable {
         playback.connect(monitorGain, to: playback.mainMixerNode, format: monitorFormat)
         // Neutral, for the same reason as the duplex path above.
         playback.mainMixerNode.outputVolume = 1
+        // The playback engine is the one bound to the output device here, so
+        // this is the graph sample playback belongs on — not the capture one.
+        attachSamplePlayerIfAvailable(to: playback, mixer: playback.mainMixerNode, sampleRate: hardwareFormat.sampleRate)
 
         let analysis = makeAnalysisWorker(directMonitoring: false)
         let chord = makeChordWorker()
@@ -418,6 +428,95 @@ final class AudioEngine: @unchecked Sendable {
         chord.setEnabled(chordDetectionEnabled)
         chordWorker = chord
         return chord
+    }
+
+    // MARK: - Sample playback
+
+    /// Decodes the bundled note library, then attaches a player to whichever
+    /// graph is currently running. Idle until called: the library is 138 files
+    /// and tens of megabytes of decoded audio, which a user who never triggers
+    /// playback should not pay for — the same reasoning that keeps chord
+    /// detection and sample recording gated.
+    ///
+    /// Safe to call repeatedly; the library is decoded once.
+    func prepareSamplePlayback(completion: (@Sendable (String?) -> Void)? = nil) {
+        controlQueue.async { [weak self] in
+            guard let self else { return }
+            if self.sampleLibrary != nil {
+                completion?(nil)
+                return
+            }
+            do {
+                let library = try NoteSampleLibrary.loadFromBundle()
+                self.sampleLibrary = library
+                // A graph may already be running, in which case it was built
+                // before the library existed and has no player on it yet.
+                // Rebuilding the graph to add one would interrupt monitoring,
+                // so the player is attached on the next build; force one only
+                // if something is actually running.
+                if let inputID = self.currentInputDeviceID, let outputID = self.currentOutputDeviceID {
+                    try? self.startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: self.currentMonitorVolume)
+                }
+                completion?(nil)
+            } catch {
+                completion?(String(describing: error))
+            }
+        }
+    }
+
+    /// Builds a fresh player on `engine` and connects it to the shared mixer.
+    ///
+    /// A new one per graph build rather than a retained node: an `AVAudioNode`
+    /// belongs to the engine it is attached to, and `attemptRestart` builds new
+    /// engines. The expensive part — the decoded library — is what is reused.
+    /// Any note sounding across a restart is lost with the old graph, which is
+    /// correct: the device it was playing through has gone.
+    private func attachSamplePlayerIfAvailable(to engine: AVAudioEngine, mixer: AVAudioMixerNode, sampleRate: Double) {
+        guard let library = sampleLibrary,
+              let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
+        else {
+            samplePlayer = nil
+            return
+        }
+        let player = SamplePlayer(library: library, format: format)
+        engine.attach(player.node)
+        engine.connect(player.node, to: mixer, format: format)
+        // Unlike the monitor leg, this level *is* free: an AVAudioSourceNode
+        // conforms to AVAudioMixing, so its contribution to the mixer is a
+        // per-input-bus volume rather than another gain node. See
+        // `monitorGainDB` for why the monitor leg cannot do the same.
+        (player.node as? AVAudioMixing)?.volume = samplePlaybackVolume
+        samplePlayer = player
+    }
+
+    /// Sounds one position through the output device. No-op until
+    /// `prepareSamplePlayback` has completed and a graph is running.
+    ///
+    /// Goes through the control queue like every other accessor here, because
+    /// `samplePlayer` is replaced on that queue by each graph build — reading
+    /// the reference from a caller's thread would race a restart. The note
+    /// itself is handed to the render thread lock-free once inside; this hop
+    /// costs a dispatch, not a wait on audio.
+    func playSample(string: Int, fret: Int, rateMultiplier: Double = 1, gain: Float = 1) {
+        controlQueue.async { [weak self] in
+            self?.samplePlayer?.play(string: string, fret: fret, rateMultiplier: rateMultiplier, gain: gain)
+        }
+    }
+
+    /// Releases every sounding note. Not a hard stop — see `SamplePlayer`.
+    func stopSamplePlayback() {
+        controlQueue.async { [weak self] in self?.samplePlayer?.stopAll() }
+    }
+
+    /// Playback level, independent of the monitor slider and of monitor mute.
+    func setSamplePlaybackVolume(_ value: Float) {
+        controlQueue.async { [weak self] in
+            guard let self else { return }
+            self.samplePlaybackVolume = min(max(value, 0), 1)
+            if let node = self.samplePlayer?.node as? AVAudioMixing {
+                node.volume = self.samplePlaybackVolume
+            }
+        }
     }
 
     /// Safe to call from any thread — both the stored flag write and the
@@ -578,6 +677,7 @@ final class AudioEngine: @unchecked Sendable {
         captureSink = nil
         inputNode = nil
         monitorLevel = nil
+        samplePlayer = nil
         captureEngine = nil
         playbackEngine = nil
     }
