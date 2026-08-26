@@ -77,9 +77,19 @@ final class TakeVerifierTests: XCTestCase {
         XCTAssertEqual(TakeVerifier.verify(take(silent), string: Self.aString, fret: 0), .tooQuiet)
     }
 
+    /// Derived from the constant rather than hardcoded, so tuning the
+    /// threshold against a real instrument does not quietly invalidate the
+    /// test that guards it.
     func testATakeBelowUsableLevelIsRejectedAsTooQuiet() {
+        let tooQuiet = TakeVerifier.minimumPeak / 3
         XCTAssertEqual(
-            TakeVerifier.verify(take(sine(Self.aFrequency, amplitude: 0.01)), string: Self.aString, fret: 0),
+            TakeVerifier.verify(take(sine(Self.aFrequency, amplitude: tooQuiet)), string: Self.aString, fret: 0),
+            .tooQuiet
+        )
+        // Just above it must not be rejected for level.
+        let audible = TakeVerifier.minimumPeak * 3
+        XCTAssertNotEqual(
+            TakeVerifier.verify(take(sine(Self.aFrequency, amplitude: audible)), string: Self.aString, fret: 0),
             .tooQuiet
         )
     }

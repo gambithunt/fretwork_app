@@ -92,6 +92,24 @@ final class FretboardBoardViewTests: XCTestCase {
         }
     }
 
+    func testOverlaysRenderInBothKinds() {
+        let dots = (0..<5).map { dot("d\($0)", string: $0, fret: $0 + 2) }
+        let group = FretboardOverlay(id: "box", kind: .group, color: .yellow, dotIDs: dots.map(\.id))
+        let sequence = FretboardOverlay(id: "run", kind: .sequence, color: .cyan, dotIDs: dots.map(\.id).reversed())
+        render(FretboardBoardView(dots: dots, overlays: [group, sequence]))
+    }
+
+    /// An overlay naming dots that are not on the board must not stop the
+    /// board drawing.
+    func testAnOverlayOverNoPresentDotsStillRenders() {
+        let stray = FretboardOverlay(id: "ghost", kind: .sequence, color: .red, dotIDs: ["nope", "also-nope"])
+        render(FretboardBoardView(dots: [dot("a", string: 0, fret: 0)], overlays: [stray]))
+    }
+
+    func testAnInteractiveBoardRenders() {
+        render(FretboardBoardView(dots: [dot("a", string: 0, fret: 0)], onHit: { _ in }, onLongPress: { _ in }))
+    }
+
     func testADegenerateSizeDoesNotCrashTheBoard() {
         render(FretboardBoardView(dots: [dot("a", string: 0, fret: 0)]), size: CGSize(width: 10, height: 10))
     }

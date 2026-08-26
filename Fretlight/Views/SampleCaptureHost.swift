@@ -12,8 +12,12 @@ struct SampleCaptureHost: View {
     @State private var model: SampleCaptureModel?
     @State private var meter = CaptureLevelMeter()
     @State private var arm = CaptureArmState()
-    @State private var directory = SampleCaptureDirectory.url
+    @State private var directory = SampleCaptureDirectory.url()
     @State private var choosingDirectory = false
+    /// Re-read on a timer rather than observed: it depends on the engine's
+    /// internal state, which is not `@Observable`, and it only needs to be
+    /// right within a second.
+    @State private var blockedReason: String?
 
     var body: some View {
         Group {
@@ -22,6 +26,7 @@ struct SampleCaptureHost: View {
                     model: model,
                     meter: meter,
                     arm: arm,
+                    blockedReason: blockedReason,
                     onArm: startWaiting,
                     onDisarm: stopWaiting,
                     onChooseDirectory: { choosingDirectory = true }
@@ -32,13 +37,19 @@ struct SampleCaptureHost: View {
         }
         .fileImporter(isPresented: $choosingDirectory, allowedContentTypes: [.folder]) { result in
             guard case let .success(url) = result else { return }
-            SampleCaptureDirectory.url = url
+            SampleCaptureDirectory.setURL(url)
             directory = url
             makeModel(at: url)
         }
         .onAppear {
             if let directory { makeModel(at: directory) }
             state.setSampleRecordingEnabled(true)
+        }
+        .task {
+            while !Task.isCancelled {
+                blockedReason = state.sampleRecordingBlockedReason
+                try? await Task.sleep(for: .seconds(1))
+            }
         }
         .onDisappear {
             stopWaiting()
@@ -64,8 +75,11 @@ struct SampleCaptureHost: View {
         // the recorder's own queue, and a `View` struct is not `Sendable`.
         let meter = meter
         let arm = arm
-        state.sampleRecorder.onLevel = { level in
-            Task { @MainActor in meter.update(level) }
+        state.sampleRecorder.onLevel = { reading in
+            Task { @MainActor in meter.update(reading) }
+        }
+        state.sampleRecorder.onPhase = { phase in
+            Task { @MainActor in arm.phase = phase }
         }
         state.sampleRecorder.onTake = { take in
             Task { @MainActor in

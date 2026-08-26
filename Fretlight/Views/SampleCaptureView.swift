@@ -12,12 +12,27 @@ import SwiftUI
 @MainActor @Observable
 final class CaptureLevelMeter {
     private(set) var level: Float = 0
+    /// The level a note has to exceed to start a take. Shown as a number, not
+    /// just a mark on a bar: "why did nothing happen when I played" is only
+    /// answerable if you can see both sides of the comparison.
+    private(set) var onsetThreshold: Float = 0
+    private(set) var noiseFloor: Float = 0
+    private(set) var recentPeak: Float = 0
 
     /// Compare before assigning: storing an equal value still fires
     /// `withMutation` and invalidates observers.
-    func update(_ value: Float) {
-        guard abs(value - level) > 0.001 else { return }
-        level = value
+    func update(_ reading: SampleRecorder.LevelReading) {
+        if abs(reading.level - level) > 0.0002 { level = reading.level }
+        if abs(reading.gate - onsetThreshold) > 0.0002 { onsetThreshold = reading.gate }
+        if abs(reading.noiseFloor - noiseFloor) > 0.0002 { noiseFloor = reading.noiseFloor }
+        if abs(reading.recentPeak - recentPeak) > 0.0002 { recentPeak = reading.recentPeak }
+    }
+
+    /// How far the loudest thing heard sits above the noise. Below about 20 dB
+    /// there is no useful sample to be had, whatever the thresholds say.
+    var signalToNoiseDB: Float {
+        guard noiseFloor > 0, recentPeak > 0 else { return 0 }
+        return 20 * log10(recentPeak / noiseFloor)
     }
 }
 
@@ -27,6 +42,11 @@ final class CaptureLevelMeter {
 @MainActor @Observable
 final class CaptureArmState {
     var isArmed = false
+    /// What the recorder itself is doing, as opposed to what the button was
+    /// last told. Without this there is no way to tell "waiting for a note"
+    /// from "heard nothing" — which is exactly the state a first session
+    /// gets stuck in.
+    var phase: SampleRecorder.Phase = .idle
 }
 
 struct SampleCaptureView: View {
@@ -37,15 +57,29 @@ struct SampleCaptureView: View {
     let model: SampleCaptureModel
     let meter: CaptureLevelMeter
     let arm: CaptureArmState
+    /// Non-nil when nothing can be recorded, and why.
+    var blockedReason: String?
     let onArm: () -> Void
     let onDisarm: () -> Void
     let onChooseDirectory: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if let blockedReason {
+                Label(blockedReason, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            }
             header
             LevelSection(meter: meter)
+            LiveReadout(meter: meter, arm: arm)
+            LibrarySection(model: model)
             VerdictSection(model: model)
+            DiagnosticsSection(model: model)
             NeckGrid(model: model)
             controls
             issues
@@ -179,6 +213,71 @@ private struct LevelSection: View {
     }
 }
 
+/// Numbers rather than a bar, because the bar cannot answer the question that
+/// actually blocks a first session: is what I just played loud enough to start
+/// a take, and did the recorder notice.
+/// The folder and how far through it we are. A resumed session that opened
+/// the wrong folder is indistinguishable from one that has recorded nothing,
+/// which is a bad way to lose an hour.
+private struct LibrarySection: View {
+    let model: SampleCaptureModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder")
+                .foregroundStyle(.secondary)
+            Text(model.directory.path)
+                .font(.system(size: 10).monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.head)
+                .textSelection(.enabled)
+            if model.recordedCount > 0 {
+                Text("· resuming")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.green)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct LiveReadout: View {
+    let meter: CaptureLevelMeter
+    let arm: CaptureArmState
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(phaseLabel)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(phaseColor)
+            Text(String(format: "level %.4f · peak(1s) %.4f · gate %.4f · floor %.4f · %+.0f dB",
+                        meter.level, meter.recentPeak, meter.onsetThreshold, meter.noiseFloor, meter.signalToNoiseDB))
+                .font(.system(size: 10).monospaced())
+                // Green on the peak, not the live level: whether a note would
+                // trigger is decided at its attack.
+                .foregroundStyle(meter.recentPeak >= meter.onsetThreshold ? .green : .secondary)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var phaseLabel: String {
+        switch arm.phase {
+        case .idle: arm.isArmed ? "Arming…" : "Idle"
+        case .armed: "Listening for a note"
+        case .recording: "Recording"
+        }
+    }
+
+    private var phaseColor: Color {
+        switch arm.phase {
+        case .idle: .secondary
+        case .armed: .orange
+        case .recording: .green
+        }
+    }
+}
+
 private struct VerdictSection: View {
     let model: SampleCaptureModel
 
@@ -198,6 +297,21 @@ private struct VerdictSection: View {
         case .tooQuiet:
             Label("Too quiet to judge — play harder or raise the input gain", systemImage: "speaker.slash.fill")
                 .font(.callout).foregroundStyle(.orange)
+        }
+    }
+}
+
+/// Always shown, not only on a rejection: knowing what an *accepted* take
+/// measured is what tells you how much headroom the thresholds have.
+private struct DiagnosticsSection: View {
+    let model: SampleCaptureModel
+
+    var body: some View {
+        if let diagnostics = model.lastDiagnostics {
+            Text(diagnostics)
+                .font(.system(size: 10).monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
         }
     }
 }

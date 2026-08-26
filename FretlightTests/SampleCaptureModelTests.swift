@@ -130,6 +130,71 @@ final class SampleCaptureModelTests: XCTestCase {
         XCTAssertEqual(model.statuses[FretPosition(string: 0, fret: 1)], .recorded)
     }
 
+    // MARK: - Stopping and resuming
+
+    /// The folder has to outlive the process, or a resumed session has nothing
+    /// to resume from. Uses its own defaults suite so the real domain is
+    /// untouched.
+    func testTheChosenFolderSurvivesARelaunch() throws {
+        let suiteName = "fretwork.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertNil(SampleCaptureDirectory.url(in: defaults), "nothing chosen yet")
+        SampleCaptureDirectory.setURL(directory, in: defaults)
+        XCTAssertEqual(SampleCaptureDirectory.url(in: defaults)?.path, directory.path)
+
+        SampleCaptureDirectory.setURL(nil, in: defaults)
+        XCTAssertNil(SampleCaptureDirectory.url(in: defaults))
+    }
+
+    /// The whole point of resuming: a session stopped partway comes back at
+    /// the next thing to record, with the work already done still counted.
+    func testASessionStoppedPartwayResumesWhereItLeftOff() throws {
+        let first = model()
+        for _ in 0..<4 {
+            let position = try XCTUnwrap(first.currentPosition)
+            first.handle(take: take(for: position))
+        }
+        XCTAssertEqual(first.recordedCount, 4)
+        let stoppedAt = try XCTUnwrap(first.currentPosition)
+
+        // A new model against the same folder is what a relaunch produces.
+        let resumed = model()
+        XCTAssertEqual(resumed.currentPosition, stoppedAt)
+        XCTAssertEqual(resumed.recordedCount, 4)
+        XCTAssertEqual(resumed.remainingCount, 134)
+        XCTAssertEqual(resumed.statuses[FretPosition(string: 0, fret: 0)], .recorded)
+    }
+
+    /// A position skipped earlier is a gap, and resuming should send you back
+    /// to fill it rather than leaving a hole 130 takes behind you.
+    func testResumingReturnsToAGapLeftInTheMiddle() throws {
+        let session = model()
+        for fret in [0, 1, 3, 4] {
+            let position = FretPosition(string: 0, fret: fret)
+            session.jump(to: position)
+            session.handle(take: take(for: position))
+        }
+        XCTAssertEqual(session.recordedCount, 4)
+
+        let resumed = model()
+        XCTAssertEqual(resumed.currentPosition, FretPosition(string: 0, fret: 2), "the skipped fret is the first gap")
+    }
+
+    func testAFullyRecordedLibraryResumesWithNothingLeftToDo() throws {
+        let session = model()
+        for position in SampleLibrary.expectedPositions {
+            session.jump(to: position)
+            session.handle(take: take(for: position))
+        }
+        XCTAssertEqual(session.recordedCount, SampleLibrary.expectedPositions.count)
+
+        let resumed = model()
+        XCTAssertNil(resumed.currentPosition, "nothing left to prompt for")
+        XCTAssertEqual(resumed.remainingCount, 0)
+    }
+
     // MARK: - Processing and status
 
     func testAcceptedTakesAreTrimmedAndNormalisedBeforeBeingWritten() throws {

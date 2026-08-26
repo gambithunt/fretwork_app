@@ -20,7 +20,7 @@ built against real audio than against a placeholder tone.
 | ~~001~~ | ~~Theory foundations and the tuning model~~ — **complete**, see `completed/` | — |
 | 002 | Sample capture mode and the note library | — |
 | 003 | Sampled playback engine | 001, 002 |
-| 004 | General-purpose fretboard view | 001 |
+| ~~004~~ | ~~General-purpose fretboard view~~ — **complete**, see `completed/` | 001 |
 | 005 | Multi-module app shell | 001 |
 | 006 | Learning modules | 003, 004, 005 |
 | 007 | Microphone-verified guided practice | 006 |

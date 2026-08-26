@@ -13,17 +13,23 @@ enum SampleCapturePositionStatus: Sendable {
 /// Where the operator keeps the masters. Its own defaults key rather than a
 /// field in `PracticeState`: that document is shipped schema, and a
 /// maintainer-only path has no business in it.
+///
+/// A plain path rather than a security-scoped bookmark, because this app is
+/// not sandboxed (`ENABLE_APP_SANDBOX = NO`). If that ever changes, this is
+/// the thing that breaks — a resumed session would silently find nothing and
+/// offer to start the 138 takes again.
 enum SampleCaptureDirectory {
     private static let key = "fretwork.debug.sample-capture-directory"
 
-    static var url: URL? {
-        get {
-            guard let path = UserDefaults.standard.string(forKey: key) else { return nil }
-            return URL(fileURLWithPath: path, isDirectory: true)
-        }
-        set {
-            UserDefaults.standard.set(newValue?.path, forKey: key)
-        }
+    /// Takes its store rather than reaching for `.standard`, so a test can
+    /// prove resume works without writing into the real defaults domain.
+    static func url(in defaults: UserDefaults = .standard) -> URL? {
+        guard let path = defaults.string(forKey: key) else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    static func setURL(_ url: URL?, in defaults: UserDefaults = .standard) {
+        defaults.set(url?.path, forKey: key)
     }
 }
 
@@ -36,9 +42,16 @@ enum SampleCaptureDirectory {
 @MainActor @Observable
 final class SampleCaptureModel {
     private let library: SampleLibrary
+    /// Shown in the capture window. Resuming into the wrong folder looks
+    /// exactly like having recorded nothing, so the folder has to be visible
+    /// rather than merely remembered.
+    let directory: URL
 
     private(set) var currentPosition: FretPosition?
     private(set) var lastVerdict: TakeVerdict?
+    /// The numbers behind `lastVerdict`, so a rejection can be diagnosed from
+    /// the capture window rather than from a rebuild.
+    private(set) var lastDiagnostics: String?
     private(set) var statuses: [FretPosition: SampleCapturePositionStatus] = [:]
     private(set) var recordedCount = 0
     /// Disagreements between the manifest and the directory. Surfaced, never
@@ -53,6 +66,7 @@ final class SampleCaptureModel {
     var remainingCount: Int { SampleLibrary.expectedPositions.count - recordedCount }
 
     init(directory: URL) {
+        self.directory = directory
         library = SampleLibrary(directory: directory)
         refresh()
         currentPosition = firstMissing()
@@ -74,6 +88,7 @@ final class SampleCaptureModel {
         guard let position = currentPosition else { return }
         let verdict = TakeVerifier.verify(take, string: position.string, fret: position.fret)
         lastVerdict = verdict
+        lastDiagnostics = TakeVerifier.diagnostics(take, string: position.string, fret: position.fret)
         guard case let .accepted(frequency, cents) = verdict else { return }
 
         let prepared = TakeVerifier.normalized(TakeVerifier.trimmed(take))

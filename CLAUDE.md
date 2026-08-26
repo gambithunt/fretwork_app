@@ -68,6 +68,8 @@ Layout:
 | Porting a fret array or string index from `../fretwork` | Reverse it — web string 0 is the high e, this app's is the Low E — and prove it with a test asserting the *sounded pitch classes*, not the numbers | Transcribing as-is. A reversed array is still six plausible fret numbers: it compiles, it renders, and it is wrong |
 | A generator whose output is fixed fret offsets (open-chord charts, pentatonic boxes) | Take no `Tuning` parameter at all, so misuse is a compile error (see `ScaleShapes.pentatonicPosition`) | Accepting a `Tuning` it cannot honour. Those frets do not transpose, they detune — the box silently stops being the scale it claims to be. This slipped in twice |
 | Decoding a persisted settings document | Decode field by field, each with its own fallback (`PracticeState.Settings`) | Synthesised `Decodable` — one unrecognised enum case throws and takes every other setting down with it |
+| Refactoring a view that must look unchanged | Render it off-screen to PNGs before and after and compare pixels (`DetectionBoardSnapshotTests`, gated on `TEST_RUNNER_FRETWORK_SNAPSHOT_DIR`) | Reading the diff and calling it equivalent. The detection board's rewrite looked right and was placing every dot wrongly; only the pixels said so |
+| Placing a view that also carries a `.transition(.modifier(...))` | Let the transition's identity state position it, and nothing else | Adding `.position` on top. Both apply, the dot lands where neither asked, and it is invisible in a static reading of the code |
 
 ## Patterns
 
@@ -143,6 +145,13 @@ scattered across call sites.
 - A backgrounded/occluded window is occlusion-throttled to ~0% CPU, so a
   hidden window measures clean no matter how bad the bug is. Any CPU
   comparison has to run with the window actually composited (`onscreen`).
+
+- A SwiftUI text style and a same-size `Font.system` are not the same glyphs.
+  Swapping `.caption2.weight(.bold)` for `.system(size: 10, weight: .bold)`
+  changed 0.023% of the detection board's pixels — invisible, but it proves
+  the two are distinct rasterisations. `FretboardDotView` keeps the text style
+  at the default dot radius for exactly this reason and scales only when a
+  module asks for a smaller dot.
 
 - `PitchDetector` sized its `scratch` buffer from `maxTau` but `vDSP_vsub`
   wrote `count - tau` floats into it — sized by one derived quantity, written

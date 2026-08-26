@@ -163,4 +163,44 @@ module reinvents dot layout, animation and hit-testing.
 
 ## Implementation Record
 
-_Append phase-by-phase evidence here._
+### 2026-08-25 — Complete
+
+Phases 0–5 done. Full suite green; Debug and Release both build.
+
+**Shipped** in `Fretlight/Views/Fretboard/`: `BoardGeometry` (string count, fret
+count and label margins all parameters, plus hit-testing), `FretboardDot`,
+`BoardCanvas` (the shared neck), `FretboardBoardView` (identity-keyed dot
+animation, overlays, gestures, accessibility), `FretboardHitTest`,
+`FretboardNavigation`, `FretboardOverlay`, `FretboardAccessibility`,
+`DotMotionModifier` and `DetectionBoardAdapter`. `FretboardView` went from 296
+lines to 57 and is now a thin consumer.
+
+**Phase 4 was verified against pixels, not a diff.** `DetectionBoardSnapshotTests`
+renders the detection board off-screen to PNGs when
+`TEST_RUNNER_FRETWORK_SNAPSHOT_DIR` is set, and skips otherwise. Baselines were
+captured before the rewire and compared after: all five cases — notes, notes
+flipped, notes empty, chords, chords empty — are pixel-identical.
+
+That oracle earned its keep immediately. The first rewire attempt looked
+correct and placed every dot wrongly, because the dot carried both a
+`.position` and a transition whose identity state also positions. 6240 pixels
+differed at a max channel delta of 240. Nothing in a code reading would have
+caught it. See the new Decisions row.
+
+A second, smaller finding: swapping `.caption2.weight(.bold)` for a same-size
+`Font.system` changed 0.023% of pixels. Invisible, but it proves the two are
+distinct rasterisations, so `FretboardDotView` keeps the text style at the
+default radius and scales only for the smaller dots the modules will ask for.
+
+**Fixed while reviewing delegated work:** `FretboardOverlay.resolve` used
+`Dictionary(uniqueKeysWithValues:)`, which traps on a duplicate dot id. A
+duplicate is a module bug, but the honest failure for it is a misdrawn overlay,
+not a crashed app.
+
+**Not done:** the smoke test was inconclusive — the headless launch measured
+~0.2% CPU, meaning the window was occlusion-throttled, which per Gotchas proves
+nothing either way. No audio code changed in this workstream, and the pixel
+comparison is the meaningful evidence for a view refactor.
+
+**Not bumped:** no user-visible change. The detection board is pixel-identical
+by construction; everything else is scaffolding for workstream 006.

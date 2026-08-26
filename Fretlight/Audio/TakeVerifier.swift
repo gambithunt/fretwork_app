@@ -30,24 +30,35 @@ enum TakeVerifier {
     /// periods of the lowest note in range — settles just as well.
     static let analysisWindow = 4096
 
-    /// Stricter than `PitchDetector.defaultThreshold` (0.12), which is tuned
-    /// for live display where missing a note is worse than a wrong one. Here
-    /// the trade is reversed: a take is cheap to redo and expensive to ship
-    /// wrong, so only clean periodicity counts as a pitch at all. This is what
-    /// separates a buzzed or dead note from a good one.
-    static let verificationThreshold: Float = 0.08
+    /// Was 0.08 — deliberately stricter than `PitchDetector.defaultThreshold`
+    /// (0.12), on the reasoning that a take is cheap to redo and expensive to
+    /// ship wrong. That reasoning was sound and the number was not: it was
+    /// picked against sine waves, which are perfectly periodic. A real string
+    /// — especially a wound low E, whose fundamental is the weakest partial on
+    /// many pickups — does not reach 0.08, so good takes were being called
+    /// unpitched.
+    ///
+    /// Now matched to the live detector. If the app trusts this much
+    /// periodicity to put a note on screen, it can trust it to accept a take;
+    /// a genuinely dead or buzzed note still fails it.
+    static let verificationThreshold: Float = PitchDetector.defaultThreshold
 
-    /// Ten cents accepts ordinary intonation and fretting-hand pressure while
-    /// still rejecting a true mis-fret, which is a hundred cents out.
-    static let centsWindow = 10.0
+    /// Was 10 cents, which is a studio tuner's tolerance rather than a
+    /// guitar's. A real instrument is out by more than that from fretting
+    /// pressure alone, before intonation error up the neck is counted. 25
+    /// still leaves three quarters of a semitone of margin before a genuine
+    /// mis-fret — a hundred cents — could slip through, which is the error
+    /// this is actually here to catch.
+    static let centsWindow = 25.0
 
     /// How much silence to leave ahead of the transient, so every sample in
     /// the library starts the same distance before its attack.
     static let preOnsetSeconds = 0.015
 
-    /// Roughly -30 dBFS. Beneath this a DI take carries more noise than note
-    /// and any pitch decision would be led by the noise.
-    static let minimumPeak: Float = 0.0316
+    /// Roughly -40 dBFS. Beneath this a DI take carries more noise than note
+    /// and any pitch decision would be led by the noise. Was -30 dBFS, which
+    /// assumed an input driven harder than a clean DI usually is.
+    static let minimumPeak: Float = 0.01
 
     /// Roughly -1.9 dBFS. Leaves headroom for the playback chain while
     /// removing accidental pick-force variance between takes.
@@ -95,6 +106,49 @@ enum TakeVerifier {
             sampleRate: take.sampleRate,
             peak: normalizedPeak
         )
+    }
+
+    /// What the verifier actually saw, whatever it decided.
+    ///
+    /// A rejection with no numbers behind it is untriageable: "wrong pitch"
+    /// and "wrong by exactly an octave" want completely different fixes, and
+    /// "no stable pitch" could mean a dead note or merely a threshold set too
+    /// strict for a real string. Every constant here was chosen against
+    /// synthesised sine waves, so the first real session needs to be able to
+    /// see past the verdict.
+    static func diagnostics(_ take: SampleRecorder.Take, string: Int, fret: Int) -> String {
+        guard Tunings.standard.openMIDINotes.indices.contains(string) else { return "invalid string" }
+        let targetMIDI = Tunings.standard.openMIDINotes[string] + fret
+        let target = 440.0 * pow(2, Double(targetMIDI - 69) / 12)
+
+        var parts = [String(format: "peak %.3f (min %.3f)", take.peak, minimumPeak)]
+
+        let skip = Int(take.sampleRate * attackSkipSeconds)
+        guard take.samples.count > skip else {
+            parts.append("too short to analyse (\(take.samples.count) frames)")
+            return parts.joined(separator: " · ")
+        }
+        let sustained = Array(take.samples[skip..<min(skip + analysisWindow, take.samples.count)])
+        parts.append(String(format: "%.2fs", Double(take.samples.count) / take.sampleRate))
+
+        // Run at both thresholds. If the strict one finds nothing and the
+        // live detector's looser one finds the right pitch, the take is fine
+        // and the strictness is the problem — which is the single most likely
+        // way sine-tuned constants fail on a real string.
+        let detector = PitchDetector()
+        let strict = detector.detect(samples: sustained, sampleRate: take.sampleRate, threshold: verificationThreshold)
+        let loose = detector.detect(samples: sustained, sampleRate: take.sampleRate, threshold: PitchDetector.defaultThreshold)
+
+        parts.append(String(format: "target %.1f Hz", target))
+        parts.append(describe(strict, target: target, label: "strict \(verificationThreshold)"))
+        parts.append(describe(loose, target: target, label: "loose \(PitchDetector.defaultThreshold)"))
+        return parts.joined(separator: " · ")
+    }
+
+    private static func describe(_ detection: PitchDetection?, target: Double, label: String) -> String {
+        guard let detection else { return "\(label): none" }
+        let cents = 1200 * log2(detection.frequency / target)
+        return String(format: "%@: %.1f Hz %+.0f¢ conf %.2f", label, detection.frequency, cents, detection.confidence)
     }
 
     private static func peak(of samples: [Float]) -> Float {

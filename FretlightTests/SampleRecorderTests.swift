@@ -70,7 +70,7 @@ final class SampleRecorderTests: XCTestCase {
         let takes = Box(0)
         let sawSignal = Box(false)
         recorder.onTake = { _ in takes.value += 1 }
-        recorder.onLevel = { if $0 > 0.1 { sawSignal.value = true } }
+        recorder.onLevel = { reading in if reading.level > 0.1 { sawSignal.value = true } }
         recorder.start(sampleRate: Self.rate)
         defer { recorder.stop() }
 
@@ -79,6 +79,45 @@ final class SampleRecorderTests: XCTestCase {
 
         XCTAssertTrue(sawSignal.value, "the level meter must work before arming")
         XCTAssertEqual(takes.value, 0, "nothing may be captured until armed")
+    }
+
+    /// The failure that made a real session impossible: play a bit before
+    /// arming — to check the level, to tune, to see if anything happens — and
+    /// the noise floor climbs to meet the guitar. The gate ends up above the
+    /// signal and nothing can ever trigger again.
+    ///
+    /// A floor must snap down to quiet and recover upward only slowly. This
+    /// test plays for several seconds *while unarmed* and then requires a
+    /// normal note to still start a take.
+    func testPlayingBeforeArmingDoesNotTeachTheFloorToIgnoreTheGuitar() {
+        let ring = RingBuffer()
+        let recorder = SampleRecorder(ring: ring)
+        let captured = Box<SampleRecorder.Take?>(nil)
+        let gate = Box<Float>(0)
+        let finished = expectation(description: "take finished")
+        recorder.onLevel = { gate.value = $0.gate }
+        recorder.onTake = { take in
+            captured.value = take
+            finished.fulfill()
+        }
+        recorder.start(sampleRate: Self.rate)
+        defer { recorder.stop() }
+
+        // Room tone, so the floor starts where it belongs.
+        pump(ring, amplitude: 0.002, chunks: 8)
+        // Then several seconds of playing while still idle. This is what used
+        // to poison the floor.
+        pump(ring, amplitude: 0.03, chunks: 120)
+        pump(ring, amplitude: 0.002, chunks: 8)
+
+        XCTAssertLessThan(gate.value, 0.03, "the gate must stay under a normally-played note")
+
+        recorder.arm()
+        pump(ring, amplitude: 0.03, chunks: 8)
+        pump(ring, amplitude: 0, chunks: 8)
+
+        wait(for: [finished], timeout: 5)
+        XCTAssertNotNil(captured.value, "a note at ordinary level must still start a take")
     }
 
     func testDisarmingMidTakeDiscardsIt() {

@@ -132,6 +132,22 @@ final class AppState {
     func setSampleRecordingEnabled(_ value: Bool) {
         audioEngine.setSampleRecordingEnabled(value)
     }
+
+    /// Nil when the recorder is running. Otherwise, why not — so the capture
+    /// window can say it plainly instead of waiting for a note that can never
+    /// arrive.
+    var sampleRecordingBlockedReason: String? {
+        if selectedInputDeviceID == nil {
+            return "No input device is selected. Choose one in the main Fretwork window."
+        }
+        if let errorMessage {
+            return "Audio is not running: \(errorMessage)"
+        }
+        if !audioEngine.sampleRecorder.isRunning {
+            return "The recorder is not draining audio. Check the input device in the main Fretwork window, then reopen this one."
+        }
+        return nil
+    }
 #endif
     private let resolver = FretPositionResolver()
     private var resolvedMIDI: Int?
