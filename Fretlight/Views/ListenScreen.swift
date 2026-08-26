@@ -139,6 +139,14 @@ struct ListenScreen: View {
         .font(.callout)
         .foregroundStyle(.secondary)
         .lineLimit(1)
+        .truncationMode(.middle)
+        // Capped, because this shows *device names* and the window's minimum
+        // width is derived from this screen's natural size. Uncapped, plugging
+        // in an interface with a long name would silently widen the minimum
+        // window — a layout that depends on what hardware is attached.
+        // Truncating in the middle keeps both ends, which is where the
+        // distinguishing part of a device name usually is.
+        .frame(maxWidth: 320, alignment: .leading)
     }
 
     // Caption above control, both on their shared fixed rows. An empty label

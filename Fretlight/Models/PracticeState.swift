@@ -73,7 +73,48 @@ extension PracticeState {
     /// decode with a default, so introducing one stays a compatible change and
     /// a build that does not know about a module cannot wipe its neighbours.
     struct Modules: Codable, Equatable, Sendable {
+        var notes = Notes()
+
         init() {}
+
+        private enum CodingKeys: String, CodingKey { case notes }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.init()
+            if let stored = (try? container.decodeIfPresent(Notes.self, forKey: .notes)) ?? nil {
+                notes = stored
+            }
+        }
+
+        /// Notes-on-the-fretboard: which positions the player has put on the
+        /// neck.
+        ///
+        /// Stored as `"string:fret"` strings, matching the web app's key format
+        /// exactly, so the same saved board means the same thing in both and a
+        /// future sync has nothing to translate.
+        struct Notes: Codable, Equatable, Sendable {
+            var placed: [String] = Notes.defaultPlaced
+
+            init() {}
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let stored = (try? container.decodeIfPresent([String].self, forKey: .placed)) ?? nil {
+                    placed = stored
+                }
+            }
+
+            private enum CodingKeys: String, CodingKey { case placed }
+
+            /// Every C on the neck, as the web app opens. A board that starts
+            /// empty teaches nothing on arrival; one note in every octave shows
+            /// the pattern the module is about before the player touches it.
+            static let defaultPlaced: [String] = Positions
+                .findAll(pitchClasses: [PitchClass(0)], fretCount: LearningModule.notes.highestFret)
+                .map { "\($0.string):\($0.fret)" }
+        }
     }
 }
 

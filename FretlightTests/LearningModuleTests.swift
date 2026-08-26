@@ -18,17 +18,23 @@ final class LearningModuleTests: XCTestCase {
         let blurb: String
     }
 
-    /// `../fretwork` relative to this repo. Resolved from this source file's
-    /// path rather than from the test bundle, which lives inside DerivedData
-    /// and has no relationship to the checkout.
-    private func loadWebCatalog(file: StaticString = #filePath) throws -> [CatalogEntry] {
-        let testsDirectory = URL(fileURLWithPath: "\(file)").deletingLastPathComponent()
-        let repoRoot = testsDirectory.deletingLastPathComponent()
-        let catalog = repoRoot
-            .deletingLastPathComponent()
-            .appendingPathComponent("fretwork/src/lib/modules/catalog.json")
+    /// Reads the web's catalogue — **only** when `FRETWORK_WEB_REPO` points at
+    /// the checkout, following the opt-in convention
+    /// `DetectionBoardSnapshotTests` already uses.
+    ///
+    /// This used to resolve `../fretwork` from `#filePath` and read it
+    /// unconditionally. The test host is a sandboxed app, and a read outside
+    /// its container needs a Documents-folder grant that a headless
+    /// `xcodebuild` run has nobody to approve — so the read blocked
+    /// indefinitely and the suite stalled with no failure and no message. A
+    /// unit test must not reach outside the test bundle for a file it needs.
+    private func loadWebCatalog() throws -> [CatalogEntry] {
+        guard let root = ProcessInfo.processInfo.environment["FRETWORK_WEB_REPO"] else {
+            throw XCTSkip("set TEST_RUNNER_FRETWORK_WEB_REPO to the web checkout to compare against the live catalogue")
+        }
+        let catalog = URL(fileURLWithPath: root).appendingPathComponent("src/lib/modules/catalog.json")
         guard FileManager.default.fileExists(atPath: catalog.path) else {
-            throw XCTSkip("the web repo is not checked out beside this one; nothing to compare against")
+            throw XCTSkip("no catalog.json under \(root)")
         }
         return try JSONDecoder().decode([CatalogEntry].self, from: Data(contentsOf: catalog))
     }

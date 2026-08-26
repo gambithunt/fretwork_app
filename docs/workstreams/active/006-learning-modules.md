@@ -125,4 +125,88 @@ disappearance.
 
 ## Implementation Record
 
-_Append phase-by-phase evidence here._
+### Phase 0 — Baseline and module scaffold
+
+`ModuleLayout` is the Swift counterpart of the web's three-zone skeleton —
+controls, stage, readout — plus `ModulePicker`, `ModuleStat` and `ModuleProse`.
+The web's responsive rules do not come across: they exist because that app is
+used on a tablet in portrait with a guitar in the way, and this is a Mac window
+with a 950 x 800 floor.
+
+**`NotePalette` re-keyed to pitch class** and given the role colours (root,
+third, fifth, degree, pentatonic, outside-shape) plus the accent. Finding 3
+said the keying should move once workstream 001 landed, and the reason is
+concrete: a string key cannot survive the app spelling a note `A♯` in one place
+and `B♭` in another. `PitchClass(name:)` was added to parse either spelling,
+ASCII `#`/`b` included. Values are the web's hex verbatim rather than the
+eyeballed approximations that were there before.
+
+**Both session engines ported as one.** The web keeps `guided-session.ts` and
+`progression-session.ts` as separate files with near-identical bodies; they
+differ only in that a progression can loop and can hold a step for several
+beats. `GuidedSession` takes those as parameters and `ProgressionSession` is a
+typealias over it — one implementation of count-in, tempo rescheduling and
+generation-token cancellation to keep correct instead of two kept identical by
+hand.
+
+The ported tests earned their keep immediately by catching a **real bug in the
+port**. The web's `schedule()` calls `clearTimeout` before setting a new timer;
+`Clock` has no cancellation, so rescheduling on a tempo change left the original
+timer in flight *and* added a new one — the step fired twice, once at the old
+interval and once at the new. The generation token does not catch this, because
+a tempo change is not a new run. A per-schedule token does.
+
+### Phase 1 — Notes
+
+`NotesModuleModel` holds the rules, `NotesModuleScreen` presents them, and the
+model is testable without rendering or audio. The board is both output and
+input, and the point of the module is that the two ways of editing it produce
+one set of dots: a note button is lit only when **every** position of that note
+is on the board, so the buttons can never claim more than the board shows.
+
+Playback and pulses share one callback, which is the required outcome about what
+is heard and what lights up not drifting apart. Leaving the screen stops the
+run; so does changing tuning, because a tuning change re-pitches every dot and
+anything still sounding belongs to the old tuning.
+
+Persisted through the practice-state document as `"string:fret"` keys, the web's
+format exactly, so a saved board means the same thing in both apps. An empty
+board survives a relaunch rather than being mistaken for "never set" and
+refilled with the default Cs.
+
+18 tests, covering both editing paths, deduplication between them, chord
+discovery, enharmonic hints, tuning changes, and persistence.
+
+### Two testing traps found along the way
+
+**A unit test must not read a file outside the test bundle.** Both drift checks
+originally resolved `../fretwork` from `#filePath` and read it directly. The
+test host is a sandboxed app, so a read under `~/Documents` needs a
+Documents-folder grant — and in a headless `xcodebuild` run there is nobody to
+answer that prompt, so the read blocks **indefinitely**. The suite stalled after
+260 tests with no failure and no message, twice, and the first theory was that
+the audio stack had wedged again. `sample` on the test host is what showed it
+parked in `webVariables`. Both checks now mirror the web's values as literals
+for the everyday run and compare against the live repo only when
+`TEST_RUNNER_FRETWORK_WEB_REPO` is set — the opt-in convention
+`DetectionBoardSnapshotTests` already uses.
+
+**A vacuous assertion is worse than none.** The first CSS parser passed
+`.regularExpression` to one `range(of:)` and not the other, so the second was a
+literal substring search for the pattern text, matched nothing, and produced an
+empty table — every colour comparison then compared against nothing. It failed
+only because a separate assertion happened to catch it. The parse count is now
+asserted before anything is compared against it.
+
+**The window minimum must not depend on attached hardware.** The listening
+screen's new signal-path summary shows device *names*, and the window's minimum
+width is derived from that screen's natural size — so plugging in an interface
+with a long name silently widened the minimum window. Caught by
+`WindowSizeTests` failing when the GP-200 was unplugged mid-session. The summary
+is now width-capped and truncates in the middle.
+
+### Status
+
+Suite **286 passing, 0 failures**. Phases 2–10 (Intervals, Octaves, Triads,
+Chords, Pentatonic, Scales, Harmonizing, Note association, Circle of fifths) and
+Phase 11's final gates remain.

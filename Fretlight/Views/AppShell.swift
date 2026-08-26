@@ -41,6 +41,8 @@ struct AppShell: View {
             switch state.selectedScreen {
             case .listen:
                 ListenScreen(state: state)
+            case .module(.notes):
+                NotesModuleScreen(state: state)
             case .module(let module):
                 ModulePlaceholderScreen(module: module)
             }

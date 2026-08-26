@@ -27,6 +27,34 @@ struct PitchClass: Hashable, Sendable {
         }
     }
 
+    /// Parses either spelling — `A♯` or `B♭`, both give 10 — because a name is
+    /// user-facing text and the app writes whichever suits the key. Nil for
+    /// anything that is not a note name.
+    ///
+    /// Accepts ASCII `#` and `b` alongside the Unicode `♯`/`♭` the app renders,
+    /// so a name that has been through a shell, a JSON file or a test fixture
+    /// still parses. `CLAUDE.md` records why the accidentals are Unicode in the
+    /// first place.
+    init?(name: String) {
+        let normalized = name
+            .trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "#", with: "♯")
+            .replacingOccurrences(of: "b", with: "♭")
+            .replacingOccurrences(of: "B♭♭", with: "B♭")
+        guard !normalized.isEmpty else { return nil }
+        // "B" survives the `b` → `♭` swap above only because it is uppercase;
+        // the flat sign is always lowercase in the input this accepts.
+        if let index = Self.sharpNames.firstIndex(of: normalized) {
+            self.init(index)
+            return
+        }
+        if let index = Self.flatNames.firstIndex(of: normalized) {
+            self.init(index)
+            return
+        }
+        return nil
+    }
+
     /// The flat spelling, or nil for a pitch class whose two spellings are the
     /// same note letter — the naturals, which have no alias to offer.
     var enharmonicAlias: String? {

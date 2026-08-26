@@ -319,6 +319,27 @@ final class AppState {
     /// which isn't the case this is trying to protect against. The
     /// automatic path triggered by device-change notifications goes through
     /// `scheduleDeviceRefresh` instead.
+    /// Builds the Notes module's model, wired to this app's persisted state and
+    /// to sample playback in the current tuning.
+    ///
+    /// A factory for the same reason `AudioEngine.makeSequencer` is: it
+    /// captures `self`, which a stored property cannot do during
+    /// initialisation.
+    func makeNotesModuleModel() -> NotesModuleModel {
+        NotesModuleModel(
+            tuning: tuning,
+            store: practiceState,
+            play: { [weak self] position in
+                guard let self else { return }
+                self.audioEngine.playSample(
+                    string: position.string,
+                    fret: position.fret,
+                    tuning: self.tuning
+                )
+            }
+        )
+    }
+
     func refreshDevices() {
         applyDeviceLists(inputs: AudioDeviceEnumerator.inputDevices(), outputs: AudioDeviceEnumerator.outputDevices())
     }
