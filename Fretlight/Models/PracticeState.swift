@@ -75,10 +75,11 @@ extension PracticeState {
     struct Modules: Codable, Equatable, Sendable {
         var notes = Notes()
         var intervals = Intervals()
+        var octaves = Octaves()
 
         init() {}
 
-        private enum CodingKeys: String, CodingKey { case notes, intervals }
+        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -88,6 +89,34 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Intervals.self, forKey: .intervals)) ?? nil {
                 intervals = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Octaves.self, forKey: .octaves)) ?? nil {
+                octaves = stored
+            }
+        }
+
+        /// Octaves: the root being traced and which of its shapes is anchored.
+        ///
+        /// The challenge's progress is deliberately absent — a half-finished
+        /// round is not something to resume days later, and workstream 006
+        /// states that guided playback state stays transient.
+        struct Octaves: Codable, Equatable, Sendable {
+            var rootPitchClass: Int = 0
+            var anchor: String = "0:8"
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey { case rootPitchClass, anchor }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let stored = (try? container.decodeIfPresent(Int.self, forKey: .rootPitchClass)) ?? nil {
+                    rootPitchClass = ((stored % 12) + 12) % 12
+                }
+                if let stored = (try? container.decodeIfPresent(String.self, forKey: .anchor)) ?? nil {
+                    anchor = stored
+                }
             }
         }
 
