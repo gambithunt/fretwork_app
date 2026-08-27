@@ -467,6 +467,39 @@ every starting key. One test states the same fact musically: I–IV–V are thre
 adjacent keys on the ring, which is why those three chords hold so many songs
 together.
 
-### Status
+### Phase 9 — Note association
 
-Phase 9 (Note association — the capstone) and Phase 11's final gates remain.
+The capstone: the whole key on one neck at once, each note coloured by what it
+is doing over the chord sounding *now* — chord tone, pentatonic, or the rest of
+the scale.
+
+**The layering is the lesson, and the test that matters says so directly.**
+`testChangingChordRecoloursWithoutMovingAnyDot` asserts that changing the chord
+leaves every dot exactly where it was while changing their colours. A dot that
+moved would be teaching the opposite of the point: you are not learning where
+the notes are, you are learning what they *mean* at a given moment.
+
+Precedence between layers is explicit and tested: a chord tone stays a chord
+tone even when it is also in the pentatonic, because while that chord sounds
+that is the stronger fact. A note in both keeps its chord colour and gains a
+pentatonic ring, so neither fact hides the other.
+
+Each layer can be switched off, because chord tones alone is arpeggio practice,
+pentatonic alone is where most solos live, and all three together is what an
+improviser is actually seeing. Layer and label changes are view changes and
+deliberately do **not** stop playback; changing key, chord or progression does.
+
+A progression written only for major falls back rather than appearing empty when
+the key switches to minor — `Progressions.resolve` returns nothing for a mode a
+progression was not written for, on the grounds that a ii–V–I borrowed into
+minor is a different progression rather than this one relabelled.
+
+15 tests.
+
+### Status — all ten modules built
+
+Phases 1–10 are complete. **305 tests passing** across the deterministic suites.
+Phase 11's final gates remain: a full-suite run, a smoke test, a direct launch
+of the archived build, `CLAUDE.md` updates, and the version bump — all of which
+need a machine whose audio stack is healthy, since the suites that construct
+`AppState` block on device enumeration while it is not.

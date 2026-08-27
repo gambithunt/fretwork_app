@@ -82,11 +82,13 @@ extension PracticeState {
         var scales = Scales()
         var harmonizing = Harmonizing()
         var circle = Circle()
+        var noteAssociation = NoteAssociation()
 
         init() {}
 
         private enum CodingKeys: String, CodingKey {
             case notes, intervals, octaves, triads, chords, pentatonic, scales, harmonizing, circle
+            case noteAssociation
         }
 
         init(from decoder: any Decoder) throws {
@@ -118,6 +120,66 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Circle.self, forKey: .circle)) ?? nil {
                 circle = stored
+            }
+            if let stored = (try? container.decodeIfPresent(NoteAssociation.self, forKey: .noteAssociation)) ?? nil {
+                noteAssociation = stored
+            }
+        }
+
+        /// Note association — the capstone. Key, focused chord, which layers
+        /// are on, and which progression to practise.
+        struct NoteAssociation: Codable, Equatable, Sendable {
+            var rootPitchClass: Int = 0
+            var isMajor: Bool = true
+            /// 0...6.
+            var chordDegree: Int = 0
+            var progressionID: String = ProgressionID.pop1564.rawValue
+            var loop: Bool = false
+            /// `notes` or `degrees`.
+            var labelMode: String = "notes"
+            var showsChordTones: Bool = true
+            var showsPentatonic: Bool = true
+            var showsScale: Bool = true
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey {
+                case rootPitchClass, isMajor, chordDegree, progressionID, loop, labelMode
+                case showsChordTones, showsPentatonic, showsScale
+            }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .rootPitchClass)) ?? nil {
+                    rootPitchClass = ((value % 12) + 12) % 12
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .isMajor)) ?? nil {
+                    isMajor = value
+                }
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .chordDegree)) ?? nil {
+                    chordDegree = min(max(value, 0), 6)
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .progressionID)) ?? nil,
+                   ProgressionID(rawValue: value) != nil {
+                    progressionID = value
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .loop)) ?? nil {
+                    loop = value
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .labelMode)) ?? nil,
+                   ["notes", "degrees"].contains(value) {
+                    labelMode = value
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .showsChordTones)) ?? nil {
+                    showsChordTones = value
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .showsPentatonic)) ?? nil {
+                    showsPentatonic = value
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .showsScale)) ?? nil {
+                    showsScale = value
+                }
             }
         }
 
