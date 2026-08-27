@@ -78,10 +78,11 @@ extension PracticeState {
         var octaves = Octaves()
         var triads = Triads()
         var chords = Chords()
+        var pentatonic = Pentatonic()
 
         init() {}
 
-        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads, chords }
+        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads, chords, pentatonic }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -100,6 +101,53 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Chords.self, forKey: .chords)) ?? nil {
                 chords = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Pentatonic.self, forKey: .pentatonic)) ?? nil {
+                pentatonic = stored
+            }
+        }
+
+        /// Pentatonic: root, quality, which of the five boxes, and how many
+        /// boxes are on screen at once.
+        ///
+        /// The guided run itself is absent, as workstream 006 requires: guided
+        /// playback state stays transient.
+        struct Pentatonic: Codable, Equatable, Sendable {
+            var rootPitchClass: Int = 9
+            /// `minor` or `major`.
+            var quality: String = PentatonicQuality.minorPentatonic.rawValue
+            /// 0...4, matching `ScaleShapes.pentatonicPosition` and the web's
+            /// own saved value. Displayed as 1–5; stored as the index it is.
+            var position: Int = 0
+            /// `single`, `pair` or `path`.
+            var displayMode: String = "single"
+            /// The lowest box shown when more than one is. 0-based, as above.
+            var displayStart: Int = 0
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey { case rootPitchClass, quality, position, displayMode, displayStart }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .rootPitchClass)) ?? nil {
+                    rootPitchClass = ((value % 12) + 12) % 12
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .quality)) ?? nil,
+                   PentatonicQuality(rawValue: value) != nil {
+                    quality = value
+                }
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .position)) ?? nil {
+                    position = min(max(value, 0), 4)
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .displayMode)) ?? nil,
+                   ["single", "pair", "path"].contains(value) {
+                    displayMode = value
+                }
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .displayStart)) ?? nil {
+                    displayStart = min(max(value, 0), 4)
+                }
             }
         }
 

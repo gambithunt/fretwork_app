@@ -24,7 +24,7 @@ struct ChordsModuleScreen: View {
         ModuleLayout(module: .chords) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
-                tuningNotice
+                StandardTuningNotice(tuning: state.tuning, what: "These shapes")
                 controls(model)
             }
         } stage: {
@@ -38,25 +38,6 @@ struct ChordsModuleScreen: View {
             .frame(minHeight: 260)
         } readout: {
             readout(model)
-        }
-    }
-
-    /// These shapes are fixed fret patterns, so they only mean anything in
-    /// standard tuning. Saying so is better than drawing a shape that is
-    /// quietly wrong for the tuning the player has selected globally.
-    @ViewBuilder
-    private var tuningNotice: some View {
-        if state.tuning.id != .standard {
-            Label(
-                "These shapes are standard-tuning forms. You have \(state.tuning.name) selected, so they will not sound as written.",
-                systemImage: "info.circle"
-            )
-            .font(.callout)
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

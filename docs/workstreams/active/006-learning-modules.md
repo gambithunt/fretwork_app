@@ -375,7 +375,38 @@ assert that each sounded string carries a degree the formula actually contains,
 and — from the other direction — that every dot's pitch class is one of the
 chord's. A `?` label would mean the shape contains a note the chord does not.
 
+### Phase 6 — Pentatonic
+
+Five two-notes-per-string boxes, shown one at a time, as a pair, or as a
+three-box path with the focus in the middle. Neighbours are drawn recessed and
+unlabelled: they exist to show how the boxes join, and a fully-labelled neck is
+a wall of dots rather than a shape.
+
+First module with **guided practice** — the `GuidedSession` ported in Phase 0
+drives it: four-beat count-in, one note per beat, live tempo, and a readout of
+string, fret, note, degree, fretting finger and what is coming next.
+
+**A 0-based/1-based mistake, caught by the tests.** `ScaleShapes.pentatonicPosition`
+indexes its pattern table directly, so positions are 0–4 — and the web's saved
+default is `position: 0` for the same reason. I wrote the model as 1–5, which
+made box 5 silently empty and shifted every other box by one: `selectPosition(1)`
+showed box 2. Two tests caught it — "every box is two notes per string" and
+"every box contains only scale notes" — because a shifted box is still a
+plausible-looking pentatonic shape, just the wrong one. Positions are now 0-based
+throughout and converted to 1-based only for display.
+
+Standard tuning only, and now said out loud: `StandardTuningNotice` appears on
+this module and on Chords when a non-standard tuning is selected globally.
+`CLAUDE.md` records that the tuning-parameterisation error slipped into this
+generator twice, so the scale-membership assertions run every root against every
+box in both qualities, cross-checked against intervals derived independently of
+the generator.
+
+18 tests, including that the five boxes together cover the whole scale (no note
+unreachable from any position), and that A minor and C major pentatonic come out
+as the same five notes.
+
 ### Status
 
-Phases 6–10 (Pentatonic, Scales, Harmonizing, Note association, Circle of
-fifths) and Phase 11's final gates remain.
+Phases 7–10 (Scales, Harmonizing, Note association, Circle of fifths) and Phase
+11's final gates remain.
