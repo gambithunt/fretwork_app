@@ -215,6 +215,14 @@ scattered across call sites.
   to keep the rest of the app working and tell the player, not to abort the
   call. Anything added to `controlQueue` must be non-blocking.
 
+- `AudioDeviceEnumerator.inputDevices()` costs **~30 seconds per call** in the
+  test host when the microphone grant is missing, which it is after any reboot:
+  the Debug build is ad-hoc signed, so TCC treats each rebuild as a new app, and
+  a headless `xcodebuild` run has nobody to answer the prompt. It does not fail
+  — it times out and returns. Spotting it is easy once known, because the
+  durations come out as exact multiples of 30s (a test enumerating inputs twice
+  takes 60s). Output enumeration is unaffected.
+
 - Core Audio can reach a state where the app hangs **indefinitely** on
   startup, blocked in `mach_msg` inside `AudioDeviceCreateIOProcID` while
   binding a device — `AudioEngine.startSynchronously` never returns, so the

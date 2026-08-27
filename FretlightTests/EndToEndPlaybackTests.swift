@@ -36,6 +36,19 @@ final class EndToEndPlaybackTests: XCTestCase {
         try XCTSkipIf(outputs.isEmpty || inputs.isEmpty, "no audio devices on this machine")
 
         let state = AppState()
+
+        // Choose the devices rather than inheriting whatever was last saved.
+        // Measured on this machine: the saved interface was gone, so the app
+        // fell back to the first enumerated output — a monitor's DisplayPort
+        // audio, which never answers a bind. That is correct app behaviour (the
+        // watchdog reports it), but it makes this test assert the machine's
+        // device list rather than the playback path. Preferring an output whose
+        // name matches an input picks the same physical box on both ends.
+        let input = try XCTUnwrap(inputs.first)
+        let output = outputs.first { $0.name == input.name } ?? outputs[0]
+        state.selectInputDevice(input.id)
+        state.selectOutputDevice(output.id)
+
         // The app starts audio from `ContentView`'s `.task`; a unit test has no
         // view, so it has to do the same thing explicitly. Without this there is
         // no graph for a player to attach to and the test would be measuring

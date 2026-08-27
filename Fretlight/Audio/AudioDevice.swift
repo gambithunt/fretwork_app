@@ -33,6 +33,30 @@ enum AudioDeviceEnumerator {
         }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// The device macOS itself is using, which is what a person means by "my
+    /// speakers" or "my mic".
+    ///
+    /// Worth having as a fallback rather than taking the first enumerated
+    /// device: enumeration order is arbitrary, and on a machine with a monitor
+    /// attached the first output is often the monitor's DisplayPort audio.
+    /// Measured here — binding that never returned, so the app opened unable to
+    /// play anything while the real speakers sat further down the list.
+    static func defaultDeviceID(scope: AudioObjectPropertyScope) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: scope == kAudioDevicePropertyScopeInput
+                ? kAudioHardwarePropertyDefaultInputDevice
+                : kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var id = AudioDeviceID()
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id) == noErr,
+              id != kAudioObjectUnknown
+        else { return nil }
+        return id
+    }
+
     static func nominalSampleRate(_ id: AudioDeviceID) -> Double? {
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         var rate: Float64 = 0

@@ -527,15 +527,59 @@ need one.
 | Direct launch of the Release bundle | launches, no dyld failure, 22 MB |
 | `git diff --check` | clean |
 
-**The full-suite gate is not met, and the reason is the machine rather than the
-code.** Its audio stack has been wedged since before this phase: any
+**Update after the machine was restarted: every gate now passes**, and chasing
+the last two failures found two real defects. What follows was written while the
+audio stack was still wedged.
+
+**The full-suite gate was not met at the time, and the reason was the machine
+rather than the code.** Its audio stack has been wedged since before this phase: any
 `AudioObjectGetPropertyData` against the HAL blocks, so every suite that
 constructs an `AppState` stalls in `AudioDeviceEnumerator`. Nothing fails —
 tests simply never return. It needs the reboot that has not happened yet
 (`uptime` shows six days). **No tag has been created**: pushing one publishes to
 real users, and this version has not passed its own gates.
 
-### Status — all ten modules built
+### Phase 11 (continued) — after the restart
 
-Phases 1–11 are complete bar the full-suite run, which is blocked on a healthy
-audio stack.
+With a healthy audio stack the full suite runs clean, and the two failures that
+remained turned out to be real defects rather than machine noise.
+
+**1. The note library was queued behind device binding.** `prepareSamplePlayback`
+decoded the 138 files on `graphQueue`. Reading them needs no audio device at
+all, but sitting behind a build meant a device that never answered also stopped
+the library from ever loading: measured, `isSampleLibraryLoaded` stayed false
+indefinitely, so every module reported "no audio device" when in truth only the
+output was missing and the library could have been ready the whole time. It now
+decodes on its own queue and only the *attach* touches the graph.
+
+**2. Selecting another device did not recover from a hung one — the claim made
+when the queues were split was wrong.** Splitting `controlQueue` from
+`graphQueue` kept volume and note triggers alive, but choosing a different
+device is *itself* graph work and queued behind the hang. Measured: after a hung
+bind, selecting working hardware never took effect (90s, no recovery). Now a
+submission arriving while a build is in flight gets a **fresh queue**, and the
+abandoned build refuses to install its engines because every build checks its
+generation before touching shared state. The same test now recovers in 0.143s.
+
+Also: the device fallback took the *first enumerated* device, which on a machine
+with a monitor attached is often the monitor's DisplayPort audio — measured here
+binding something that never returned. It now prefers the system default, which
+is what a person means by "my speakers".
+
+| Gate | Result |
+| --- | --- |
+| Full suite | **437 passed, 0 failed** |
+| `EndToEndPlaybackTests` (opt-in, alone) | passes, 0.32s |
+| `AudioEngineWatchdogTests` (opt-in, alone) | passes, including the new recovery test |
+| Release build + direct launch | succeeds, no dyld failure, 22 MB |
+| `git diff --check` | clean |
+
+One thing to know when launching a fresh build: the Debug and Release binaries
+are ad-hoc signed, so TCC treats each rebuild as a new app and re-prompts for
+microphone access. Until that prompt is answered the app sits waiting on the
+input device — which looks exactly like the hang above but is just an unanswered
+dialog.
+
+### Status — workstream complete
+
+Phases 1–11 are complete and every gate passes.

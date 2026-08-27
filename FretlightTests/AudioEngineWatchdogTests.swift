@@ -69,6 +69,36 @@ final class AudioEngineWatchdogTests: XCTestCase {
         engine.stop()
     }
 
+    /// The claim the queue split was made for: a device that hangs must not
+    /// trap the player there. Selecting a different one has to recover, which
+    /// is only possible because the control surface is no longer queued behind
+    /// the stuck build.
+    ///
+    /// Skips rather than fails if the machine has no second device to move to —
+    /// that is a fact about the machine, not a defect.
+    func testSelectingAnotherDeviceRecoversFromAHungOne() throws {
+        let inputs = AudioDeviceEnumerator.inputDevices()
+        let outputs = AudioDeviceEnumerator.outputDevices()
+        try XCTSkipIf(inputs.isEmpty || outputs.isEmpty, "no audio devices on this machine")
+
+        let engine = AudioEngine()
+        // Start on a device that cannot answer.
+        engine.start(inputDeviceID: unusable, outputDeviceID: unusable, monitorVolume: 0.4)
+
+        // Now do what a player would: pick real hardware instead. Prefer an
+        // output on the same physical box as the input.
+        let input = inputs[0]
+        let output = outputs.first { $0.name == input.name } ?? outputs[0]
+
+        let recovered = expectation(description: "recovered")
+        recovered.assertForOverFulfill = false
+        engine.onRecovered = { recovered.fulfill() }
+        engine.start(inputDeviceID: input.id, outputDeviceID: output.id, monitorVolume: 0.4)
+
+        wait(for: [recovered], timeout: 30)
+        engine.stop()
+    }
+
     /// Stopping an engine whose build never completed must not deadlock.
     func testStopAfterAFailedBuildReturnsPromptly() {
         let engine = AudioEngine()

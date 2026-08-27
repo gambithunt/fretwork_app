@@ -280,6 +280,11 @@ final class AppState {
     /// resolution of these against whatever is plugged in right now.
     private var selectedInputUID: String?
     private var selectedOutputUID: String?
+
+    /// Whether a saved output was restored, so a test can tell the "no saved
+    /// device, fell back to the system default" case from the "restored what
+    /// was saved" one.
+    var selectedOutputUIDForTesting: String? { selectedOutputUID }
     private let practiceState = PracticeStateStore()
 
     init() {
@@ -325,10 +330,19 @@ final class AppState {
         let settings = practiceState.state.settings
         let restoredInput = restoreSelection(uid: settings.inputDeviceUID, legacyIDKey: "selectedInputDeviceID", from: inputDevices)
         selectedInputUID = restoredInput?.uid
-        selectedInputDeviceID = restoredInput?.id ?? inputDevices.first?.id
+        // Falls back to the system default rather than the first enumerated
+        // device — see `AudioDeviceEnumerator.defaultDeviceID`. Only if even
+        // that is unavailable does the list order decide.
+        selectedInputDeviceID = restoredInput?.id
+            ?? AudioDeviceEnumerator.defaultDeviceID(scope: kAudioDevicePropertyScopeInput)
+                .flatMap { id in inputDevices.first { $0.id == id }?.id }
+            ?? inputDevices.first?.id
         let restoredOutput = restoreSelection(uid: settings.outputDeviceUID, legacyIDKey: "selectedOutputDeviceID", from: outputDevices)
         selectedOutputUID = restoredOutput?.uid
-        selectedOutputDeviceID = restoredOutput?.id ?? outputDevices.first?.id
+        selectedOutputDeviceID = restoredOutput?.id
+            ?? AudioDeviceEnumerator.defaultDeviceID(scope: kAudioDevicePropertyScopeOutput)
+                .flatMap { id in outputDevices.first { $0.id == id }?.id }
+            ?? outputDevices.first?.id
         sensitivity = settings.sensitivity
         // Restored the same way, and safe to assign directly: this one's
         // `didSet` only writes the value back, so a missed observer costs

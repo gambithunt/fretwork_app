@@ -142,7 +142,40 @@ final class AudioEngine: @unchecked Sendable {
     /// slider, playing a note, hitting Retry — queued silently behind it and
     /// did nothing. The window stayed responsive, which made it look like the
     /// app was fine and the audio had simply gone quiet.
-    private let graphQueue = DispatchQueue(label: "com.fretlight.audio-graph", qos: .userInitiated)
+    private var graphQueue = DispatchQueue(label: "com.fretlight.audio-graph", qos: .userInitiated)
+    /// Guards replacing `graphQueue` — see `submitGraphWork`.
+    private let graphQueueLock = NSLock()
+
+    /// Runs graph work, abandoning a queue whose build has hung.
+    ///
+    /// `graphQueue` is serial, and a build stuck inside Core Audio holds it for
+    /// as long as the device takes to answer — which may be never. Moving graph
+    /// work off `controlQueue` kept volume and note triggers alive, but it did
+    /// **not** rescue the one action that actually recovers the app: choosing a
+    /// different device, which is itself graph work and queued behind the hang.
+    /// Measured: selecting working hardware after a hung bind never took effect.
+    ///
+    /// So a submission that arrives while a build is still in flight gets a
+    /// *fresh* queue, and the old one is abandoned to its stuck call. The
+    /// orphaned build is harmless because every build checks its generation
+    /// before installing anything — see `startSynchronously`.
+    private func submitGraphWork(_ work: @escaping @Sendable () -> Void) {
+        graphQueueLock.lock()
+        stateLock.lock()
+        let stuck = buildInFlight
+        stateLock.unlock()
+        if stuck {
+            graphQueue = DispatchQueue(label: "com.fretlight.audio-graph", qos: .userInitiated)
+        }
+        let queue = graphQueue
+        graphQueueLock.unlock()
+        queue.async(execute: work)
+    }
+
+    /// Decodes the bundled note library. Its own queue because that work is
+    /// pure file reading — it must not sit behind a device that may never
+    /// answer. See `prepareSamplePlayback`.
+    private let libraryQueue = DispatchQueue(label: "com.fretlight.audio-library", qos: .userInitiated)
 
     /// Runs the watchdog below. Its own queue so it cannot be delayed by
     /// whatever it is watching.
@@ -241,7 +274,7 @@ final class AudioEngine: @unchecked Sendable {
     /// main actor, and never on `controlQueue`.
     func start(inputDeviceID: AudioDeviceID, outputDeviceID: AudioDeviceID, monitorVolume: Float) {
         let generation = beginBuild()
-        graphQueue.async { [weak self] in
+        submitGraphWork { [weak self] in
             guard let self else { return }
             defer { self.endBuild(generation) }
             // This is an explicit user action, so it should always clear the
@@ -319,6 +352,21 @@ final class AudioEngine: @unchecked Sendable {
         stateLock.unlock()
     }
 
+    /// Whether a build is still the newest one. An abandoned build — one whose
+    /// queue was replaced because it hung — must not install the engines it
+    /// eventually produces over a newer, working graph.
+    private func isCurrentBuild(_ generation: Int) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return generation == buildGeneration
+    }
+
+    private func currentBuildGeneration() -> Int {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return buildGeneration
+    }
+
     private func isBuildStillRunning(_ generation: Int) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -365,10 +413,11 @@ final class AudioEngine: @unchecked Sendable {
             AudioDeviceEnumerator.setBufferFrameSize(Self.targetBufferFrames, on: outputDeviceID)
         }
 
+        let generation = currentBuildGeneration()
         if inputDeviceID == outputDeviceID, AudioDeviceEnumerator.isDuplexCapable(inputDeviceID) {
-            try startDuplex(deviceID: inputDeviceID, monitorVolume: monitorVolume)
+            try startDuplex(deviceID: inputDeviceID, monitorVolume: monitorVolume, generation: generation)
         } else {
-            try startSplit(inputDeviceID: inputDeviceID, outputDeviceID: outputDeviceID, monitorVolume: monitorVolume)
+            try startSplit(inputDeviceID: inputDeviceID, outputDeviceID: outputDeviceID, monitorVolume: monitorVolume, generation: generation)
         }
         onRecovered?()
     }
@@ -380,7 +429,7 @@ final class AudioEngine: @unchecked Sendable {
     /// buffer queue, and therefore no drift between a capture clock and a
     /// playback clock. The analysis tap hangs off the same input node and is
     /// purely an observer — it cannot add latency to what is heard.
-    private func startDuplex(deviceID: AudioDeviceID, monitorVolume: Float) throws {
+    private func startDuplex(deviceID: AudioDeviceID, monitorVolume: Float, generation: Int) throws {
         let engine = AVAudioEngine()
         let input = engine.inputNode
         try bind(audioUnit: input.audioUnit!, to: deviceID, label: "input")
@@ -433,6 +482,13 @@ final class AudioEngine: @unchecked Sendable {
             throw error
         }
 
+        // Superseded while this build was inside Core Audio: throw away what it
+        // produced rather than installing it over the newer graph.
+        guard isCurrentBuild(generation) else {
+            engine.stop()
+            engine.reset()
+            return
+        }
         captureEngine = engine
         inputNode = input
         setMonitorLevelStage(monitorGain)
@@ -444,7 +500,7 @@ final class AudioEngine: @unchecked Sendable {
 
     // MARK: - Split
 
-    private func startSplit(inputDeviceID: AudioDeviceID, outputDeviceID: AudioDeviceID, monitorVolume: Float) throws {
+    private func startSplit(inputDeviceID: AudioDeviceID, outputDeviceID: AudioDeviceID, monitorVolume: Float, generation: Int) throws {
         // --- Capture graph: bound only to the input device. ---
         let capture = AVAudioEngine()
         let input = capture.inputNode
@@ -501,6 +557,13 @@ final class AudioEngine: @unchecked Sendable {
             throw error
         }
 
+        guard isCurrentBuild(generation) else {
+            capture.stop()
+            capture.reset()
+            playback.stop()
+            playback.reset()
+            return
+        }
         captureEngine = capture
         playbackEngine = playback
         inputNode = input
@@ -562,30 +625,48 @@ final class AudioEngine: @unchecked Sendable {
     ///
     /// Safe to call repeatedly; the library is decoded once.
     func prepareSamplePlayback(completion: (@Sendable (String?) -> Void)? = nil) {
-        graphQueue.async { [weak self] in
+        // Decoded on its own queue, **not** `graphQueue`. Reading 138 files out
+        // of the bundle needs no audio device at all, and putting it behind
+        // graph building meant a device that never answered also stopped the
+        // note library from ever loading: measured, a hung bind left
+        // `isSampleLibraryLoaded` false indefinitely, so every module reported
+        // "no audio device" when in truth only the output was missing and the
+        // library could have been ready the whole time.
+        libraryQueue.async { [weak self] in
             guard let self else { return }
             if self.isSampleLibraryLoaded {
                 completion?(nil)
                 return
             }
+            let library: NoteSampleLibrary
             do {
-                let library = try NoteSampleLibrary.loadFromBundle()
-                self.stateLock.lock()
-                self.sampleLibrary = library
-                self.stateLock.unlock()
-                // A graph may already be running, in which case it was built
-                // before the library existed and has no player on it yet.
-                // Rebuilding the graph to add one would interrupt monitoring,
-                // so the player is attached on the next build; force one only
-                // if something is actually running.
-                if let inputID = self.currentInputDeviceID, let outputID = self.currentOutputDeviceID {
-                    let generation = self.beginBuild()
-                    defer { self.endBuild(generation) }
-                    try? self.startSynchronously(inputDeviceID: inputID, outputDeviceID: outputID, monitorVolume: self.monitorVolumeSnapshot())
-                }
-                completion?(nil)
+                library = try NoteSampleLibrary.loadFromBundle()
             } catch {
                 completion?(String(describing: error))
+                return
+            }
+            self.stateLock.lock()
+            self.sampleLibrary = library
+            self.stateLock.unlock()
+            completion?(nil)
+
+            // Attaching *does* need the graph, so that part — and only that
+            // part — goes to `graphQueue`. A graph already running was built
+            // before the library existed and has no player on it, so it is
+            // rebuilt; if the queue is blocked on a sick device this simply
+            // waits, and the library is ready regardless.
+            self.submitGraphWork { [weak self] in
+                guard let self,
+                      let inputID = self.currentInputDeviceID,
+                      let outputID = self.currentOutputDeviceID
+                else { return }
+                let generation = self.beginBuild()
+                defer { self.endBuild(generation) }
+                try? self.startSynchronously(
+                    inputDeviceID: inputID,
+                    outputDeviceID: outputID,
+                    monitorVolume: self.monitorVolumeSnapshot()
+                )
             }
         }
     }
@@ -767,12 +848,19 @@ final class AudioEngine: @unchecked Sendable {
     }
 
     private func scheduleRestart(for engine: AVAudioEngine) {
-        graphQueue.async { [weak self] in
+        // Identity only, never the engine itself: `AVAudioEngine` is not
+        // `Sendable`, and carrying one into this closure was the source of the
+        // long-standing non-Sendable capture warnings here. An identifier
+        // answers the only question being asked — is this still one of ours.
+        let identity = ObjectIdentifier(engine)
+        submitGraphWork { [weak self] in
             guard let self else { return }
             // Notifications from an engine that has already been stopped are
             // normal during teardown. They must not start a fresh recovery
             // loop for a healthy, newly-created engine.
-            guard self.captureEngine === engine || self.playbackEngine === engine else { return }
+            let live = [self.captureEngine, self.playbackEngine]
+                .compactMap { $0.map(ObjectIdentifier.init) }
+            guard live.contains(identity) else { return }
             // Our own start-up churn, not the device renegotiating under us.
             // The graph was built after this change, so it is already current.
             guard Date() >= self.settledAfter else { return }
@@ -782,7 +870,10 @@ final class AudioEngine: @unchecked Sendable {
             // Rebuild after the device has finished its own configuration
             // change. This is the recovery path that keeps the input tap
             // alive on interfaces which renegotiate mid-stream.
-            self.graphQueue.asyncAfter(deadline: .now() + 0.5, execute: work)
+            self.graphQueueLock.lock()
+            let queue = self.graphQueue
+            self.graphQueueLock.unlock()
+            queue.asyncAfter(deadline: .now() + 0.5, execute: work)
         }
     }
 
@@ -848,7 +939,7 @@ final class AudioEngine: @unchecked Sendable {
     }
 
     func stop() {
-        graphQueue.async { [weak self] in self?.stopSynchronously() }
+        submitGraphWork { [weak self] in self?.stopSynchronously() }
     }
 
     private func stopSynchronously() {
