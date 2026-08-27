@@ -81,11 +81,12 @@ extension PracticeState {
         var pentatonic = Pentatonic()
         var scales = Scales()
         var harmonizing = Harmonizing()
+        var circle = Circle()
 
         init() {}
 
         private enum CodingKeys: String, CodingKey {
-            case notes, intervals, octaves, triads, chords, pentatonic, scales, harmonizing
+            case notes, intervals, octaves, triads, chords, pentatonic, scales, harmonizing, circle
         }
 
         init(from decoder: any Decoder) throws {
@@ -114,6 +115,26 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Harmonizing.self, forKey: .harmonizing)) ?? nil {
                 harmonizing = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Circle.self, forKey: .circle)) ?? nil {
+                circle = stored
+            }
+        }
+
+        /// Circle of fifths: which key is selected.
+        struct Circle: Codable, Equatable, Sendable {
+            var selectedPitchClass: Int = 0
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey { case selectedPitchClass }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .selectedPitchClass)) ?? nil {
+                    selectedPitchClass = ((value % 12) + 12) % 12
+                }
             }
         }
 

@@ -57,6 +57,8 @@ struct AppShell: View {
                 ScalesModuleScreen(state: state)
             case .module(.harmonizing):
                 HarmonizingModuleScreen(state: state)
+            case .module(.circle):
+                CircleModuleScreen(state: state)
             case .module(let module):
                 ModulePlaceholderScreen(module: module)
             }

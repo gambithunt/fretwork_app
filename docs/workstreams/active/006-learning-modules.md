@@ -441,7 +441,32 @@ does.
 7th, and that an up-and-down run does not sound the top note twice (the thing
 that makes a practice run sound like a stumble).
 
+### Phase 8 — Harmonizing
+
+Pick a key and a degree, and see the chord that falls out of it. The three
+stacked scale tones sit beside the chord because they are the *reason* it is
+what it is: the chord is the consequence, the stack is the cause.
+
+13 tests, asserting the claim rather than the module's own output — the chord at
+each degree must be the set of its three stacked scale tones, and the quality
+patterns (major: maj, min, min, maj, maj, min, dim; and the minor equivalent)
+must hold in all twelve keys. One more checks a relative major and minor come
+out as the same seven chords.
+
+### Phase 10 — Circle of fifths
+
+The one module whose stage is not a fretboard. A ring of twelve keys with the
+relative minors on an inner ring, and the selected key's tonic triad on a small
+board beside it so the diagram stays connected to the instrument.
+
+The tests assert that the arrangement *means* something, because a ring drawn in
+the wrong order still looks like a circle of fifths: every step clockwise is a
+fifth, **neighbouring keys share six of their seven notes**, and the key
+opposite shares the fewest of any — checked against all eleven others, from
+every starting key. One test states the same fact musically: I–IV–V are three
+adjacent keys on the ring, which is why those three chords hold so many songs
+together.
+
 ### Status
 
-Phases 8–10 (Harmonizing, Note association, Circle of fifths) and Phase 11's
-final gates remain.
+Phase 9 (Note association — the capstone) and Phase 11's final gates remain.
