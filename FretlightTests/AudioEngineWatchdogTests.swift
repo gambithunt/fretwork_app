@@ -16,6 +16,21 @@ final class AudioEngineWatchdogTests: XCTestCase {
     /// anything real. The point is the *reporting*, not the failure.
     private let unusable: AudioDeviceID = 0xFFFF_FFFE
 
+    /// **Opt-in**, via `TEST_RUNNER_FRETWORK_AUDIO_DEVICE_TESTS=1`, for a
+    /// reason worth stating: these tests deliberately drive the pathological
+    /// Core Audio path — a bind that never returns. Measured, that does not
+    /// stay inside this process. Running them in the default suite left the
+    /// HAL unwilling to answer for the *other* test processes XCTest runs in
+    /// parallel, and the whole run stalled after 411 passing tests with no
+    /// failure and no message. A test that deliberately wedges a device cannot
+    /// share a machine with tests that need one.
+    override func setUpWithError() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["FRETWORK_AUDIO_DEVICE_TESTS"] == "1",
+            "set TEST_RUNNER_FRETWORK_AUDIO_DEVICE_TESTS=1 to run the device-binding tests"
+        )
+    }
+
     /// The control surface must stay usable while a build is in flight, which
     /// is the whole reason the queues are separate. If these ran on the same
     /// queue as the build, a stuck build would make every one of them hang.

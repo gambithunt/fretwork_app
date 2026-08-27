@@ -71,6 +71,11 @@ Layout:
 | A generator whose output is fixed fret offsets (open-chord charts, pentatonic boxes) | Take no `Tuning` parameter at all, so misuse is a compile error (see `ScaleShapes.pentatonicPosition`) | Accepting a `Tuning` it cannot honour. Those frets do not transpose, they detune — the box silently stops being the scale it claims to be. This slipped in twice |
 | Decoding a persisted settings document | Decode field by field, each with its own fallback (`PracticeState.Settings`) | Synthesised `Decodable` — one unrecognised enum case throws and takes every other setting down with it |
 | Refactoring a view that must look unchanged | Render it off-screen to PNGs before and after and compare pixels (`DetectionBoardSnapshotTests`, gated on `TEST_RUNNER_FRETWORK_SNAPSHOT_DIR`) | Reading the diff and calling it equivalent. The detection board's rewrite looked right and was placing every dot wrongly; only the pixels said so |
+| A learning module's rules | A `@MainActor @Observable` model with the audio call injected as a closure, and a thin screen over it (see `NotesModuleModel` / `NotesModuleScreen`) | Putting the rules in the `View`. Every module's real content — what the shape *is* — then needs a rendered view to test |
+| A module's persisted selection | The thing's own id or `short` (`intervalShort`, `formulaID`, a voicing's id) | An index into a catalogue or a voicing list. Both change length, so an index silently re-points at a different chord or shape rather than failing |
+| A generator's position/index convention | Check it against the generator, not against the UI's numbering — `ScaleShapes.pentatonicPosition` is 0-based, and so is the web's saved value | Assuming the 1-based numbering the screen shows. A shifted box is still a plausible-looking shape, so this fails silently and looks right |
+| Emphasising the current step of a guided run | Pass the **run** to `GuidedPresentation.decorate`, not the shape it was built from | Passing the shape. An up-and-down run is nearly twice as long, so past the turn the index emphasises the wrong note or none at all |
+| A module built on fixed fret shapes, when tuning is a global setting | Say so on screen (`StandardTuningNotice`) — Chords, Pentatonic, Harmonizing | Drawing the shape anyway. Those frets do not transpose, they detune, and the board looks equally confident either way |
 | Placing a view that also carries a `.transition(.modifier(...))` | Let the transition's identity state position it, and nothing else | Adding `.position` on top. Both apply, the dot lands where neither asked, and it is invisible in a static reading of the code |
 | Aligning recorded samples on their attack | Re-measure the onset from the audio at build time (`scripts/build-sample-library.sh`) | Trusting the mark the recorder wrote. A noise-floor-derived threshold fires late on a soft attack, so a fixed rewind lands *inside* the transient — measured across 138 real takes, onsets ranged 0–43 ms against a nominal 15 |
 | Choosing a lossy codec for sampled audio | Decode both builds back to PCM, correlate to find the offset, and check it is 0 before comparing anything else | Judging on bitrate or on an SNR figure alone. Encoder priming shifting the attack is what disqualifies a codec for a sampled instrument, and an SNR computed at the wrong offset hides it |
@@ -175,6 +180,28 @@ scattered across call sites.
   until the user happened to move the control. Apply the side effect
   explicitly after assigning, and be suspicious of any `init` that assigns a
   property whose `didSet` does real work.
+
+- A module test that injects its `play:` closure proves the module calls
+  *something*, not that anything is connected. Both of the first two modules
+  shipped **silently mute** with a green suite: `playSample` is a no-op until
+  `prepareSamplePlayback()` has run, and nothing called it. Anything whose
+  effect leaves the process — audio, files, the network — needs one test that
+  goes the whole way (`SamplePlaybackWiringTests`, `EndToEndPlaybackTests`)
+  alongside the fast injected ones.
+
+- A test that needs the real audio device does not belong in the default suite.
+  XCTest runs suites in parallel processes that each build an `AudioEngine`, so
+  a device-dependent test contends with them: measured at 20s alone and past 45s
+  in the suite. Gate it behind `TEST_RUNNER_FRETWORK_AUDIO_DEVICE_TESTS=1`. The
+  same applies to reading anything outside the test bundle — see the sandbox
+  note below.
+
+- A unit test must not read a file outside the test bundle. The test host is a
+  sandboxed app, so a read under `~/Documents` needs a Documents-folder grant,
+  and a headless `xcodebuild` run has nobody to answer the prompt — the read
+  blocks **indefinitely** and the suite stalls with no failure and no message.
+  Mirror the values as literals and gate the live comparison behind
+  `TEST_RUNNER_FRETWORK_WEB_REPO` (`NotePaletteTests`, `LearningModuleTests`).
 
 - Graph building lives on `graphQueue`, never `controlQueue`. A device that
   stops answering blocks `AVAudioEngine.inputNode` inside

@@ -496,10 +496,46 @@ minor is a different progression rather than this one relabelled.
 
 15 tests.
 
+### Phase 11 — Final gates
+
+`CLAUDE.md` gained five Decisions rows and three Gotchas from the port: where a
+module's rules live, persisting a thing's id rather than its index, checking a
+generator's 0-based convention rather than the UI's numbering, giving
+`GuidedPresentation` the run rather than the shape, and saying out loud when a
+module's fixed shapes do not fit the selected tuning. The Gotchas record the
+three testing traps — an injected closure proving only that the module calls
+*something*, a device-dependent test in the default suite, and a unit test
+reading outside the test bundle.
+
+Version bumped to **0.4.0 / build 4** with a `CHANGELOG.md` entry.
+
+**A test of mine was poisoning the suite.** `AudioEngineWatchdogTests`
+deliberately binds a device id that cannot resolve — the pathological Core Audio
+path the watchdog exists to report. Measured, that does not stay inside its own
+process: it left the HAL unwilling to answer for the other test processes XCTest
+runs in parallel, and the full run stalled after 411 passing tests with no
+failure and no message. It is now opt-in behind
+`TEST_RUNNER_FRETWORK_AUDIO_DEVICE_TESTS=1`, alongside `EndToEndPlaybackTests`.
+A test that deliberately wedges a device cannot share a machine with tests that
+need one.
+
+| Gate | Result |
+| --- | --- |
+| Deterministic suites (27 of them, every module) | **305 passed, 0 failed** |
+| Full suite | reaches 408–411 passed, **0 failed**, then stalls in device enumeration |
+| Release build | succeeds |
+| Direct launch of the Release bundle | launches, no dyld failure, 22 MB |
+| `git diff --check` | clean |
+
+**The full-suite gate is not met, and the reason is the machine rather than the
+code.** Its audio stack has been wedged since before this phase: any
+`AudioObjectGetPropertyData` against the HAL blocks, so every suite that
+constructs an `AppState` stalls in `AudioDeviceEnumerator`. Nothing fails —
+tests simply never return. It needs the reboot that has not happened yet
+(`uptime` shows six days). **No tag has been created**: pushing one publishes to
+real users, and this version has not passed its own gates.
+
 ### Status — all ten modules built
 
-Phases 1–10 are complete. **305 tests passing** across the deterministic suites.
-Phase 11's final gates remain: a full-suite run, a smoke test, a direct launch
-of the archived build, `CLAUDE.md` updates, and the version bump — all of which
-need a machine whose audio stack is healthy, since the suites that construct
-`AppState` block on device enumeration while it is not.
+Phases 1–11 are complete bar the full-suite run, which is blocked on a healthy
+audio stack.

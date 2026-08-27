@@ -2,6 +2,50 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.4.0 — 2026-08-27
+
+- Fretwork is now a multi-screen app. The listening screen you already had is
+  unchanged and still where the app opens; alongside it are **ten learning
+  modules**, ported from the web app so the two teach the same course in the
+  same order.
+- **Notes on the fretboard** — tap anywhere to drop a note, or light up every
+  position of a note at once. The board names what you have placed and finds the
+  chord in it.
+- **Intervals** — a root and one related note, anchored anywhere on the neck.
+  The same fifth is a different physical move on each string, and the board
+  shows every root you could anchor on.
+- **Octaves** — the movable two-string shape, plus a recall round that hides the
+  octave and asks you to find it. A wrong answer plays the note you actually
+  picked, so you can hear that it is not an octave.
+- **Triads** — every compact shape and inversion, double stops, and diatonic
+  paths that walk a key along one set of three strings without your hand
+  leaving them.
+- **Major, minor & power chords** — movable shapes traced back to their root,
+  3rd and 5th, with muted strings marked rather than quietly omitted.
+- **Pentatonic scales** — the five boxes, singly, in pairs, or as a three-box
+  path, with guided practice: a four-beat count-in, one note per beat, and the
+  fretting finger for the note you are on.
+- **Scales** — one-octave major and natural minor, labelled by note or by
+  degree, played ascending or up and down.
+- **Harmonizing the scale** — pick a degree and see the chord that falls out of
+  it, next to the three stacked scale tones that produced it.
+- **Note association** — the whole key on one neck, each note coloured by what
+  it is doing over the chord playing right now. Play a progression and the
+  colours move while the notes stay still.
+- **Circle of fifths** — the twelve keys and their relative minors, with the
+  selected key's tonic triad on a board beside it.
+- Every board and every played note now follows one **tuning**, chosen once and
+  applied everywhere. The tuning setting has existed in the saved document since
+  0.1 but was never read back until now.
+- Settings — devices, monitor, sensitivity, tuning and board orientation — moved
+  out of the listening screen's header into the toolbar, reachable from any
+  screen. The window is 430pt narrower as a result.
+- Board orientation is now remembered between launches instead of resetting.
+- Fixed the app becoming unresponsive to every audio control when a device stops
+  answering. Building the audio graph now happens off the control path, so you
+  can still pick a different device while a bad one is hanging, and the app says
+  the device is not responding rather than going quiet with no explanation.
+
 ## 0.3.0 — 2026-08-26
 
 - The app now plays real recorded guitar. Every position on the neck — six
