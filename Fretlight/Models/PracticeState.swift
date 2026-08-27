@@ -76,10 +76,11 @@ extension PracticeState {
         var notes = Notes()
         var intervals = Intervals()
         var octaves = Octaves()
+        var triads = Triads()
 
         init() {}
 
-        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves }
+        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -92,6 +93,81 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Octaves.self, forKey: .octaves)) ?? nil {
                 octaves = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Triads.self, forKey: .triads)) ?? nil {
+                triads = stored
+            }
+        }
+
+        /// Triads: the largest of the reference modules, and the one with the
+        /// most to remember between visits.
+        ///
+        /// The path settings are kept separate from the shape settings on
+        /// purpose — they are two different exercises that happen to share a
+        /// screen, and returning to one should not have disturbed the other.
+        struct Triads: Codable, Equatable, Sendable {
+            var rootPitchClass: Int = 0
+            /// A chord's `short`, not an index, for the same reason intervals
+            /// store `short`: a catalogue that gains an entry must not silently
+            /// re-point a saved selection.
+            var triadShort: String = "maj"
+            var doubleStopID: String = "maj3"
+            /// `shapes`, `inversions` or `doubleStops` — which of the three
+            /// ways of looking at a triad is on screen.
+            var view: String = "shapes"
+            /// Which voicing along the neck.
+            var position: Int = 0
+
+            var pathKeyRoot: Int = 0
+            var pathIsMajor: Bool = true
+            var pathStringSet: String = TriadPathStringSet.dgb.rawValue
+            var pathStep: Int = 0
+            var isPathMode: Bool = false
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey {
+                case rootPitchClass, triadShort, doubleStopID, view, position
+                case pathKeyRoot, pathIsMajor, pathStringSet, pathStep, isPathMode
+            }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .rootPitchClass)) ?? nil {
+                    rootPitchClass = ((value % 12) + 12) % 12
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .triadShort)) ?? nil,
+                   Fretwork.Triads.all.contains(where: { $0.short == value }) {
+                    triadShort = value
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .doubleStopID)) ?? nil,
+                   DoubleStops.all.contains(where: { $0.id == value }) {
+                    doubleStopID = value
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .view)) ?? nil,
+                   ["shapes", "inversions", "doubleStops"].contains(value) {
+                    view = value
+                }
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .position)) ?? nil {
+                    position = max(0, value)
+                }
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .pathKeyRoot)) ?? nil {
+                    pathKeyRoot = ((value % 12) + 12) % 12
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .pathIsMajor)) ?? nil {
+                    pathIsMajor = value
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .pathStringSet)) ?? nil,
+                   TriadPathStringSet(rawValue: value) != nil {
+                    pathStringSet = value
+                }
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .pathStep)) ?? nil {
+                    pathStep = max(0, value)
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .isPathMode)) ?? nil {
+                    isPathMode = value
+                }
             }
         }
 

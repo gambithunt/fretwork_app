@@ -45,6 +45,10 @@ struct AppShell: View {
                 NotesModuleScreen(state: state)
             case .module(.intervals):
                 IntervalsModuleScreen(state: state)
+            case .module(.octaves):
+                OctavesModuleScreen(state: state)
+            case .module(.triads):
+                TriadsModuleScreen(state: state)
             case .module(let module):
                 ModulePlaceholderScreen(module: module)
             }

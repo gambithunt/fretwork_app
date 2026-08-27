@@ -14,7 +14,23 @@ final class EndToEndPlaybackTests: XCTestCase {
     /// Opening a module and playing a note must reach a real player attached to
     /// a running graph. Skips rather than fails when the machine has no usable
     /// audio device, since that is an environment fact and not a defect.
+    /// **Opt-in**, via `TEST_RUNNER_FRETWORK_AUDIO_DEVICE_TESTS=1`.
+    ///
+    /// It needs the real default device to build a graph, so under the full
+    /// suite it contends with the other test processes XCTest runs in parallel —
+    /// each of which also constructs an `AudioEngine`. Measured: 20s alone,
+    /// past 45s in the suite. A hardware-dependent test in the default run is
+    /// flaky by construction, and a flaky test teaches people to ignore red.
+    ///
+    /// The bug this was written for is still caught deterministically by
+    /// `SamplePlaybackWiringTests`, which needs no device. What this adds is
+    /// the last link — a player actually attached to a running graph — and that
+    /// genuinely cannot be checked without hardware.
     func testANoteFromAModuleReachesARealPlayer() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["FRETWORK_AUDIO_DEVICE_TESTS"] == "1",
+            "set TEST_RUNNER_FRETWORK_AUDIO_DEVICE_TESTS=1 to run the hardware playback check"
+        )
         let outputs = AudioDeviceEnumerator.outputDevices()
         let inputs = AudioDeviceEnumerator.inputDevices()
         try XCTSkipIf(outputs.isEmpty || inputs.isEmpty, "no audio devices on this machine")

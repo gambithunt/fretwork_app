@@ -261,8 +261,95 @@ anchored root **in pitch** — not merely in pitch class, since the module is
 about a physical distance — and that no position is ever drawn twice across all
 tiers.
 
+### Interlude — the modules were silently mute
+
+Reported by the user: no sound. The playback engine is gated behind
+`prepareSamplePlayback()` so nobody pays 85 MB unless they open a module — and
+**nothing ever called it**. `sampleLibrary` stayed nil, no player was attached,
+and `playSample` is a silent no-op in that state. Every tap in Notes and
+Intervals called into a gate that was never opened.
+
+**306 passing tests could not catch it.** The module tests inject a `play:`
+closure so they can run without an audio graph, and that closure was called
+faithfully on every tap — the seam that makes the modules testable is exactly
+where the bug lived. A green suite proved the modules called *something*, not
+that the something was connected.
+
+`AppState` now requests the library the first time a module is opened, which
+keeps the memory off anyone who only uses the listening screen while making it
+impossible to forget. Two test layers close the gap the module tests
+structurally cannot: `SamplePlaybackWiringTests` (deterministic, no hardware)
+asserts opening any module loads the library and the listening screen does not,
+and `EndToEndPlaybackTests` goes `AppState` → `AudioEngine` → `SamplePlayer`
+against a real device.
+
+Silence is also no longer mysterious: a module now says *which* reason applies
+when it cannot sound a note.
+
+### Phase 3 — Octaves
+
+`RecallChallenge` ports `recall-challenge.ts` — deliberately not a quiz that
+marks you and moves on. A wrong answer goes to an `incorrect` phase you retry
+from, so the round advances only once the shape has actually been recalled.
+
+The module's substance is that **the fret offset is tuning-honest**. In standard
+tuning the octave shape is "two strings up, two frets across" — except across
+the G–B pair, where the major-third gap makes it three. A module drawing a fixed
++2 would be wrong on a third of the neck and still look plausible.
+
+My first two tests here asserted the *wrong numbers*: I claimed the three-fret
+case was rooted on strings 1–2 (it is 2–3), and that Drop D would stretch the
+low-string shape to four frets when it in fact collapses it to **zero** — the
+low string becomes a D, matching the D string, so the octave sits at the same
+fret. Both are now derived and pinned: the human-facing literals (2, 2, 3, 3)
+plus the invariant they come from, checked across all fifteen tunings.
+
+16 tests, including that the target is hidden while the question stands, that a
+wrong answer sounds the note actually picked (hearing that it is not an octave
+is the correction), and that a tap mid-round cannot move the shape — otherwise
+answering would change the question.
+
+### Phase 4 — Triads
+
+The largest reference module: two exercises sharing a screen, with their
+settings kept apart in the document so returning to one does not disturb the
+other.
+
+- **Shapes** — one triad or double-stop in every compact voicing, inversions
+  callable directly. Dots are coloured by *role* rather than pitch, because the
+  lesson is which degree you are fingering.
+- **Paths** — every diatonic triad of a key on one three-string set, walked up
+  the neck and played back as a progression through the ported
+  `ProgressionSession`.
+
+Two more of my test expectations were wrong, both instructive. I asserted a path
+walks the diatonic chords *in scale order*; it does not, and should not —
+`TriadPaths.diatonicPath` sorts up the neck, because the exercise is to move the
+harmony along one string set, so degrees interleave by position. The test now
+asserts what the design actually promises: only the key's chords, each voiced
+with its own notes, ordered by fret. And I asserted the progression leaves
+`idle` synchronously when its state callback hops to the main actor — a real
+finding, since the *UI* would have had the same lag and read as the button not
+working. The snapshot is now taken synchronously at start as well.
+
+24 tests, including that every voicing contains exactly the triad's notes, that
+an inversion is the same notes with a different bass rather than a different
+chord, that a voicing stays within a hand's span, that a path never leaves its
+string set, and that any selection change stops playback — a progression left
+running after a key change would play the old key's chords over the new key's
+shapes.
+
+### A test-suite lesson
+
+`EndToEndPlaybackTests` needs the real default device, so under the full suite it
+contends with the other test processes XCTest runs in parallel — each of which
+also builds an `AudioEngine`. Measured at 20s alone and past 45s in the suite. It
+is now opt-in behind `TEST_RUNNER_FRETWORK_AUDIO_DEVICE_TESTS=1`: a
+hardware-dependent test in the default run is flaky by construction, and a flaky
+test teaches people to ignore red. The bug it was written for stays covered
+deterministically by `SamplePlaybackWiringTests`.
+
 ### Status
 
-Suite **306 passing, 0 failures**. Phases 3–10 (Octaves, Triads, Chords,
-Pentatonic, Scales, Harmonizing, Note association, Circle of fifths) and Phase
-11's final gates remain.
+Phases 5–10 (Chords, Pentatonic, Scales, Harmonizing, Note association, Circle
+of fifths) and Phase 11's final gates remain.

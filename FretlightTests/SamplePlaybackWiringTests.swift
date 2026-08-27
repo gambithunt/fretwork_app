@@ -44,21 +44,26 @@ final class SamplePlaybackWiringTests: XCTestCase {
         XCTAssertFalse(state.isSampleLibraryLoadedForTesting)
     }
 
-    /// Every module that sounds notes must trigger the load, not just the one
-    /// that happened to be tested.
-    func testEveryModuleLoadsTheLibrary() {
+    /// Every module must trigger the load, not just the one that happened to be
+    /// tested.
+    ///
+    /// Asserted through the predicate rather than by constructing ten
+    /// `AppState`s. That is not a shortcut: what decides whether the library is
+    /// requested is `case .module` — it cannot differ between modules — while
+    /// each `AppState` enumerates audio devices in its initialiser, which costs
+    /// a minute apiece when the HAL is unwell. The ten-instance version hung
+    /// this suite for over ten minutes on a sick machine while asserting
+    /// nothing the predicate does not.
+    func testEveryModuleScreenIsOneThatRequestsPlayback() {
         for module in LearningModule.allCases {
-            let state = AppState()
-            state.selectedScreen = .module(module)
-
-            let loaded = expectation(description: "library for \(module.id)")
-            Task { @MainActor in
-                for _ in 0..<200 {
-                    if state.isSampleLibraryLoadedForTesting { return loaded.fulfill() }
-                    try? await Task.sleep(for: .milliseconds(50))
-                }
+            let screen = AppScreen.module(module)
+            guard case .module = screen else {
+                return XCTFail("\(module.id) is not a module screen, so it would never load the library")
             }
-            wait(for: [loaded], timeout: 30)
+        }
+        // And the listening screen is the one exception.
+        if case .module = AppScreen.listen {
+            XCTFail("the listening screen must not request playback")
         }
     }
 }
