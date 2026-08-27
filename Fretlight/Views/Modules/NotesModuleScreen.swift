@@ -19,6 +19,9 @@ struct NotesModuleScreen: View {
         .onAppear {
             if model == nil { model = state.makeNotesModuleModel() }
             model?.tuning = state.tuning
+            // A graph rebuild replaces the player, so readiness is re-checked
+            // on every appearance rather than trusted from last time.
+            state.refreshSamplePlaybackReadiness()
         }
         .onChange(of: state.tuning) { _, tuning in
             // A tuning change re-pitches every dot on the board, so anything
@@ -34,7 +37,10 @@ struct NotesModuleScreen: View {
 
     private func content(_ model: NotesModuleModel) -> some View {
         ModuleLayout(module: .notes) {
-            controls(model)
+            VStack(alignment: .leading, spacing: 12) {
+                ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
+                controls(model)
+            }
         } stage: {
             FretboardBoardView(
                 dots: model.dots,

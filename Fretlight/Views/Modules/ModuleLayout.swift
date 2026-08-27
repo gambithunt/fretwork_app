@@ -122,3 +122,41 @@ struct ModuleProse: View {
         .frame(maxWidth: 720, alignment: .leading)
     }
 }
+
+/// Shown on a module when a tap would produce no sound.
+///
+/// Exists because the first two modules shipped silently broken: every tap
+/// called into a playback path that was never initialised, and there was
+/// nothing on screen — or in a log — to say so. A module that cannot make a
+/// sound should say which of the two reasons applies rather than leaving the
+/// player wondering whether they mis-tapped.
+struct ModuleAudioNotice: View {
+    let isReady: Bool
+    let error: String?
+
+    var body: some View {
+        if let error {
+            notice(
+                "The bundled note library could not be loaded, so notes cannot play. \(error)",
+                systemImage: "exclamationmark.triangle.fill",
+                tint: .orange
+            )
+        } else if !isReady {
+            notice(
+                "Notes will not sound until an audio device is connected — choose one in Settings.",
+                systemImage: "speaker.slash.fill",
+                tint: .secondary
+            )
+        }
+    }
+
+    private func notice(_ text: String, systemImage: String, tint: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.callout)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}

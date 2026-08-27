@@ -17,6 +17,7 @@ struct IntervalsModuleScreen: View {
         }
         .onAppear {
             if model == nil { model = state.makeIntervalsModuleModel() }
+            state.refreshSamplePlaybackReadiness()
         }
         .onChange(of: state.tuning) { _, tuning in model?.retune(to: tuning) }
         .onDisappear { model?.stop() }
@@ -24,7 +25,10 @@ struct IntervalsModuleScreen: View {
 
     private func content(_ model: IntervalsModuleModel) -> some View {
         ModuleLayout(module: .intervals) {
-            controls(model)
+            VStack(alignment: .leading, spacing: 12) {
+                ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
+                controls(model)
+            }
         } stage: {
             FretboardBoardView(
                 dots: model.dots,

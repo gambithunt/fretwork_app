@@ -207,7 +207,45 @@ final class AppState {
         didSet {
             guard selectedScreen != oldValue else { return }
             updateDetectionGating()
+            prepareSamplePlaybackIfNeeded()
         }
+    }
+
+    /// True once a note played from a module would actually be heard.
+    private(set) var isSamplePlaybackReady = false
+    /// Set if the bundled library could not be decoded — a shipped-resource
+    /// failure, so it is worth surfacing rather than swallowing.
+    private(set) var samplePlaybackError: String?
+    private var hasRequestedSamplePlayback = false
+
+    /// Decodes the note library the first time a screen that plays notes is
+    /// opened.
+    ///
+    /// Deliberately lazy rather than done at launch: the decoded library is
+    /// 85 MB, and someone who only ever uses the listening screen should not
+    /// pay for it. Deliberately *not* left to the caller either — that was the
+    /// bug. Every module called `playSample` on every tap while the library had
+    /// never been asked for, so nothing sounded and nothing said why.
+    private func prepareSamplePlaybackIfNeeded() {
+        guard case .module = selectedScreen, !hasRequestedSamplePlayback else { return }
+        hasRequestedSamplePlayback = true
+        audioEngine.prepareSamplePlayback { [weak self] error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.samplePlaybackError = error
+                self.isSamplePlaybackReady = self.audioEngine.isSamplePlaybackReady
+                if error != nil { self.hasRequestedSamplePlayback = false }
+            }
+        }
+    }
+
+    var isSampleLibraryLoadedForTesting: Bool { audioEngine.isSampleLibraryLoaded }
+
+    /// Re-checked when a module asks, because a graph rebuild between then and
+    /// now replaces the player.
+    func refreshSamplePlaybackReadiness() {
+        prepareSamplePlaybackIfNeeded()
+        isSamplePlaybackReady = audioEngine.isSamplePlaybackReady
     }
 
     private let resolver = FretPositionResolver()

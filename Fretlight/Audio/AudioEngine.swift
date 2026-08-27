@@ -564,13 +564,15 @@ final class AudioEngine: @unchecked Sendable {
     func prepareSamplePlayback(completion: (@Sendable (String?) -> Void)? = nil) {
         graphQueue.async { [weak self] in
             guard let self else { return }
-            if self.sampleLibrary != nil {
+            if self.isSampleLibraryLoaded {
                 completion?(nil)
                 return
             }
             do {
                 let library = try NoteSampleLibrary.loadFromBundle()
+                self.stateLock.lock()
                 self.sampleLibrary = library
+                self.stateLock.unlock()
                 // A graph may already be running, in which case it was built
                 // before the library existed and has no player on it yet.
                 // Rebuilding the graph to add one would interrupt monitoring,
@@ -596,7 +598,10 @@ final class AudioEngine: @unchecked Sendable {
     /// Any note sounding across a restart is lost with the old graph, which is
     /// correct: the device it was playing through has gone.
     private func attachSamplePlayerIfAvailable(to engine: AVAudioEngine, mixer: AVAudioMixerNode, sampleRate: Double) {
-        guard let library = sampleLibrary,
+        stateLock.lock()
+        let library = sampleLibrary
+        stateLock.unlock()
+        guard let library,
               let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
         else {
             setSamplePlayer(nil)
@@ -614,6 +619,25 @@ final class AudioEngine: @unchecked Sendable {
         stateLock.unlock()
         (player.node as? AVAudioMixing)?.volume = volume
         setSamplePlayer(player)
+    }
+
+    /// Whether a note would actually sound right now: the library is decoded
+    /// **and** a graph is running with a player attached.
+    ///
+    /// Exists because the absence of both was invisible. `playSample` is a
+    /// silent no-op until they hold, so a screen could call it on every tap and
+    /// produce nothing, with no error anywhere — which is exactly what shipped
+    /// in the first two modules.
+    var isSamplePlaybackReady: Bool { currentSamplePlayer() != nil }
+
+    /// Whether the bundled library has been decoded. Separate from
+    /// `isSamplePlaybackReady`, which additionally needs a running graph — so a
+    /// test can assert the library was *asked for* without needing a working
+    /// audio device.
+    var isSampleLibraryLoaded: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return sampleLibrary != nil
     }
 
     /// Sounds one position through the output device. No-op until
