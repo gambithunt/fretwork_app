@@ -55,6 +55,8 @@ struct AppShell: View {
                 PentatonicModuleScreen(state: state)
             case .module(.scales):
                 ScalesModuleScreen(state: state)
+            case .module(.harmonizing):
+                HarmonizingModuleScreen(state: state)
             case .module(let module):
                 ModulePlaceholderScreen(module: module)
             }

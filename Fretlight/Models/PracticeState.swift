@@ -80,10 +80,13 @@ extension PracticeState {
         var chords = Chords()
         var pentatonic = Pentatonic()
         var scales = Scales()
+        var harmonizing = Harmonizing()
 
         init() {}
 
-        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads, chords, pentatonic, scales }
+        private enum CodingKeys: String, CodingKey {
+            case notes, intervals, octaves, triads, chords, pentatonic, scales, harmonizing
+        }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -108,6 +111,35 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Scales.self, forKey: .scales)) ?? nil {
                 scales = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Harmonizing.self, forKey: .harmonizing)) ?? nil {
+                harmonizing = stored
+            }
+        }
+
+        /// Harmonizing: the key, and which degree of it is being looked at.
+        struct Harmonizing: Codable, Equatable, Sendable {
+            var keyRootPitchClass: Int = 0
+            var isMajor: Bool = true
+            /// 0...6 — I through vii.
+            var degree: Int = 0
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey { case keyRootPitchClass, isMajor, degree }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .keyRootPitchClass)) ?? nil {
+                    keyRootPitchClass = ((value % 12) + 12) % 12
+                }
+                if let value = (try? container.decodeIfPresent(Bool.self, forKey: .isMajor)) ?? nil {
+                    isMajor = value
+                }
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .degree)) ?? nil {
+                    degree = min(max(value, 0), 6)
+                }
             }
         }
 
