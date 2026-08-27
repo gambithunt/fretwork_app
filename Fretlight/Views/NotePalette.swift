@@ -84,6 +84,12 @@ enum NotePalette {
 
     /// Primary actions. The web's `--fw-accent`.
     static let accent = Color(hex: 0x5dcaa5)
+
+    /// The one background every screen sits on — Listen, every module, and
+    /// the module placeholder all used to spell this out as the same literal
+    /// independently. One token here instead, so "the same dark" stays
+    /// actually the same if it's ever tuned.
+    static let backdrop = Color(red: 0.035, green: 0.045, blue: 0.047)
 }
 
 extension Color {

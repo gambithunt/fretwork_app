@@ -34,9 +34,19 @@ struct FretboardBoardView: View {
     /// would both remove a note and re-report it.
     @State private var longPressFired = false
 
-    /// Matches the detection board's existing motion, so a module board and
-    /// the listening screen feel like the same instrument.
-    private static let motion = Animation.spring(response: 0.32, dampingFraction: 0.7)
+    /// Not `FretworkMotion.gravity`. Measured directly (off-screen capture at
+    /// 33/50/75/100ms into the transition — see the session that produced
+    /// this comment): at `.bouncy`'s duration of 0.5s, a dot's scale had
+    /// already travelled almost the whole way from its start value to full
+    /// size within about 40ms — 2–3 frames. Everything after that was a
+    /// wobble too small to read. That reads as a pop followed by a flicker,
+    /// not a grow — a chip's highlight travels a real distance across a grid
+    /// and doesn't have this problem; a dot growing in place from a small
+    /// starting scale does. `duration` in `spring(duration:bounce:)` sets the
+    /// spring's characteristic timescale directly, so lengthening it slows
+    /// the rise itself, not just the tail — this is longer than `.bouncy`
+    /// specifically so the growth is something the eye can follow.
+    private static let motion = Animation.spring(duration: 0.85, bounce: 0.32)
 
     var body: some View {
         BoardCanvas(frets: frets, tuning: tuning, flipped: flipped, margins: margins, showsLabels: showsLabels)
@@ -49,31 +59,44 @@ struct FretboardBoardView: View {
                         flipped: flipped,
                         margins: margins
                     )
-                    OverlayLayer(overlays: overlays, dots: dots, geometry: geometry)
-                    ForEach(dots) { dot in
-                        let point = geometry.point(dot.position)
-                        // Dots below the board's middle enter one string closer
-                        // to centre and settle outward; dots above do the
-                        // opposite. Measured against the board's own mid-Y
-                        // rather than a fixed string index, so it stays right
-                        // whichever string the flip put on top. Both ends are
-                        // absolute positions, so they are exactly one string
-                        // apart with nothing able to pull them toward centre.
-                        let startY = point.y > geometry.midY
-                            ? point.y - geometry.stringSpacing
-                            : point.y + geometry.stringSpacing
-                        FretboardDotView(dot: dot, pulse: pulses[dot.id] ?? 0)
-                            // Positioned by the transition's identity state,
-                            // not by a separate `.position` on top of it —
-                            // applying both places the dot twice and it lands
-                            // somewhere neither modifier asked for.
-                            .transition(
-                                .modifier(
-                                    active: DotMotionModifier(x: point.x, y: startY, scale: 0.66, opacity: 0),
-                                    identity: DotMotionModifier(x: point.x, y: point.y, scale: 1, opacity: 1)
+                    ZStack {
+                        OverlayLayer(overlays: overlays, dots: dots, geometry: geometry)
+                        ForEach(dots) { dot in
+                            let point = geometry.point(dot.position)
+                            // Scale and opacity only now — no positional
+                            // slide. A dot materialises in place and bounces
+                            // to size, the way a Liquid Glass surface blooms
+                            // in rather than arrives from a direction. With
+                            // dozens of dots capable of appearing at once
+                            // (Notes' board routinely holds 50+), several of
+                            // them sliding in from different directions
+                            // simultaneously was adding visual noise on top
+                            // of what was mostly a rendering-cost problem
+                            // (see `.drawingGroup()` below).
+                            FretboardDotView(dot: dot, pulse: pulses[dot.id] ?? 0)
+                                // Positioned by the transition's identity
+                                // state, not by a separate `.position` on top
+                                // of it — applying both places the dot twice
+                                // and it lands somewhere neither modifier
+                                // asked for.
+                                .transition(
+                                    .modifier(
+                                        active: DotMotionModifier(x: point.x, y: point.y, scale: 0.6, opacity: 0),
+                                        identity: DotMotionModifier(x: point.x, y: point.y, scale: 1, opacity: 1)
+                                    )
                                 )
-                            )
+                        }
                     }
+                    // Every dot draws its own `.shadow()`, and a shadow is a
+                    // real per-layer rasterisation cost — with dozens on
+                    // screen at once, animating any of them meant Core
+                    // Animation re-rasterising dozens of independent blurred
+                    // layers every frame, which is what actually produced
+                    // the stutter no amount of spring-curve tuning could
+                    // fix. `.drawingGroup()` flattens this whole layer to
+                    // one Metal-composited texture, so the GPU redraws it as
+                    // a single unit instead.
+                    .drawingGroup()
                 }
                 .allowsHitTesting(false)
             }
@@ -112,7 +135,18 @@ struct FretboardBoardView: View {
                             .onEnded { _ in
                                 guard let hit = hit(at: lastTouch, geometry: geometry) else { return }
                                 longPressFired = true
-                                onLongPress?(hit)
+                                // A gesture's `onEnded` closure runs with no
+                                // animation transaction active, unlike a
+                                // Button action — the ambient
+                                // `.animation(Self.motion, value: dots)` below
+                                // does not reliably pick up a change made
+                                // from here. Measured directly: without this,
+                                // a tapped-in dot popped straight to full size
+                                // with no grow at all, while the exact same
+                                // mutation wrapped in `withAnimation` (as the
+                                // chip pickers already do) grew smoothly. Both
+                                // callbacks need the same explicit wrap.
+                                withAnimation(Self.motion) { onLongPress?(hit) }
                             }
                     )
                     .simultaneousGesture(
@@ -123,7 +157,7 @@ struct FretboardBoardView: View {
                                     return
                                 }
                                 guard let hit = hit(at: value.location, geometry: geometry) else { return }
-                                onHit?(hit)
+                                withAnimation(Self.motion) { onHit?(hit) }
                             }
                     )
             }
@@ -205,7 +239,7 @@ struct FretboardDotView: View {
             .font(labelFont)
             .foregroundStyle(dot.labelColor)
             .frame(width: diameter, height: diameter)
-            .background(dot.color, in: Circle())
+            .background(glassFill)
             .overlay {
                 if let stroke = dot.stroke {
                     Circle().strokeBorder(stroke, lineWidth: 1)
@@ -225,6 +259,31 @@ struct FretboardDotView: View {
                         .padding(-3)
                 }
             }
+            // A soft glow instead of the old hard white edge — the dot's own
+            // colour bleeding a few points into the neck around it is what
+            // makes it read as lit rather than as a flat sticker. A fixed
+            // radius rather than one keyed to `pulse`: animating a shadow's
+            // radius every frame is real rendering cost, and it bought
+            // nothing here since the dot's own swelling diameter already
+            // carries the pulse.
+            .shadow(color: dot.color.opacity(0.55 * dot.alpha), radius: 6)
             .opacity(dot.alpha)
+            // Everything above this line reacts to `pulse`, which used to
+            // change with no animation in scope — a played note's dot would
+            // pop to its grown size and pop back rather than swell and
+            // settle. Calmer and closer to critical damping than the
+            // fretboard's own arrival spring, since this one has to read as
+            // a soft breath rather than a bounce.
+            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: pulse)
+    }
+
+    /// Flat and translucent — a single, uniform fill with no radial shading
+    /// and no glint standing in for a light source. A gradient plus a
+    /// top-left highlight is a specular effect (the same thing the chip
+    /// fill's beveled look turned out to be), and the opposite of what
+    /// should read as a light marker resting on the neck: something you can
+    /// still faintly see the fret grid through, not a lit glass bead.
+    private var glassFill: some View {
+        Circle().fill(dot.color.opacity(0.82))
     }
 }

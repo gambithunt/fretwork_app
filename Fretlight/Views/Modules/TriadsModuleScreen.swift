@@ -29,47 +29,54 @@ struct TriadsModuleScreen: View {
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: model.tuning,
-                flipped: state.isFretboardFlipped,
-                pulses: model.pulses
-            )
-            .frame(minHeight: 260)
+            // Shapes mode moves along the neck with Lower/Higher; Paths
+            // walks the diatonic path with Play/Loop instead, so the edge
+            // nav only appears in the mode it actually acts on.
+            FretboardEdgeNav(
+                onPrevious: model.isPathMode ? nil : { model.movePosition(by: -1) },
+                onNext: model.isPathMode ? nil : { model.movePosition(by: 1) }
+            ) {
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: model.highestFret,
+                    tuning: model.tuning,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses
+                )
+                .frame(minHeight: 260)
+            }
         } readout: {
             readout(model)
         }
     }
 
     private func controls(_ model: TriadsModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("Exercise", selection: Binding(
-                get: { model.isPathMode },
-                set: { model.setPathMode($0) }
-            )) {
-                Text("Shapes").tag(false)
-                Text("Paths").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .fixedSize()
+        VStack(alignment: .leading, spacing: 18) {
+            PitchClassPicker(
+                title: model.isPathMode ? "KEY" : "ROOT",
+                selection: model.isPathMode ? model.pathKeyRoot : model.rootPitchClass,
+                onSelect: model.selectRoot
+            )
+            .moduleNotesCard()
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(model.isPathMode ? "KEY" : "ROOT")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        rootButton(model, pitchClass: PitchClass(value))
-                    }
+            VStack(alignment: .leading, spacing: 10) {
+                Picker("Exercise", selection: Binding(
+                    get: { model.isPathMode },
+                    set: { model.setPathMode($0) }
+                )) {
+                    Text("Shapes").tag(false)
+                    Text("Paths").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+
+                if model.isPathMode {
+                    pathControls(model)
+                } else {
+                    shapeControls(model)
                 }
             }
-
-            if model.isPathMode {
-                pathControls(model)
-            } else {
-                shapeControls(model)
-            }
+            .moduleOptionsCard()
         }
     }
 
@@ -122,8 +129,6 @@ struct TriadsModuleScreen: View {
             }
 
             HStack(spacing: 12) {
-                Button { model.movePosition(by: -1) } label: { Label("Lower", systemImage: "chevron.left") }
-                Button { model.movePosition(by: 1) } label: { Label("Higher", systemImage: "chevron.right") }
                 Button {
                     model.playVoicing()
                 } label: {
@@ -196,23 +201,6 @@ struct TriadsModuleScreen: View {
         }
     }
 
-    private func rootButton(_ model: TriadsModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = (model.isPathMode ? model.pathKeyRoot : model.rootPitchClass) == pitchClass
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.selectRoot(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
 
     private func readout(_ model: TriadsModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {

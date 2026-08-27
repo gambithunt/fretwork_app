@@ -4,6 +4,7 @@ import SwiftUI
 struct NoteAssociationModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: NoteAssociationModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -28,82 +29,93 @@ struct NoteAssociationModuleScreen: View {
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: model.tuning,
-                flipped: state.isFretboardFlipped,
-                pulses: model.pulses
-            )
-            .frame(minHeight: 260)
+            VStack(alignment: .trailing, spacing: 8) {
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: showsFullNeck ? 22 : model.highestFret,
+                    tuning: model.tuning,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses
+                )
+                .frame(minHeight: 260)
+            }
         } readout: {
             readout(model)
         }
     }
 
     private func controls(_ model: NoteAssociationModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("KEY")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        rootButton(model, pitchClass: PitchClass(value))
+        VStack(alignment: .leading, spacing: 18) {
+            PitchClassPicker(title: "KEY", selection: model.keyRoot, onSelect: model.selectKeyRoot)
+                .moduleNotesCard()
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Picker("Mode", selection: Binding(
+                        get: { model.isMajor },
+                        set: { model.selectMajor($0) }
+                    )) {
+                        Text("Major").tag(true)
+                        Text("Minor").tag(false)
+                    }
+                    .fixedSize()
+
+                    Picker("Labels", selection: Binding(
+                        get: { model.labelMode },
+                        set: { model.setLabelMode($0) }
+                    )) {
+                        Text("Notes").tag(NoteAssociationModuleModel.LabelMode.notes)
+                        Text("Degrees").tag(NoteAssociationModuleModel.LabelMode.degrees)
+                    }
+                    .fixedSize()
+                }
+
+                // The layer switches. Seeing the scale alone, or the chord
+                // tones alone, is a different exercise from seeing all three
+                // at once.
+                HStack(spacing: 16) {
+                    Toggle("Chord tones", isOn: Binding(
+                        get: { model.showsChordTones },
+                        set: { model.setLayer(chordTones: $0) }
+                    ))
+                    Toggle("Pentatonic", isOn: Binding(
+                        get: { model.showsPentatonic },
+                        set: { model.setLayer(pentatonic: $0) }
+                    ))
+                    Toggle("Rest of scale", isOn: Binding(
+                        get: { model.showsScale },
+                        set: { model.setLayer(scale: $0) }
+                    ))
+                }
+                .toggleStyle(.checkbox)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("CHORD")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    ChipPicker(
+                        values: Array(model.chords.indices),
+                        selection: model.focusedDegree,
+                        tint: { _ in NotePalette.accent },
+                        onSelect: model.selectDegree,
+                        isEmphasized: { model.playingDegree == $0 },
+                        accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" }
+                    ) { index, isActive in
+                        VStack(spacing: 2) {
+                            Text(model.chords[index].roman)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(isActive ? .black : .primary)
+                            Text(model.chords[index].name)
+                                .font(.caption2)
+                                .foregroundStyle(isActive ? .black.opacity(0.65) : .secondary)
+                        }
                     }
                 }
+
+                progressionControls(model)
             }
-
-            HStack(spacing: 12) {
-                Picker("Mode", selection: Binding(
-                    get: { model.isMajor },
-                    set: { model.selectMajor($0) }
-                )) {
-                    Text("Major").tag(true)
-                    Text("Minor").tag(false)
-                }
-                .fixedSize()
-
-                Picker("Labels", selection: Binding(
-                    get: { model.labelMode },
-                    set: { model.setLabelMode($0) }
-                )) {
-                    Text("Notes").tag(NoteAssociationModuleModel.LabelMode.notes)
-                    Text("Degrees").tag(NoteAssociationModuleModel.LabelMode.degrees)
-                }
-                .fixedSize()
-            }
-
-            // The layer switches. Seeing the scale alone, or the chord tones
-            // alone, is a different exercise from seeing all three at once.
-            HStack(spacing: 16) {
-                Toggle("Chord tones", isOn: Binding(
-                    get: { model.showsChordTones },
-                    set: { model.setLayer(chordTones: $0) }
-                ))
-                Toggle("Pentatonic", isOn: Binding(
-                    get: { model.showsPentatonic },
-                    set: { model.setLayer(pentatonic: $0) }
-                ))
-                Toggle("Rest of scale", isOn: Binding(
-                    get: { model.showsScale },
-                    set: { model.setLayer(scale: $0) }
-                ))
-            }
-            .toggleStyle(.checkbox)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("CHORD")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    ForEach(Array(model.chords.enumerated()), id: \.offset) { index, chord in
-                        degreeButton(model, index: index, chord: chord)
-                    }
-                }
-            }
-
-            progressionControls(model)
+            .moduleOptionsCard()
         }
     }
 
@@ -146,45 +158,6 @@ struct NoteAssociationModuleScreen: View {
         }
     }
 
-    private func degreeButton(_ model: NoteAssociationModuleModel, index: Int, chord: DiatonicChord) -> some View {
-        let isActive = model.focusedDegree == index
-        let isPlaying = model.playingDegree == index
-        return Button {
-            model.selectDegree(index)
-        } label: {
-            VStack(spacing: 2) {
-                Text(chord.roman).font(.callout.weight(.semibold))
-                Text(chord.name).font(.caption2).foregroundStyle(.secondary)
-            }
-            .frame(minWidth: 58)
-            .padding(.vertical, 6)
-            .background(
-                isActive ? NotePalette.accent.opacity(isPlaying ? 0.45 : 0.28) : Color.white.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 7)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(chord.roman), \(chord.name)")
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-
-    private func rootButton(_ model: NoteAssociationModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = model.keyRoot == pitchClass
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.selectKeyRoot(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
 
     private func readout(_ model: NoteAssociationModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {

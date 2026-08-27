@@ -7,6 +7,7 @@ import SwiftUI
 struct NotesModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: NotesModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -19,6 +20,7 @@ struct NotesModuleScreen: View {
         .onAppear {
             if model == nil { model = state.makeNotesModuleModel() }
             model?.tuning = state.tuning
+            model?.highestFret = showsFullNeck ? 22 : LearningModule.notes.highestFret
             // A graph rebuild replaces the player, so readiness is re-checked
             // on every appearance rather than trusted from last time.
             state.refreshSamplePlaybackReadiness()
@@ -28,6 +30,9 @@ struct NotesModuleScreen: View {
             // still sounding belongs to the old tuning.
             model?.stop()
             model?.tuning = tuning
+        }
+        .onChange(of: showsFullNeck) { _, expanded in
+            model?.highestFret = expanded ? 22 : LearningModule.notes.highestFret
         }
         // Leaving the screen must silence it. Without this a run started here
         // keeps playing over whatever the player navigates to — one of the
@@ -42,45 +47,62 @@ struct NotesModuleScreen: View {
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: model.tuning,
-                flipped: state.isFretboardFlipped,
-                pulses: model.pulses,
-                // A hit is either an existing dot or an empty cell; both carry
-                // a position and the module treats them the same way — tapping
-                // a dot replays it, tapping a cell places one.
-                onHit: { hit in
-                    let position = Self.position(of: hit)
-                    model.tapCell(string: position.string, fret: position.fret)
-                },
-                onLongPress: { hit in
-                    let position = Self.position(of: hit)
-                    model.longPressCell(string: position.string, fret: position.fret)
-                }
-            )
-            .frame(minHeight: 260)
+            VStack(alignment: .trailing, spacing: 8) {
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: LearningModule.notes.highestFret)
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: model.highestFret,
+                    tuning: model.tuning,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses,
+                    // A hit is either an existing dot or an empty cell; both
+                    // carry a position and the module treats them the same
+                    // way — tapping a dot replays it, tapping a cell places
+                    // one.
+                    onHit: { hit in
+                        let position = Self.position(of: hit)
+                        model.tapCell(string: position.string, fret: position.fret)
+                    },
+                    onLongPress: { hit in
+                        let position = Self.position(of: hit)
+                        model.longPressCell(string: position.string, fret: position.fret)
+                    }
+                )
+                .frame(minHeight: 260)
+            }
         } readout: {
             readout(model)
         }
     }
 
+    private static let allPitchClasses = (0..<12).map(PitchClass.init)
+
     private func controls(_ model: NotesModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("NOTES — TAP TO TOGGLE EVERY POSITION")
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                // A wrapping row of twelve, each in its own colour. Not a
-                // Picker: these are twelve independent toggles reflecting the
-                // board, not one selection.
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        noteButton(model, pitchClass: PitchClass(value))
-                    }
+                // Twelve independent toggles reflecting the board, not one
+                // selection — `ToggleChipGrid`, not `PitchClassPicker`. Menu
+                // taps stay silent; only a tap on the fretboard itself
+                // (`tapCell`, below) sounds anything.
+                ToggleChipGrid(
+                    values: Self.allPitchClasses,
+                    isActive: model.isNoteActive,
+                    tint: NotePalette.color(for:),
+                    onTap: model.toggleNote,
+                    help: { pitchClass in
+                        pitchClass.enharmonicAlias.map { "\(pitchClass.name()) = \($0)" } ?? pitchClass.name()
+                    },
+                    accessibilityValue: { _, active in active ? "every position placed" : "not fully placed" }
+                ) { pitchClass, isActive in
+                    Text(pitchClass.name())
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(isActive ? Color.black : NotePalette.color(for: pitchClass))
                 }
             }
+            .moduleNotesCard()
 
             HStack(spacing: 12) {
                 Button {
@@ -96,26 +118,8 @@ struct NotesModuleScreen: View {
                 Button("Clear all") { model.clearAll() }
                     .disabled(model.placed.isEmpty)
             }
+            .moduleOptionsCard()
         }
-    }
-
-    private func noteButton(_ model: NotesModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = model.isNoteActive(pitchClass)
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.toggleNote(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .help(pitchClass.enharmonicAlias.map { "\(pitchClass.name()) = \($0)" } ?? pitchClass.name())
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityValue(isActive ? "every position placed" : "not fully placed")
     }
 
     private func readout(_ model: NotesModuleModel) -> some View {

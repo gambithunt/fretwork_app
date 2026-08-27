@@ -35,8 +35,7 @@ struct TunerPanel: View {
             secondaryBlock
         }
         .padding(.horizontal, 32).padding(.vertical, 22)
-        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.06), lineWidth: 1))
+        .glassCard()
     }
 
     /// What identifies "the current reading" for the spring below — a new

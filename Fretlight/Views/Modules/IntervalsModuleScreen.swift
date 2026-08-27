@@ -6,6 +6,7 @@ import SwiftUI
 struct IntervalsModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: IntervalsModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -30,37 +31,33 @@ struct IntervalsModuleScreen: View {
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: model.tuning,
-                flipped: state.isFretboardFlipped,
-                pulses: model.pulses,
-                // Tapping a root re-anchors the same interval under a different
-                // finger, which is the module's main interaction.
-                onHit: { hit in
-                    let position = Self.position(of: hit)
-                    model.selectAnchor(string: position.string, fret: position.fret)
-                }
-            )
-            .frame(minHeight: 260)
+            VStack(alignment: .trailing, spacing: 8) {
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: showsFullNeck ? 22 : model.highestFret,
+                    tuning: model.tuning,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses,
+                    // Tapping a root re-anchors the same interval under a
+                    // different finger, which is the module's main
+                    // interaction.
+                    onHit: { hit in
+                        let position = Self.position(of: hit)
+                        model.selectAnchor(string: position.string, fret: position.fret)
+                    }
+                )
+                .frame(minHeight: 260)
+            }
         } readout: {
             readout(model)
         }
     }
 
     private func controls(_ model: IntervalsModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ROOT")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        rootButton(model, pitchClass: PitchClass(value))
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
+                .moduleNotesCard()
 
             HStack(spacing: 16) {
                 Picker("Interval", selection: Binding(
@@ -88,25 +85,8 @@ struct IntervalsModuleScreen: View {
 
                 Button("Stop") { model.stop() }
             }
+            .moduleOptionsCard()
         }
-    }
-
-    private func rootButton(_ model: IntervalsModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = model.rootPitchClass == pitchClass
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.selectRoot(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
     private func readout(_ model: IntervalsModuleModel) -> some View {

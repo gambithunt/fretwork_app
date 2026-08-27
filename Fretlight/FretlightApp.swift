@@ -49,6 +49,15 @@ struct FretworkApp: App {
                 // than raising them until it passes.
                 .frame(minWidth: 950, minHeight: 800)
         }
+        // `.automatic` (the default) keeps re-deriving the window's *ideal*
+        // size from whatever's on screen, and the Listen screen's ideal size
+        // and a module screen's `ScrollView` ideal size are not the same
+        // number — so the very first navigation away from Listen nudged the
+        // window a few points, before any manual resize had pinned it.
+        // `.contentMinSize` makes the declared `minWidth`/`minHeight` above
+        // the window's one fixed baseline instead, so switching screens can
+        // no longer re-propose a size.
+        .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)

@@ -165,6 +165,12 @@ final class IntervalsModuleModel {
         stop()
         anchorKey = Self.key(resolved.root)
         persist()
+        // A tap on the fretboard itself should always be heard — the root
+        // menu above deliberately stays silent, but this is the direct
+        // "touch the instrument" gesture.
+        let root = FretPosition(string: resolved.root.string, fret: resolved.root.fret)
+        play(root)
+        pulse("root-\(Self.key(resolved.root))")
     }
 
     /// After a change of root, interval or tuning the saved anchor may not

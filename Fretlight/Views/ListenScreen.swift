@@ -64,7 +64,7 @@ struct ListenScreen: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.035, green: 0.045, blue: 0.047))
+        .background(NotePalette.backdrop)
         .preferredColorScheme(.dark)
     }
 

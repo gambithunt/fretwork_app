@@ -33,8 +33,7 @@ struct InputLevelPanel: View {
         }
         .padding(.horizontal, 22).padding(.vertical, 15)
         .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.06), lineWidth: 1))
+        .glassCard(cornerRadius: 14, fill: 0.035)
         .onChange(of: level) { _, new in
             let now = Self.normalized(new)
             // Jump straight to a new peak, but only ever ease back down —

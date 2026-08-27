@@ -163,6 +163,12 @@ final class OctavesModuleModel {
         stop()
         anchorKey = Self.key(resolved.root)
         persist()
+        // A tap on the fretboard itself should always be heard — the root
+        // menu above deliberately stays silent, but this is the direct
+        // "touch the instrument" gesture.
+        let root = FretPosition(string: resolved.root.string, fret: resolved.root.fret)
+        play(root)
+        pulse("octave-root-\(Self.key(resolved.root))")
     }
 
     /// Step to the next or previous shape along the neck, wrapping. The web

@@ -4,6 +4,7 @@ import SwiftUI
 struct ChordsModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: ChordsModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -28,90 +29,71 @@ struct ChordsModuleScreen: View {
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: Tunings.standard,
-                flipped: state.isFretboardFlipped,
-                pulses: model.pulses
-            )
-            .frame(minHeight: 260)
+            VStack(alignment: .trailing, spacing: 8) {
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
+                FretboardEdgeNav(
+                    onPrevious: model.voicings.count < 2 ? nil : { model.movePosition(by: -1) },
+                    onNext: model.voicings.count < 2 ? nil : { model.movePosition(by: 1) }
+                ) {
+                    FretboardBoardView(
+                        dots: model.dots,
+                        frets: showsFullNeck ? 22 : model.highestFret,
+                        tuning: Tunings.standard,
+                        flipped: state.isFretboardFlipped,
+                        pulses: model.pulses
+                    )
+                    .frame(minHeight: 260)
+                }
+            }
         } readout: {
             readout(model)
         }
     }
 
     private func controls(_ model: ChordsModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ROOT")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        rootButton(model, pitchClass: PitchClass(value))
+        VStack(alignment: .leading, spacing: 18) {
+            PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
+                .moduleNotesCard()
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Picker("Family", selection: Binding(
+                        get: { model.family },
+                        set: { model.selectFamily($0) }
+                    )) {
+                        ForEach(ChordsModuleModel.families, id: \.self) { family in
+                            Text(ChordsModuleModel.label(for: family)).tag(family)
+                        }
                     }
+                    .fixedSize()
+
+                    Picker("Chord", selection: Binding(
+                        get: { model.formula.id },
+                        set: { id in
+                            if let formula = ChordFormulas.formula(id: id) { model.selectFormula(formula) }
+                        }
+                    )) {
+                        ForEach(model.formulasInFamily, id: \.id) { formula in
+                            Text(formula.label.isEmpty ? "Major" : formula.label).tag(formula.id)
+                        }
+                    }
+                    .fixedSize()
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        model.strum()
+                    } label: {
+                        Label("Strum", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(NotePalette.accent)
+                    .disabled(model.currentVoicing == nil)
+                    Button("Stop") { model.stop() }
                 }
             }
-
-            HStack(spacing: 12) {
-                Picker("Family", selection: Binding(
-                    get: { model.family },
-                    set: { model.selectFamily($0) }
-                )) {
-                    ForEach(ChordsModuleModel.families, id: \.self) { family in
-                        Text(ChordsModuleModel.label(for: family)).tag(family)
-                    }
-                }
-                .fixedSize()
-
-                Picker("Chord", selection: Binding(
-                    get: { model.formula.id },
-                    set: { id in
-                        if let formula = ChordFormulas.formula(id: id) { model.selectFormula(formula) }
-                    }
-                )) {
-                    ForEach(model.formulasInFamily, id: \.id) { formula in
-                        Text(formula.label.isEmpty ? "Major" : formula.label).tag(formula.id)
-                    }
-                }
-                .fixedSize()
-            }
-
-            HStack(spacing: 12) {
-                Button { model.movePosition(by: -1) } label: { Label("Lower", systemImage: "chevron.left") }
-                    .disabled(model.voicings.count < 2)
-                Button { model.movePosition(by: 1) } label: { Label("Higher", systemImage: "chevron.right") }
-                    .disabled(model.voicings.count < 2)
-                Button {
-                    model.strum()
-                } label: {
-                    Label("Strum", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.currentVoicing == nil)
-                Button("Stop") { model.stop() }
-            }
+            .moduleOptionsCard()
         }
-    }
-
-    private func rootButton(_ model: ChordsModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = model.rootPitchClass == pitchClass
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.selectRoot(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
     private func readout(_ model: ChordsModuleModel) -> some View {

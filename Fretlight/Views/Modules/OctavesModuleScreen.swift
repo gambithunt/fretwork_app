@@ -4,6 +4,7 @@ import SwiftUI
 struct OctavesModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: OctavesModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -31,52 +32,46 @@ struct OctavesModuleScreen: View {
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: model.tuning,
-                flipped: state.isFretboardFlipped,
-                pulses: model.pulses,
-                // One board, two meanings: outside a round a tap moves the
-                // shape; inside one it is the answer.
-                onHit: { hit in
-                    let position = Self.position(of: hit)
-                    if model.challenge.isAcceptingAnswers {
-                        model.answerCell(string: position.string, fret: position.fret)
-                    } else {
-                        model.selectAnchor(string: position.string, fret: position.fret)
-                    }
+            VStack(alignment: .trailing, spacing: 8) {
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
+                // Moving the shape up or down the neck is this module's
+                // main non-root interaction, so it sits at the neck's own
+                // ends now rather than as two more buttons in the row above.
+                FretboardEdgeNav(
+                    onPrevious: model.challenge.isRunning ? nil : { model.moveAnchor(by: -1) },
+                    onNext: model.challenge.isRunning ? nil : { model.moveAnchor(by: 1) }
+                ) {
+                    FretboardBoardView(
+                        dots: model.dots,
+                        frets: showsFullNeck ? 22 : model.highestFret,
+                        tuning: model.tuning,
+                        flipped: state.isFretboardFlipped,
+                        pulses: model.pulses,
+                        // One board, two meanings: outside a round a tap
+                        // moves the shape; inside one it is the answer.
+                        onHit: { hit in
+                            let position = Self.position(of: hit)
+                            if model.challenge.isAcceptingAnswers {
+                                model.answerCell(string: position.string, fret: position.fret)
+                            } else {
+                                model.selectAnchor(string: position.string, fret: position.fret)
+                            }
+                        }
+                    )
+                    .frame(minHeight: 260)
                 }
-            )
-            .frame(minHeight: 260)
+            }
         } readout: {
             readout(model)
         }
     }
 
     private func controls(_ model: OctavesModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ROOT")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        rootButton(model, pitchClass: PitchClass(value))
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
+                .moduleNotesCard()
 
             HStack(spacing: 12) {
-                Button { model.moveAnchor(by: -1) } label: {
-                    Label("Lower", systemImage: "chevron.left")
-                }
-                .disabled(model.challenge.isRunning)
-                Button { model.moveAnchor(by: 1) } label: {
-                    Label("Higher", systemImage: "chevron.right")
-                }
-                .disabled(model.challenge.isRunning)
-
                 Button {
                     model.hearOctave()
                 } label: {
@@ -89,6 +84,7 @@ struct OctavesModuleScreen: View {
                 Spacer()
                 challengeControls(model)
             }
+            .moduleOptionsCard()
         }
     }
 
@@ -134,23 +130,6 @@ struct OctavesModuleScreen: View {
         }
     }
 
-    private func rootButton(_ model: OctavesModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = model.rootPitchClass == pitchClass
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.selectRoot(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
 
     private func readout(_ model: OctavesModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {

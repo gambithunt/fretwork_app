@@ -27,15 +27,26 @@ struct ModuleLayout<Controls: View, Stage: View, Readout: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                // `controls` now draws its own cards internally — a fixed-size
+                // one around the module's note/key picker (`.moduleNotesCard()`)
+                // and a second below it for everything else
+                // (`.moduleOptionsCard()`), so the note picker holds the same
+                // position and size across every module rather than resizing
+                // around whatever secondary controls that module happens to
+                // have. `readout` still gets one card of its own — the stage
+                // keeps its own look (`BoardCanvas` already draws its
+                // instrument-body card).
                 controls
                 stage
                 readout
+                    .padding(18)
+                    .glassCard()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(red: 0.035, green: 0.045, blue: 0.047))
+        .background(NotePalette.backdrop)
         .preferredColorScheme(.dark)
     }
 
