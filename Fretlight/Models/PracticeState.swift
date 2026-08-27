@@ -77,10 +77,11 @@ extension PracticeState {
         var intervals = Intervals()
         var octaves = Octaves()
         var triads = Triads()
+        var chords = Chords()
 
         init() {}
 
-        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads }
+        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads, chords }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -96,6 +97,40 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Triads.self, forKey: .triads)) ?? nil {
                 triads = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Chords.self, forKey: .chords)) ?? nil {
+                chords = stored
+            }
+        }
+
+        /// Chords: root, which formula, and which voicing along the neck.
+        struct Chords: Codable, Equatable, Sendable {
+            var rootPitchClass: Int = 0
+            /// A formula `id`, not an index — the catalogue has sixteen and may
+            /// gain more.
+            var formulaID: String = "maj"
+            /// A voicing's own id rather than an index into the list, because
+            /// the list changes length with the formula and an index would
+            /// silently land on a different shape.
+            var positionID: String = ""
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey { case rootPitchClass, formulaID, positionID }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .rootPitchClass)) ?? nil {
+                    rootPitchClass = ((value % 12) + 12) % 12
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .formulaID)) ?? nil,
+                   ChordFormulas.formula(id: value) != nil {
+                    formulaID = value
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .positionID)) ?? nil {
+                    positionID = value
+                }
             }
         }
 

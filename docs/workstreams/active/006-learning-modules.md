@@ -349,7 +349,33 @@ hardware-dependent test in the default run is flaky by construction, and a flaky
 test teaches people to ignore red. The bug it was written for stays covered
 deterministically by `SamplePlaybackWiringTests`.
 
+### Phase 5 — Chords
+
+The selector is two levels — family (core, sevenths, colour, extensions) then
+formula — because sixteen formulas in one flat list is a wall.
+
+**Muted strings are content, not absence.** A voicing's `frets` carries `nil`
+for a string the conventional shape does not sound. A diagram that silently
+omitted them would teach a chord you cannot actually strum, so they are
+reported, named on screen, and skipped by the strum.
+
+**Standard tuning only, and the screen says so.** `ChordVoicings` holds fixed
+fret shapes, and `CLAUDE.md`'s rule is that a generator whose output is fixed
+fret offsets must not accept a `Tuning` it cannot honour — those frets do not
+transpose, they detune. Since tuning is now a global setting, the module shows a
+notice when a non-standard tuning is selected rather than drawing a shape that
+is quietly wrong.
+
+The saved position is a voicing's own **id**, never an index: the list changes
+length with the formula, so an index would silently land on a different shape.
+Changing root or formula snaps to the shape nearest the nut.
+
+16 tests. The two that carry the weight run every formula against every root and
+assert that each sounded string carries a degree the formula actually contains,
+and — from the other direction — that every dot's pitch class is one of the
+chord's. A `?` label would mean the shape contains a note the chord does not.
+
 ### Status
 
-Phases 5–10 (Chords, Pentatonic, Scales, Harmonizing, Note association, Circle
-of fifths) and Phase 11's final gates remain.
+Phases 6–10 (Pentatonic, Scales, Harmonizing, Note association, Circle of
+fifths) and Phase 11's final gates remain.

@@ -49,6 +49,8 @@ struct AppShell: View {
                 OctavesModuleScreen(state: state)
             case .module(.triads):
                 TriadsModuleScreen(state: state)
+            case .module(.chords):
+                ChordsModuleScreen(state: state)
             case .module(let module):
                 ModulePlaceholderScreen(module: module)
             }

@@ -412,6 +412,16 @@ final class AppState {
         )
     }
 
+    func makeChordsModuleModel() -> ChordsModuleModel {
+        ChordsModuleModel(
+            store: practiceState,
+            play: { [weak self] position in
+                guard let self else { return }
+                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+            }
+        )
+    }
+
     func refreshDevices() {
         applyDeviceLists(inputs: AudioDeviceEnumerator.inputDevices(), outputs: AudioDeviceEnumerator.outputDevices())
     }
