@@ -406,7 +406,42 @@ the generator.
 unreachable from any position), and that A minor and C major pentatonic come out
 as the same five notes.
 
+### Phase 7 — Scales
+
+One-octave major and natural-minor shapes: seven degrees plus the root again on
+top, which is what makes a run sound finished rather than stopped. Labels switch
+between note names (for learning the neck) and degrees (for learning the scale),
+and a run goes up or up-and-back-down.
+
+**This generator does take a tuning**, unlike Pentatonic and Chords.
+`ScaleShapes.oneOctaveScale` derives every note from MIDI rather than from fixed
+fret offsets, so it transposes honestly instead of detuning — which is why the
+two have different signatures, and a test asserts each note's pitch really does
+come from the tuning in use.
+
+`GuidedPresentation` ports `guided-presentation.ts` and is now shared with
+Pentatonic: mid-run the note to play carries its **fretting finger** instead of
+its label, the next note is visible but recessed, and everything else dims to
+context. The emphasis *is* the instruction. It applies only while playing —
+during the count-in the whole shape stays legible, which is what the count-in is
+for.
+
+**A bug caught while wiring that up.** The decorator was given the *shape* while
+the snapshot's index counts positions in the *run*. In up-and-down mode the run
+is nearly twice as long, so on the way back down it would have emphasised the
+wrong note, or none at all once the index ran past the shape's end. It now takes
+the run, and a test walks a descending index to prove exactly one note is
+emphasised and that it is the right one.
+
+Relabelling deliberately does **not** stop a run — it is a change of view, not
+of what is being practised — while changing root, quality, direction or tuning
+does.
+
+17 tests, including that minor really is major with a flattened 3rd, 6th and
+7th, and that an up-and-down run does not sound the top note twice (the thing
+that makes a practice run sound like a stumble).
+
 ### Status
 
-Phases 7–10 (Scales, Harmonizing, Note association, Circle of fifths) and Phase
-11's final gates remain.
+Phases 8–10 (Harmonizing, Note association, Circle of fifths) and Phase 11's
+final gates remain.

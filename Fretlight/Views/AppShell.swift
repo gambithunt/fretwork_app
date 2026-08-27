@@ -53,6 +53,8 @@ struct AppShell: View {
                 ChordsModuleScreen(state: state)
             case .module(.pentatonic):
                 PentatonicModuleScreen(state: state)
+            case .module(.scales):
+                ScalesModuleScreen(state: state)
             case .module(let module):
                 ModulePlaceholderScreen(module: module)
             }

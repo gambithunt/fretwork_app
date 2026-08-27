@@ -79,10 +79,11 @@ extension PracticeState {
         var triads = Triads()
         var chords = Chords()
         var pentatonic = Pentatonic()
+        var scales = Scales()
 
         init() {}
 
-        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads, chords, pentatonic }
+        private enum CodingKeys: String, CodingKey { case notes, intervals, octaves, triads, chords, pentatonic, scales }
 
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -104,6 +105,47 @@ extension PracticeState {
             }
             if let stored = (try? container.decodeIfPresent(Pentatonic.self, forKey: .pentatonic)) ?? nil {
                 pentatonic = stored
+            }
+            if let stored = (try? container.decodeIfPresent(Scales.self, forKey: .scales)) ?? nil {
+                scales = stored
+            }
+        }
+
+        /// Scales: root, which scale, how the dots are labelled, and whether a
+        /// run goes up or up-and-back-down.
+        struct Scales: Codable, Equatable, Sendable {
+            var rootPitchClass: Int = 0
+            /// `major` or `naturalMinor`.
+            var quality: String = OneOctaveScaleQuality.major.rawValue
+            /// `notes` or `degrees` — whether a dot shows what the note *is* or
+            /// what it *does*. Both are worth practising and neither is a
+            /// default the other can stand in for.
+            var labelMode: String = "notes"
+            /// `ascending` or `upDown`.
+            var direction: String = "ascending"
+
+            init() {}
+
+            private enum CodingKeys: String, CodingKey { case rootPitchClass, quality, labelMode, direction }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                self.init()
+                if let value = (try? container.decodeIfPresent(Int.self, forKey: .rootPitchClass)) ?? nil {
+                    rootPitchClass = ((value % 12) + 12) % 12
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .quality)) ?? nil,
+                   OneOctaveScaleQuality(rawValue: value) != nil {
+                    quality = value
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .labelMode)) ?? nil,
+                   ["notes", "degrees"].contains(value) {
+                    labelMode = value
+                }
+                if let value = (try? container.decodeIfPresent(String.self, forKey: .direction)) ?? nil,
+                   ["ascending", "upDown"].contains(value) {
+                    direction = value
+                }
             }
         }
 

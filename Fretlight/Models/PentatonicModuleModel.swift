@@ -102,19 +102,22 @@ final class PentatonicModuleModel {
             }
         }
 
-        for step in box {
+        let focus = box.map { step -> FretboardDot in
             let isRoot = step.pitchClass == rootPitchClass
-            let isCurrent = currentStep.map { $0.id == step.id } ?? false
-            dots.append(FretboardDot(
+            return FretboardDot(
                 id: step.id,
                 position: FretPosition(string: step.string, fret: step.fret),
                 label: step.degree,
                 color: NotePalette.color(for: isRoot ? .root : .pentatonic),
-                ring: isCurrent ? .white : (isRoot ? .white : nil),
-                ringAlpha: isCurrent ? 1 : 0.5,
+                ring: isRoot ? .white : nil,
+                ringAlpha: 0.5,
                 outline: true
-            ))
+            )
         }
+        // The same emphasis every guided module uses: the note to play now
+        // carries its fretting finger, the next one is visible but recessed,
+        // and the rest dim to context.
+        dots.append(contentsOf: GuidedPresentation.decorate(focus, steps: box, snapshot: guidedSnapshot))
         return dots
     }
 
