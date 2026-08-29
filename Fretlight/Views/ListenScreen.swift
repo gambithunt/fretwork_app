@@ -15,7 +15,13 @@ struct ListenScreen: View {
             header
             if let error = state.errorMessage {
                 audioErrorBanner(error)
-            } else if state.isReconnecting {
+            } else if state.isReconnecting, state.hasStartedAudio {
+                // Only for a genuine mid-session reconnect. A slow *first*
+                // build reaches this same flag through the build watchdog, and
+                // inserting a row there pushes the whole screen down and back
+                // up a beat later, on a launch where nothing has gone wrong.
+                // The status pill in `brand` carries that case instead — it
+                // reserves its width, so it changes without moving anything.
                 reconnectingBanner
             } else if let hint = state.unclearSignalMessage {
                 signalHintBanner(hint)
@@ -108,9 +114,38 @@ struct ListenScreen: View {
                 .scaledToFit()
                 .frame(height: HeaderMetrics.blockHeight)
                 .accessibilityLabel("Fretwork")
-            Label(state.errorMessage == nil && !state.isReconnecting ? "Listening" : "Reconnecting", systemImage: "circle.fill")
-                .font(.callout).foregroundStyle(state.errorMessage == nil && !state.isReconnecting ? .green : .orange)
+            statusPill
         }
+    }
+
+    /// Three states, not two. "Starting…" is the honest one for the window
+    /// between the app appearing and the graph coming up — `ContentView` waits
+    /// 100ms before starting the engine at all, and a USB interface can take a
+    /// good deal longer than that to bind — where this used to claim
+    /// "Listening" before anything was, or "Reconnecting" to a device it had
+    /// never reached.
+    ///
+    /// Laid out against "Reconnecting", the widest of the three, with the live
+    /// label overlaid: the pill sits to the left of the whole signal-path row,
+    /// so a word changing width here slides every control in the header. That
+    /// was already true of the old two-state label; reserving the space is what
+    /// makes it stop being true.
+    private var statusPill: some View {
+        let (text, tint): (String, Color) = {
+            if state.errorMessage != nil || state.isReconnecting {
+                return (state.hasStartedAudio ? "Reconnecting" : "Starting…", .orange)
+            }
+            return state.hasStartedAudio ? ("Listening", .green) : ("Starting…", .orange)
+        }()
+        return Label("Reconnecting", systemImage: "circle.fill")
+            .font(.callout)
+            .hidden()
+            .overlay(alignment: .leading) {
+                Label(text, systemImage: "circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(tint)
+                    .fixedSize()
+            }
     }
 
     /// What is left in the header after workstream 005 moved the global

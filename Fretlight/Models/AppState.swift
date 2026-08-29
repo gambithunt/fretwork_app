@@ -152,6 +152,15 @@ final class AppState {
     /// multi-second retry window. Surfacing this instead is what turns that
     /// window from "looks frozen" into "visibly reconnecting".
     var isReconnecting = false
+    /// Whether the audio graph has ever come up in this session.
+    ///
+    /// The build watchdog reports a slow *first* build through the same
+    /// `onReconnecting` callback a mid-session device drop uses, and on a first
+    /// build there is nothing to reconnect to — so without this the app told a
+    /// player with a slow-binding interface that it was "Reconnecting to audio
+    /// device" the first time they ever opened it. The two states also deserve
+    /// different weight on screen: see `ListenScreen`.
+    private(set) var hasStartedAudio = false
     /// Set when the live input has real signal but nothing is resolving a
     /// confident note/chord from it for a sustained stretch — heavy
     /// distortion, noise, or (in Notes mode) a strummed chord the detector
@@ -312,6 +321,7 @@ final class AppState {
             Task { @MainActor [weak self] in
                 self?.errorMessage = nil
                 self?.isReconnecting = false
+                self?.hasStartedAudio = true
             }
         }
         audioEngine.onReconnecting = { [weak self] in

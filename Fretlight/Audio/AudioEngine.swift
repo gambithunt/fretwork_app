@@ -397,7 +397,9 @@ final class AudioEngine: @unchecked Sendable {
         // same churn again: a self-sustaining restart loop. (It is genuinely
         // self-sustaining, not merely repeated: closing the last engine on a
         // device reverts its buffer size, so the next build sets it again.)
-        settledAfter = Date().addingTimeInterval(1.5)
+        // `settledAfter`, at the bottom of this method, is what suppresses
+        // that — and it is set *there*, not here, for the reason recorded
+        // beside it.
         stopSynchronously()
         currentInputDeviceID = inputDeviceID
         currentOutputDeviceID = outputDeviceID
@@ -419,6 +421,20 @@ final class AudioEngine: @unchecked Sendable {
         } else {
             try startSplit(inputDeviceID: inputDeviceID, outputDeviceID: outputDeviceID, monitorVolume: monitorVolume, generation: generation)
         }
+        // Measured from the moment the graph is actually live, not from the
+        // moment the build started. `setBufferFrameSize` above provokes a
+        // configuration change of our own making, and that notification is
+        // only delivered once the build lets go of `graphQueue` — so a build
+        // slower than this window would see its own churn arrive with the
+        // window already expired and treat it as the device renegotiating.
+        // Measured with a 2s simulated bind: the notification landed 8ms
+        // after the build finished with `settledAfter` already 0.7s in the
+        // past, which restarted the graph, which provoked the same
+        // notification again — a launch-time restart loop stopped only by the
+        // three-attempts circuit breaker, with the "Reconnecting" banner
+        // appearing and vanishing on each pass. A healthy built-in device
+        // binds in ~170ms and never noticed; a USB interface does not.
+        settledAfter = Date().addingTimeInterval(1.5)
         onRecovered?()
     }
 

@@ -2,7 +2,7 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
-## 0.5.1 — 2026-08-29
+## 0.5.2 — 2026-08-29
 
 - A note placed or played on a module's fretboard no longer lurches. The dot's
   playback pulse resized its *frame*, while `.position` — which centres the dot
@@ -16,6 +16,22 @@ All notable changes to Fretwork are recorded here, newest first.
   before and after by tracking the dot's own pixels: the centroid now holds to
   within 0.03px across the whole pulse. The arrival and pulse springs are also
   critically damped, replacing curves that overshot and rang for 1.73s.
+- Launching with an audio interface no longer flashes a "Reconnecting to audio
+  device…" bar that pushes the whole Listen screen down and back. The graph
+  build sets its own settle window — the guard that tells our own start-up
+  churn apart from a device renegotiating — and it was measured from the moment
+  the build *began* rather than from the moment the graph went live. The buffer
+  size the build itself sets provokes a Core Audio configuration change, and on
+  any device that takes longer than 1.5s to bind that notification arrived with
+  the window already expired, so the app restarted the graph, which provoked
+  the same notification again. Measured with a 2s simulated bind: three full
+  restart cycles before the circuit breaker stopped it, with the bar appearing
+  and vanishing on each pass. A built-in device binds in ~170ms and never hit
+  it; a USB interface does.
+- A slow first start now says "Starting…" rather than "Reconnecting" — there is
+  nothing to reconnect to yet — and says it in the header's status pill instead
+  of a bar that moves the screen. The pill reserves the width of its longest
+  word, so it changes without shifting the controls beside it.
 - The telemetry row on Listen no longer shifts sideways a few frames after
   launch. Audio starts 100ms after the window appears, and until it reported
   the row rendered its zero-valued defaults as a confident "0 frames · 0.0 ms
