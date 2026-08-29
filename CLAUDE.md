@@ -42,7 +42,25 @@ Layout:
    `swiftc` harness that builds `NSHostingView(rootView:)` around the view in
    question and reads `.fittingSize`. This is how every `minWidth`/`minHeight`
    in `FretworkApp.swift` was derived — measured, never guessed.
-5. **Isolating a Core Audio error from a single console-log line**: don't
+5. **Seeing a transient on screen** (a jolt at launch, a janky animation):
+   screen recording is not granted here, so `screencapture`/`CGWindowList`
+   return "could not create image from display". Capture the app from *inside*
+   the process instead: a `#if DEBUG` task that walks `NSApp.windows` for the
+   detail pane's `NSClipView` and calls `cacheDisplay(in:to:)` into an
+   `NSBitmapImageRep` every ~16ms, buffering the reps and writing PNGs at the
+   end. Two traps: `cacheDisplay` on the window's own `contentView` renders the
+   module screens as solid black, because they live inside a `HostingScrollView`
+   — target the clip view; and glass cards come out as white blocks, so judge
+   layout and content, not material. Pass a sub-rect to keep the frame rate up
+   (a full 2760x2052 grab costs ~120ms; a 240x240pt region runs at ~60fps).
+   Then diff frames in Python and track the *centroid of the coloured pixels*,
+   not a bounding box — that is what showed a pulsing dot moving 4.5pt rather
+   than merely growing. Synthetic `NSEvent`s do **not** work for driving SwiftUI
+   gestures this way: neither `window.sendEvent` nor `NSApp.postEvent` delivers
+   the mouse-up to the gesture, so a `LongPressGesture` fires 450ms later and
+   undoes what the tap did. Post a `Notification` the screen listens for in
+   DEBUG and wrap the call in the same `withAnimation` the gesture uses.
+6. **Isolating a Core Audio error from a single console-log line**: don't
    trust one snapshot — `-10877` and friends can come from several unrelated
    layers (device HAL, an unowned playback graph, plain CPU starvation).
    Reproduce it in isolation first: an offline/manual-rendering
@@ -58,6 +76,7 @@ Layout:
 | A second signal joining the graph's shared mixer | Give each leg its own level, and leave `mainMixerNode.outputVolume` at unity | Driving the slider from the mixer's *output*. That works only while the mixer has one input; the moment a second one arrives, one control governs both |
 | A per-leg level on a node feeding a mixer | `AVAudioMixing.volume` if the leg ends in a source-type node (`AVAudioSourceNode`, `AVAudioPlayerNode`, `AVAudioInputNode`, `AVAudioMixerNode`) — it is free, being mixing work already being done | A dedicated `AVAudioMixerNode` as a fader: measured idle CPU 13% → 30%, because it is a full converting mixer and two in series convert twice. Effects (`AVAudioUnitEQ`, `AVAudioUnitDelay`) do **not** conform to `AVAudioMixing`, so `as? AVAudioMixing` on one silently does nothing — it compiles, it runs, and the control just stops working |
 | A background loop polling a shared buffer/queue | Check the throttle/cap condition *before* consuming, and sleep on every non-productive path | Consuming then discarding on a failed post-check — an unyielding busy-spin that once starved the real Core Audio I/O thread |
+| A momentary emphasis (a pulse, a flash) on a view something *else* positions | A transform — `.scaleEffect`, which scales about the centre and changes no layout | Growing the view's `.frame`. `FretboardDotView` did, while the `.position` centring it lived outside in `DotMotionModifier`. The grow was set inside the caller's `withAnimation` so both animated together; the release is a bare write from a detached task, so `.position` snapped to the final frame's origin while the drawn size was still shrinking — the dot pinned by its top-left, spilling 4.5pt down-right, measured. When a size and the thing positioning it animate in different scopes, only one of them is ever in the transaction |
 | A Text/Image whose displayed value changes rapidly under an active `.animation()` | `.contentTransition(.numericText())` / `.contentTransition(.symbolEffect(.replace))`, or branch with `.transition()` per state | Letting the view's content just mutate in place — produces overlapping/garbled rendering |
 | Two sibling views that need independent placement (e.g. a title and a controls row) | A sequential `HStack`/`VStack` | `ZStack` + alignment to "center" one over the other — doesn't reserve space, can genuinely overlap depending on width |
 | A custom `View` that also needs `Animatable` | Mark `animatableData` `nonisolated` | Leaving it inferred — strict concurrency flags it as crossing an actor boundary, since `Animatable`'s requirement isn't itself `@MainActor` |
@@ -156,6 +175,20 @@ scattered across call sites.
 - A backgrounded/occluded window is occlusion-throttled to ~0% CPU, so a
   hidden window measures clean no matter how bad the bug is. Any CPU
   comparison has to run with the window actually composited (`onscreen`).
+
+- A settle/debounce window that exists to ignore *your own* churn has to be
+  measured from when that work **finishes**, not when it starts.
+  `AudioEngine.startSynchronously` armed its 1.5s window at the top of a build
+  that can take seconds, and the configuration change its own
+  `setBufferFrameSize` provokes is only delivered once the build releases
+  `graphQueue` — so on a device slower to bind than the window is long, the
+  build's own churn arrived with the window already expired, was read as the
+  device renegotiating, and restarted the graph, which produced the same
+  notification again. Measured with a 2s injected bind: three full restart
+  cycles before the circuit breaker stopped it, each one flashing the
+  "Reconnecting" banner and shoving the whole Listen screen down. A built-in
+  device binds in ~170ms and never showed it; a USB interface does. Anything
+  guarded by a deadline set before slow work is the same bug.
 
 - A SwiftUI text style and a same-size `Font.system` are not the same glyphs.
   Swapping `.caption2.weight(.bold)` for `.system(size: 10, weight: .bold)`
