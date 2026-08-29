@@ -4,13 +4,18 @@ All notable changes to Fretwork are recorded here, newest first.
 
 ## 0.5.1 — 2026-08-29
 
-- A note placed on a module's fretboard no longer wobbles after it lands. The
-  board's arrival spring carried `bounce: 0.32`, which overshoots full size by
-  2.2%, crosses it three times and reports a settling duration of 1.73s — and
-  the dot's own playback pulse ran a second underdamped spring over the same
-  moment, so the two rings compounded. Both are critically damped now: the
-  composite motion grows once, peaks at 320ms and settles by 840ms without
-  reversing direction.
+- A note placed or played on a module's fretboard no longer lurches. The dot's
+  playback pulse resized its *frame*, while `.position` — which centres the dot
+  on its fret — sits outside the dot view in a different animation scope. The
+  grow ran inside the caller's `withAnimation` so the two moved together, but
+  the release is a bare write from a detached task, so the position snapped to
+  the small frame's origin while the drawn size was still shrinking: the dot
+  jumped 4.5pt down-right in a single frame and crept back over the next 260ms.
+  The pulse is a `scaleEffect` now, which scales about the centre and changes
+  no layout, so nothing can displace the dot whatever animates it. Measured
+  before and after by tracking the dot's own pixels: the centroid now holds to
+  within 0.03px across the whole pulse. The arrival and pulse springs are also
+  critically damped, replacing curves that overshot and rang for 1.73s.
 - The telemetry row on Listen no longer shifts sideways a few frames after
   launch. Audio starts 100ms after the window appears, and until it reported
   the row rendered its zero-valued defaults as a confident "0 frames · 0.0 ms

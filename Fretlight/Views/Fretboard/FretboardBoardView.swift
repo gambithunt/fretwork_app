@@ -242,7 +242,7 @@ struct FretboardDotView: View {
     }
 
     var body: some View {
-        let diameter = dot.radius * 2 * (1 + Self.pulseGrowth * CGFloat(pulse))
+        let diameter = dot.radius * 2
         Text(dot.label)
             .font(labelFont)
             .foregroundStyle(dot.labelColor)
@@ -276,17 +276,37 @@ struct FretboardDotView: View {
             // carries the pulse.
             .shadow(color: dot.color.opacity(0.55 * dot.alpha), radius: 6)
             .opacity(dot.alpha)
-            // Everything above this line reacts to `pulse`, which used to
-            // change with no animation in scope — a played note's dot would
-            // pop to its grown size and pop back rather than swell and
-            // settle. Critically damped (`dampingFraction: 1`), not merely
-            // close to it: at 0.85 this overshot the swell four times over
-            // a 0.72s settle, and a tap that *places* a note runs this on
-            // top of the board's arrival spring, so two rings compounded
-            // into the shake. A breath in and out has no reason to ring at
-            // all. `response` is shortened to 0.34 to keep the swell
-            // reaching 97% of full size inside the 320ms the pulse is held
-            // for, which critical damping would otherwise stretch past.
+            // The pulse is a **transform, not a layout size**, and that is
+            // the whole point of this line. `diameter` used to be
+            // `radius * 2 * (1 + pulseGrowth * pulse)`, so a pulse resized
+            // the dot's frame — and `.position(x:y:)`, which centres the dot
+            // on its fret, lives outside this view in `DotMotionModifier`,
+            // in a different animation scope. The grow runs inside the
+            // caller's `withAnimation` (a tap wraps `tapCell`, which sets the
+            // pulse), so `.position` animated with it and the dot grew about
+            // its centre. The *release* is a bare `pulses[id] = nil` from a
+            // detached task with no transaction, so `.position` snapped to
+            // the final small frame's origin while this view's own
+            // `.animation(value: pulse)` kept shrinking the drawn size —
+            // leaving the dot pinned by its top-left corner and spilling
+            // down-right.
+            //
+            // Measured, not inferred (in-process window capture at ~18ms,
+            // tracking the dot's coloured pixels): through the grow the
+            // centroid held at (63.5, 61.5) while the radius went 30.5 →
+            // 39.6px, then jumped to (72.5, 70.4) in one frame — 4.5pt
+            // down-right — and crept back over the next 260ms with the
+            // offset tracking `r - r_final` exactly. That lurch is the
+            // "shake", and no spring curve could have fixed it.
+            //
+            // `scaleEffect` scales about the centre and changes no layout at
+            // all, so the dot cannot be displaced no matter which transaction
+            // animates the pulse. It is also cheaper than re-laying out.
+            .scaleEffect(1 + Self.pulseGrowth * CGFloat(pulse))
+            // Critically damped (`dampingFraction: 1`), not merely close to
+            // it: at 0.85 the swell overshot and crossed its target four
+            // times. `response` is 0.34 so the swell still reaches 97% inside
+            // the 320ms the pulse is held for.
             .animation(.spring(response: 0.34, dampingFraction: 1), value: pulse)
     }
 
