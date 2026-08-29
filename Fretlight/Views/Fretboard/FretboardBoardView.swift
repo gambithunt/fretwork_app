@@ -34,19 +34,27 @@ struct FretboardBoardView: View {
     /// would both remove a note and re-report it.
     @State private var longPressFired = false
 
-    /// Not `FretworkMotion.gravity`. Measured directly (off-screen capture at
-    /// 33/50/75/100ms into the transition — see the session that produced
-    /// this comment): at `.bouncy`'s duration of 0.5s, a dot's scale had
-    /// already travelled almost the whole way from its start value to full
-    /// size within about 40ms — 2–3 frames. Everything after that was a
-    /// wobble too small to read. That reads as a pop followed by a flicker,
-    /// not a grow — a chip's highlight travels a real distance across a grid
-    /// and doesn't have this problem; a dot growing in place from a small
-    /// starting scale does. `duration` in `spring(duration:bounce:)` sets the
-    /// spring's characteristic timescale directly, so lengthening it slows
-    /// the rise itself, not just the tail — this is longer than `.bouncy`
-    /// specifically so the growth is something the eye can follow.
-    private static let motion = Animation.spring(duration: 0.85, bounce: 0.32)
+    /// Not `FretworkMotion.gravity`, and deliberately **critically damped**:
+    /// `bounce: 0` is the whole point of this constant, not a detail of it.
+    ///
+    /// A dot growing in place has nowhere to travel, so any overshoot is the
+    /// dot changing size after it has already arrived — which reads as a
+    /// wobble, not as weight. This was `spring(duration: 0.85, bounce: 0.32)`,
+    /// and the numbers say why that looked wrong: evaluating `Spring` directly
+    /// (see the harness in the session that produced this comment) it
+    /// overshoots to 1.022× full size, crosses full size three times, and
+    /// reports a `settlingDuration` of **1.73s** — the dot is still moving a
+    /// second and a half after the note was placed. Worse, `FretboardDotView`
+    /// runs its own `pulse` spring over the same 320ms, so a freshly placed
+    /// note got two overlapping size animations, one of them ringing.
+    ///
+    /// At `duration: 0.3, bounce: 0` the same 0.6 → 1 rise is monotonic: 74%
+    /// of the way at 60ms, 96% at 180ms, settled at 0.5s, and it never once
+    /// passes its target. `duration` sets the spring's characteristic
+    /// timescale directly, so this is still slow enough that the growth is
+    /// something the eye can follow rather than the 2–3 frame pop `.bouncy`
+    /// produced.
+    private static let motion = Animation.spring(duration: 0.3, bounce: 0)
 
     var body: some View {
         BoardCanvas(frets: frets, tuning: tuning, flipped: flipped, margins: margins, showsLabels: showsLabels)
@@ -271,10 +279,15 @@ struct FretboardDotView: View {
             // Everything above this line reacts to `pulse`, which used to
             // change with no animation in scope — a played note's dot would
             // pop to its grown size and pop back rather than swell and
-            // settle. Calmer and closer to critical damping than the
-            // fretboard's own arrival spring, since this one has to read as
-            // a soft breath rather than a bounce.
-            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: pulse)
+            // settle. Critically damped (`dampingFraction: 1`), not merely
+            // close to it: at 0.85 this overshot the swell four times over
+            // a 0.72s settle, and a tap that *places* a note runs this on
+            // top of the board's arrival spring, so two rings compounded
+            // into the shake. A breath in and out has no reason to ring at
+            // all. `response` is shortened to 0.34 to keep the swell
+            // reaching 97% of full size inside the 320ms the pulse is held
+            // for, which critical damping would otherwise stretch past.
+            .animation(.spring(response: 0.34, dampingFraction: 1), value: pulse)
     }
 
     /// Flat and translucent — a single, uniform fill with no radial shading

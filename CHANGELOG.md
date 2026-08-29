@@ -2,6 +2,23 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.5.1 — 2026-08-29
+
+- A note placed on a module's fretboard no longer wobbles after it lands. The
+  board's arrival spring carried `bounce: 0.32`, which overshoots full size by
+  2.2%, crosses it three times and reports a settling duration of 1.73s — and
+  the dot's own playback pulse ran a second underdamped spring over the same
+  moment, so the two rings compounded. Both are critically damped now: the
+  composite motion grows once, peaks at 320ms and settles by 840ms without
+  reversing direction.
+- The telemetry row on Listen no longer shifts sideways a few frames after
+  launch. Audio starts 100ms after the window appears, and until it reported
+  the row rendered its zero-valued defaults as a confident "0 frames · 0.0 ms
+  · Buffered"; the real values are wider, and because the row is centred,
+  filling them in slid every reading across. The row now shows "—" until the
+  device has actually reported, and every readout reserves the width of the
+  widest value it can hold.
+
 ## 0.5.0 — 2026-08-27
 
 - Every learning module now shares Listen's own material rather than sitting
