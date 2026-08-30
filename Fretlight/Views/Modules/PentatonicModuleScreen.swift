@@ -50,36 +50,34 @@ struct PentatonicModuleScreen: View {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Picker("Quality", selection: Binding(
-                        get: { model.quality },
-                        set: { model.selectQuality($0) }
-                    )) {
-                        Text("Minor").tag(PentatonicQuality.minorPentatonic)
-                        Text("Major").tag(PentatonicQuality.majorPentatonic)
-                    }
-                    .fixedSize()
-
-                    Picker("Show", selection: Binding(
-                        get: { model.displayMode },
-                        set: { model.selectDisplayMode($0) }
-                    )) {
-                        Text("One box").tag(PentatonicModuleModel.DisplayMode.single)
-                        Text("Pair").tag(PentatonicModuleModel.DisplayMode.pair)
-                        Text("Path").tag(PentatonicModuleModel.DisplayMode.path)
-                    }
-                    .fixedSize()
-
-                    Picker("Position", selection: Binding(
-                        get: { model.position },
-                        set: { model.selectPosition($0) }
-                    )) {
-                        // 0-based internally, 1-based on screen.
-                        ForEach(0...4, id: \.self) { Text("Box \($0 + 1)").tag($0) }
-                    }
-                    .fixedSize()
+            HStack(spacing: 16) {
+                Picker("Quality", selection: Binding(
+                    get: { model.quality },
+                    set: { model.selectQuality($0) }
+                )) {
+                    Text("Minor").tag(PentatonicQuality.minorPentatonic)
+                    Text("Major").tag(PentatonicQuality.majorPentatonic)
                 }
+                .fixedSize()
+
+                Picker("Show", selection: Binding(
+                    get: { model.displayMode },
+                    set: { model.selectDisplayMode($0) }
+                )) {
+                    Text("One box").tag(PentatonicModuleModel.DisplayMode.single)
+                    Text("Pair").tag(PentatonicModuleModel.DisplayMode.pair)
+                    Text("Path").tag(PentatonicModuleModel.DisplayMode.path)
+                }
+                .fixedSize()
+
+                Picker("Position", selection: Binding(
+                    get: { model.position },
+                    set: { model.selectPosition($0) }
+                )) {
+                    // 0-based internally, 1-based on screen.
+                    ForEach(0...4, id: \.self) { Text("Box \($0 + 1)").tag($0) }
+                }
+                .fixedSize()
 
                 guidedControls(model)
             }

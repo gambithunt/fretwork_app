@@ -52,21 +52,30 @@ extension View {
     /// The shell every module's primary note/key picker sits in — its own
     /// card, held to the same floor height everywhere it appears, so that
     /// card doesn't shift position or size as you move between modules with
-    /// different amounts of stuff underneath it. `alignment: .topLeading`
-    /// keeps a picker that's short of the floor pinned to where it always
-    /// starts rather than centred into empty space beneath it.
+    /// different amounts of stuff underneath it. The picker is centred in
+    /// the card's vertical space (`alignment: .leading` centres vertically,
+    /// keeps the leading edge), so a one-row picker gets equal breathing
+    /// room above its title and below its chips rather than all the slack
+    /// dumped underneath. The floor is small — just enough that the card
+    /// doesn't visibly resize between modules — not a reserve of empty space.
     func moduleNotesCard() -> some View {
         self
-            .frame(minHeight: 92, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
             .padding(18)
             .glassCard()
     }
 
     /// The shell for everything else a module's controls hold — secondary
-    /// pickers, play/stop buttons — as its own card below the notes card,
-    /// sized to whatever it actually needs.
+    /// pickers, play/stop buttons — as its own card below the notes card.
+    /// Full width so the controls can spread across one comfortable row
+    /// instead of huddling shrink-wrapped at the left, and a floor height so
+    /// a module with a single row of controls sits at the same height as one
+    /// with two. Modules that genuinely stack several control sections
+    /// (Harmonizing's degree row, Note Association's layers) still grow past
+    /// the floor.
     func moduleOptionsCard() -> some View {
         self
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
             .padding(18)
             .glassCard()
     }

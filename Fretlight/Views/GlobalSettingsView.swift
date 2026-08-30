@@ -18,49 +18,61 @@ import SwiftUI
 struct GlobalSettingsView: View {
     @Bindable var state: AppState
 
+    /// Every row's label sits in a column this wide, so every control begins
+    /// at the same x no matter how long its label is. A plain `VStack` of
+    /// `LabeledContent` (or a `Grid`, which centres a menu `Picker` in its
+    /// cell) let the controls step in and out as "Input" gave way to
+    /// "Sensitivity".
+    private let labelColumnWidth: CGFloat = 92
+    /// The three menu pickers share one width so their left *and* right edges
+    /// line up, rather than each hugging its current value.
+    private let pickerWidth: CGFloat = 240
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             section("Devices") {
-                LabeledContent("Input") {
+                row("Input") {
                     DevicePickerView(
                         title: "INPUT",
                         devices: state.inputDevices,
                         selection: state.selectedInputDeviceID,
                         onSelect: state.selectInputDevice
                     )
+                    .frame(width: pickerWidth)
                 }
-                LabeledContent("Output") {
+                row("Output") {
                     DevicePickerView(
                         title: "OUTPUT",
                         devices: state.outputDevices,
                         selection: state.selectedOutputDeviceID,
                         onSelect: state.selectOutputDevice
                     )
+                    .frame(width: pickerWidth)
                 }
-                Button {
-                    state.refreshDevices()
-                } label: {
-                    Label("Rescan", systemImage: "arrow.clockwise")
+                row(nil) {
+                    Button {
+                        state.refreshDevices()
+                    } label: {
+                        Label("Rescan", systemImage: "arrow.clockwise")
+                    }
+                    .help("Rescan for input/output devices connected since launch")
                 }
-                .help("Rescan for input/output devices connected since launch")
             }
 
             section("Monitoring") {
-                LabeledContent("Monitor") {
-                    HStack(spacing: 8) {
-                        Button {
-                            state.monitorMuted.toggle()
-                        } label: {
-                            Image(systemName: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.secondary)
-                        .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
-                        RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
-                            .frame(width: 140)
+                row("Monitor") {
+                    Button {
+                        state.monitorMuted.toggle()
+                    } label: {
+                        Image(systemName: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
                     }
+                    .buttonStyle(.bordered)
+                    .tint(.secondary)
+                    .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
+                    RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
+                        .frame(width: 140)
                 }
-                LabeledContent("Sensitivity") {
+                row("Sensitivity") {
                     RulerSlider(value: $state.sensitivity)
                         .frame(width: 140)
                         .help("Strict: fewer false triggers on noisy signal. Lenient: catches weaker or quieter notes.")
@@ -68,7 +80,7 @@ struct GlobalSettingsView: View {
             }
 
             section("Instrument") {
-                LabeledContent("Tuning") {
+                row("Tuning") {
                     // Menu style, never `.segmented`: `CLAUDE.md` records a
                     // measured registrar leak from a segmented picker rebuilt
                     // at audio rate, and this control sits in the toolbar of
@@ -79,9 +91,9 @@ struct GlobalSettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 240)
+                    .frame(width: pickerWidth)
                 }
-                LabeledContent("Board") {
+                row("Board") {
                     Button {
                         state.isFretboardFlipped.toggle()
                     } label: {
@@ -104,6 +116,22 @@ struct GlobalSettingsView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             content()
+        }
+    }
+
+    /// A label/control row. The label occupies a fixed-width leading column;
+    /// the control follows immediately after it, so the control's left edge is
+    /// identical on every row. `nil` keeps the column (the Rescan button lines
+    /// up under the device pickers) without drawing a label.
+    private func row<Control: View>(
+        _ label: String?,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label ?? "")
+                .frame(width: labelColumnWidth, alignment: .leading)
+            control()
+            Spacer(minLength: 0)
         }
     }
 }

@@ -55,42 +55,38 @@ struct ChordsModuleScreen: View {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Picker("Family", selection: Binding(
-                        get: { model.family },
-                        set: { model.selectFamily($0) }
-                    )) {
-                        ForEach(ChordsModuleModel.families, id: \.self) { family in
-                            Text(ChordsModuleModel.label(for: family)).tag(family)
-                        }
+            HStack(spacing: 16) {
+                Picker("Family", selection: Binding(
+                    get: { model.family },
+                    set: { model.selectFamily($0) }
+                )) {
+                    ForEach(ChordsModuleModel.families, id: \.self) { family in
+                        Text(ChordsModuleModel.label(for: family)).tag(family)
                     }
-                    .fixedSize()
-
-                    Picker("Chord", selection: Binding(
-                        get: { model.formula.id },
-                        set: { id in
-                            if let formula = ChordFormulas.formula(id: id) { model.selectFormula(formula) }
-                        }
-                    )) {
-                        ForEach(model.formulasInFamily, id: \.id) { formula in
-                            Text(formula.label.isEmpty ? "Major" : formula.label).tag(formula.id)
-                        }
-                    }
-                    .fixedSize()
                 }
+                .fixedSize()
 
-                HStack(spacing: 12) {
-                    Button {
-                        model.strum()
-                    } label: {
-                        Label("Strum", systemImage: "play.fill")
+                Picker("Chord", selection: Binding(
+                    get: { model.formula.id },
+                    set: { id in
+                        if let formula = ChordFormulas.formula(id: id) { model.selectFormula(formula) }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(NotePalette.accent)
-                    .disabled(model.currentVoicing == nil)
-                    Button("Stop") { model.stop() }
+                )) {
+                    ForEach(model.formulasInFamily, id: \.id) { formula in
+                        Text(formula.label.isEmpty ? "Major" : formula.label).tag(formula.id)
+                    }
                 }
+                .fixedSize()
+
+                Button {
+                    model.strum()
+                } label: {
+                    Label("Strum", systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(NotePalette.accent)
+                .disabled(model.currentVoicing == nil)
+                Button("Stop") { model.stop() }
             }
             .moduleOptionsCard()
         }

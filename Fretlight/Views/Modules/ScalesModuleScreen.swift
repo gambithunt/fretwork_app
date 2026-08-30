@@ -55,35 +55,33 @@ struct ScalesModuleScreen: View {
     }
 
     private func options(_ model: ScalesModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                Picker("Scale", selection: Binding(
-                    get: { model.quality },
-                    set: { model.selectQuality($0) }
-                )) {
-                    Text("Major").tag(OneOctaveScaleQuality.major)
-                    Text("Natural minor").tag(OneOctaveScaleQuality.naturalMinor)
-                }
-                .fixedSize()
-
-                Picker("Labels", selection: Binding(
-                    get: { model.labelMode },
-                    set: { model.selectLabelMode($0) }
-                )) {
-                    Text("Notes").tag(ScalesModuleModel.LabelMode.notes)
-                    Text("Degrees").tag(ScalesModuleModel.LabelMode.degrees)
-                }
-                .fixedSize()
-
-                Picker("Direction", selection: Binding(
-                    get: { model.direction },
-                    set: { model.selectDirection($0) }
-                )) {
-                    Text("Ascending").tag(ScalesModuleModel.Direction.ascending)
-                    Text("Up and down").tag(ScalesModuleModel.Direction.upDown)
-                }
-                .fixedSize()
+        HStack(spacing: 16) {
+            Picker("Scale", selection: Binding(
+                get: { model.quality },
+                set: { model.selectQuality($0) }
+            )) {
+                Text("Major").tag(OneOctaveScaleQuality.major)
+                Text("Natural minor").tag(OneOctaveScaleQuality.naturalMinor)
             }
+            .fixedSize()
+
+            Picker("Labels", selection: Binding(
+                get: { model.labelMode },
+                set: { model.selectLabelMode($0) }
+            )) {
+                Text("Notes").tag(ScalesModuleModel.LabelMode.notes)
+                Text("Degrees").tag(ScalesModuleModel.LabelMode.degrees)
+            }
+            .fixedSize()
+
+            Picker("Direction", selection: Binding(
+                get: { model.direction },
+                set: { model.selectDirection($0) }
+            )) {
+                Text("Ascending").tag(ScalesModuleModel.Direction.ascending)
+                Text("Up and down").tag(ScalesModuleModel.Direction.upDown)
+            }
+            .fixedSize()
 
             HStack(spacing: 12) {
                 if model.guidedSnapshot.status == .idle {
