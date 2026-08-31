@@ -105,6 +105,13 @@ struct GlobalSettingsView: View {
                     .help("Which string is drawn along the top of every board")
                 }
             }
+
+            section("Learning") {
+                row("Live note") {
+                    Toggle("Show on learning tabs", isOn: $state.showsLiveNoteOnModules)
+                        .help("Show the detected note in the top-right corner of every learning tab")
+                }
+            }
         }
         .padding(20)
         .frame(width: 420)

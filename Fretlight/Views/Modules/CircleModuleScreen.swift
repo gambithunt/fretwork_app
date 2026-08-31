@@ -23,7 +23,7 @@ struct CircleModuleScreen: View {
     }
 
     private func content(_ model: CircleModuleModel) -> some View {
-        ModuleLayout(module: .circle) {
+        ModuleLayout(module: .circle, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)

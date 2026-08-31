@@ -25,7 +25,7 @@ struct IntervalsModuleScreen: View {
     }
 
     private func content(_ model: IntervalsModuleModel) -> some View {
-        ModuleLayout(module: .intervals) {
+        ModuleLayout(module: .intervals, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
@@ -92,11 +92,18 @@ struct IntervalsModuleScreen: View {
     private func readout(_ model: IntervalsModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 28) {
-                ModuleStat(
-                    label: "Interval",
-                    value: "\(model.rootPitchClass.name()) → \(model.targetPitchClass.name())",
-                    tint: NotePalette.color(for: .third)
-                )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("INTERVAL")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text("\(model.rootPitchClass.name()) → \(model.targetPitchClass.name())")
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(NotePalette.color(for: .third))
+                    Text(model.interval.name)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minWidth: 150, alignment: .leading)
                 ModuleStat(label: "Distance", value: "\(model.interval.semitones) semitones")
                 ModuleStat(label: "Anchors", value: "\(model.playableAnchors.count)")
             }

@@ -22,7 +22,7 @@ struct HarmonizingModuleScreen: View {
     }
 
     private func content(_ model: HarmonizingModuleModel) -> some View {
-        ModuleLayout(module: .harmonizing) {
+        ModuleLayout(module: .harmonizing, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 StandardTuningNotice(tuning: state.tuning, what: "These voicings")

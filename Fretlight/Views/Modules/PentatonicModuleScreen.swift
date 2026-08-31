@@ -22,7 +22,7 @@ struct PentatonicModuleScreen: View {
     }
 
     private func content(_ model: PentatonicModuleModel) -> some View {
-        ModuleLayout(module: .pentatonic) {
+        ModuleLayout(module: .pentatonic, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 StandardTuningNotice(tuning: state.tuning, what: "These boxes")

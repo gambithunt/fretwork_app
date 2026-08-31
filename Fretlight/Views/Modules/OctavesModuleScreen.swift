@@ -26,7 +26,7 @@ struct OctavesModuleScreen: View {
     }
 
     private func content(_ model: OctavesModuleModel) -> some View {
-        ModuleLayout(module: .octaves) {
+        ModuleLayout(module: .octaves, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)

@@ -23,7 +23,7 @@ struct ScalesModuleScreen: View {
     }
 
     private func content(_ model: ScalesModuleModel) -> some View {
-        ModuleLayout(module: .scales) {
+        ModuleLayout(module: .scales, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)

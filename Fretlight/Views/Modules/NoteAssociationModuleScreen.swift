@@ -23,7 +23,7 @@ struct NoteAssociationModuleScreen: View {
     }
 
     private func content(_ model: NoteAssociationModuleModel) -> some View {
-        ModuleLayout(module: .noteAssociation) {
+        ModuleLayout(module: .noteAssociation, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)

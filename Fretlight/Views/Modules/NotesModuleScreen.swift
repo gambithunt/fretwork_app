@@ -41,7 +41,7 @@ struct NotesModuleScreen: View {
     }
 
     private func content(_ model: NotesModuleModel) -> some View {
-        ModuleLayout(module: .notes) {
+        ModuleLayout(module: .notes, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
@@ -126,13 +126,18 @@ struct NotesModuleScreen: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 28) {
                 VStack(alignment: .leading, spacing: 2) {
-                    ModuleStat(label: "Chord", value: model.chordLabel)
+                    Text("CHORD")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text(model.chordLabel)
+                        .font(.title.weight(.bold))
                     if !model.discovery.alternatives.isEmpty {
                         Text("Also: \(model.discovery.alternatives.map(\.symbol).joined(separator: ", "))")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
                 }
+                .frame(minWidth: 180, alignment: .leading)
                 ModuleStat(
                     label: "Notes",
                     value: model.present.isEmpty ? "—" : model.present.map { $0.pitchClass.name() }.joined(separator: " ")

@@ -22,7 +22,7 @@ struct ChordsModuleScreen: View {
     }
 
     private func content(_ model: ChordsModuleModel) -> some View {
-        ModuleLayout(module: .chords) {
+        ModuleLayout(module: .chords, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 StandardTuningNotice(tuning: state.tuning, what: "These shapes")

@@ -40,6 +40,11 @@ private struct GlassCard: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(Color.white.opacity(fill), in: RoundedRectangle(cornerRadius: cornerRadius))
+            // A glass highlight must sit over a known dark surface. Without
+            // this base, a control group can composite the transparent card
+            // against a system light backing layer (most visibly on
+            // Harmonizing's stacked controls).
+            .background(NotePalette.backdrop, in: RoundedRectangle(cornerRadius: cornerRadius))
             .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(.white.opacity(stroke), lineWidth: 1))
     }
 }
@@ -75,8 +80,9 @@ extension View {
     /// the floor.
     func moduleOptionsCard() -> some View {
         self
-            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
-            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
             .glassCard()
     }
 }

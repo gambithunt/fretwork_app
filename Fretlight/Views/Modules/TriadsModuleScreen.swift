@@ -23,7 +23,7 @@ struct TriadsModuleScreen: View {
     }
 
     private func content(_ model: TriadsModuleModel) -> some View {
-        ModuleLayout(module: .triads) {
+        ModuleLayout(module: .triads, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
