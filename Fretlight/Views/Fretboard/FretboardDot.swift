@@ -30,10 +30,14 @@ struct FretboardDot: Identifiable, Equatable {
     var ringAlpha: Double = 1
     /// A dark separating outline, so overlapping tiers stay legible.
     var outline: Bool = false
-    /// The dot's own edge. Present by default because that is how this app has
-    /// always drawn a note marker; a layered view that would rather its
-    /// recessed dots had no edge sets it to nil.
-    var stroke: Color? = .white.opacity(0.85)
+    /// The dot's own edge, drawn *in addition to* its glow — `nil` by
+    /// default. A hard white ring around every dot was the app's original
+    /// look; the glass redesign replaces it with the glow `FretboardDotView`
+    /// draws from `color` itself, so a dot no longer needs a manufactured
+    /// edge to read as solid. Still available for a caller that wants one
+    /// (an overlapping tier's separating line uses `outline` instead, which
+    /// is independent of this).
+    var stroke: Color? = nil
     var labelColor: Color = .white
     /// What this dot is in context — "root", "3rd" — for the legend and for
     /// the accessible description. Not drawn.

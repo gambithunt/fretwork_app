@@ -4,6 +4,7 @@ import SwiftUI
 struct ScalesModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: ScalesModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -22,65 +23,65 @@ struct ScalesModuleScreen: View {
     }
 
     private func content(_ model: ScalesModuleModel) -> some View {
-        ModuleLayout(module: .scales) {
+        ModuleLayout(module: .scales, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: model.tuning,
-                flipped: state.isFretboardFlipped
-            )
-            .frame(minHeight: 260)
+            VStack(alignment: .trailing, spacing: 8) {
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: showsFullNeck ? 22 : model.highestFret,
+                    tuning: model.tuning,
+                    flipped: state.isFretboardFlipped
+                )
+                .frame(minHeight: 260)
+            }
         } readout: {
             readout(model)
         }
     }
 
     private func controls(_ model: ScalesModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ROOT")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        rootButton(model, pitchClass: PitchClass(value))
-                    }
-                }
+        VStack(alignment: .leading, spacing: 18) {
+            PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
+                .moduleNotesCard()
+
+            options(model)
+                .moduleOptionsCard()
+        }
+    }
+
+    private func options(_ model: ScalesModuleModel) -> some View {
+        HStack(spacing: 16) {
+            Picker("Scale", selection: Binding(
+                get: { model.quality },
+                set: { model.selectQuality($0) }
+            )) {
+                Text("Major").tag(OneOctaveScaleQuality.major)
+                Text("Natural minor").tag(OneOctaveScaleQuality.naturalMinor)
             }
+            .fixedSize()
 
-            HStack(spacing: 12) {
-                Picker("Scale", selection: Binding(
-                    get: { model.quality },
-                    set: { model.selectQuality($0) }
-                )) {
-                    Text("Major").tag(OneOctaveScaleQuality.major)
-                    Text("Natural minor").tag(OneOctaveScaleQuality.naturalMinor)
-                }
-                .fixedSize()
-
-                Picker("Labels", selection: Binding(
-                    get: { model.labelMode },
-                    set: { model.selectLabelMode($0) }
-                )) {
-                    Text("Notes").tag(ScalesModuleModel.LabelMode.notes)
-                    Text("Degrees").tag(ScalesModuleModel.LabelMode.degrees)
-                }
-                .fixedSize()
-
-                Picker("Direction", selection: Binding(
-                    get: { model.direction },
-                    set: { model.selectDirection($0) }
-                )) {
-                    Text("Ascending").tag(ScalesModuleModel.Direction.ascending)
-                    Text("Up and down").tag(ScalesModuleModel.Direction.upDown)
-                }
-                .fixedSize()
+            Picker("Labels", selection: Binding(
+                get: { model.labelMode },
+                set: { model.selectLabelMode($0) }
+            )) {
+                Text("Notes").tag(ScalesModuleModel.LabelMode.notes)
+                Text("Degrees").tag(ScalesModuleModel.LabelMode.degrees)
             }
+            .fixedSize()
+
+            Picker("Direction", selection: Binding(
+                get: { model.direction },
+                set: { model.selectDirection($0) }
+            )) {
+                Text("Ascending").tag(ScalesModuleModel.Direction.ascending)
+                Text("Up and down").tag(ScalesModuleModel.Direction.upDown)
+            }
+            .fixedSize()
 
             HStack(spacing: 12) {
                 if model.guidedSnapshot.status == .idle {
@@ -109,23 +110,6 @@ struct ScalesModuleScreen: View {
         }
     }
 
-    private func rootButton(_ model: ScalesModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = model.rootPitchClass == pitchClass
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.selectRoot(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
 
     private func readout(_ model: ScalesModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {

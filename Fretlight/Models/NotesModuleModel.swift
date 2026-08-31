@@ -29,7 +29,12 @@ final class NotesModuleModel {
     private(set) var pulses: [String: Double] = [:]
 
     var tuning: Tuning
-    let highestFret = LearningModule.notes.highestFret
+    /// Mutable, unlike every other module's `highestFret`: Notes is the one
+    /// module where a tap on empty board places a note anywhere it lands, so
+    /// when the screen's "show the full neck" toggle widens the *drawn*
+    /// board it has to widen this too — otherwise a tap past fret 12 would
+    /// resolve to a real cell that silently refuses to place anything.
+    var highestFret = LearningModule.notes.highestFret
 
     private let store: PracticeStateStore?
     private let play: (FretPosition) -> Void

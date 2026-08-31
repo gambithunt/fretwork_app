@@ -4,6 +4,7 @@ import SwiftUI
 struct CircleModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: CircleModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -22,7 +23,7 @@ struct CircleModuleScreen: View {
     }
 
     private func content(_ model: CircleModuleModel) -> some View {
-        ModuleLayout(module: .circle) {
+        ModuleLayout(module: .circle, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
@@ -30,13 +31,17 @@ struct CircleModuleScreen: View {
         } stage: {
             HStack(alignment: .top, spacing: 32) {
                 ring(model)
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Tonic triad")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 10) {
+                    HStack {
+                        Text("Tonic triad")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: 12)
+                    }
                     FretboardBoardView(
                         dots: model.dots,
-                        frets: 12,
+                        frets: showsFullNeck ? 22 : 12,
                         tuning: model.tuning,
                         flipped: state.isFretboardFlipped,
                         pulses: model.pulses
@@ -91,20 +96,30 @@ struct CircleModuleScreen: View {
     }
 
     private func keyButton(_ model: CircleModuleModel, key: PitchClass, role: CircleModuleModel.Role, isMinor: Bool) -> some View {
-        Button {
-            model.select(key)
+        let isTonic = role == .tonic
+        let fill = model.color(for: role)
+        return Button {
+            withAnimation(FretworkMotion.gravity) { model.select(key) }
         } label: {
             Text(key.name())
                 .font(.callout.weight(role == .none ? .regular : .semibold))
                 .foregroundStyle(role == .none ? Color.white.opacity(0.75) : .black)
                 .frame(width: 44, height: 44)
-                .background(model.color(for: role), in: Circle())
-                .overlay(Circle().stroke(Color.white.opacity(role == .tonic ? 0.9 : 0.15), lineWidth: 1))
+                .background(
+                    Circle()
+                        .fill(fill.opacity(0.82))
+                        .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+                )
+                // A colour-matched glow instead of the old hard white ring —
+                // the tonic still reads instantly across the ring, just as
+                // light rather than as an outline.
+                .shadow(color: fill.opacity(isTonic ? 0.75 : 0), radius: isTonic ? 10 : 0)
+                .scaleEffect(isTonic ? 1.06 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ElasticPressStyle())
         .accessibilityLabel("\(key.name()) major")
         .accessibilityValue(roleName(role))
-        .accessibilityAddTraits(role == .tonic ? [.isSelected] : [])
+        .accessibilityAddTraits(isTonic ? [.isSelected] : [])
     }
 
     private func roleName(_ role: CircleModuleModel.Role) -> String {
@@ -116,6 +131,9 @@ struct CircleModuleScreen: View {
         }
     }
 
+    // Circle has no root/key chip picker — the ring itself, in `stage`, is
+    // that selector — so this is one options card rather than the
+    // notes-card-plus-options-card split every other module uses.
     private func controls(_ model: CircleModuleModel) -> some View {
         HStack(spacing: 12) {
             Button { model.step(by: -1) } label: { Label("Anticlockwise", systemImage: "arrow.counterclockwise") }
@@ -130,6 +148,7 @@ struct CircleModuleScreen: View {
             .disabled(model.dots.isEmpty)
             Button("Stop") { model.stop() }
         }
+        .moduleOptionsCard()
     }
 
     private func readout(_ model: CircleModuleModel) -> some View {

@@ -19,6 +19,7 @@ import SwiftUI
 /// exist *before* the second module rather than after the fifth.
 struct ModuleLayout<Controls: View, Stage: View, Readout: View>: View {
     let module: LearningModule
+    let state: AppState
     @ViewBuilder var controls: Controls
     @ViewBuilder var stage: Stage
     @ViewBuilder var readout: Readout
@@ -27,27 +28,79 @@ struct ModuleLayout<Controls: View, Stage: View, Readout: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                // `controls` now draws its own cards internally — a fixed-size
+                // one around the module's note/key picker (`.moduleNotesCard()`)
+                // and a second below it for everything else
+                // (`.moduleOptionsCard()`), so the note picker holds the same
+                // position and size across every module rather than resizing
+                // around whatever secondary controls that module happens to
+                // have. `readout` still gets one card of its own — the stage
+                // keeps its own look (`BoardCanvas` already draws its
+                // instrument-body card).
                 controls
                 stage
                 readout
+                    // The readout is the interpretation of the full-width
+                    // fretboard, not a small sidebar beneath it. Give it the
+                    // same horizontal claim as the board and enough room for
+                    // its larger teaching type to breathe.
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(22)
+                    .glassCard()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(red: 0.035, green: 0.045, blue: 0.047))
+        .background(NotePalette.backdrop)
         .preferredColorScheme(.dark)
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(module.title)
-                .font(.largeTitle.weight(.semibold))
-            Text(module.blurb)
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(module.title)
+                    .font(.largeTitle.weight(.semibold))
+                Text(module.blurb)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 12)
+            if state.showsLiveNoteOnModules {
+                ModuleLiveNoteReadout(state: state)
+            }
         }
+    }
+}
+
+/// The live Listen readout distilled to its one useful practising cue. This
+/// leaf owns the audio-rate `display` read so changing notes does not
+/// invalidate the rest of a module's controls, board, or teaching copy.
+private struct ModuleLiveNoteReadout: View {
+    let state: AppState
+
+    var body: some View {
+        let display = state.display
+        HStack(spacing: 8) {
+            Circle()
+                .fill(display.note.map { NotePalette.color(for: $0.name) } ?? .white.opacity(0.14))
+                .frame(width: 10, height: 10)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(display.note.map { "\($0.name)\($0.octave)" } ?? "—")
+                    .font(.title3.weight(.bold).monospacedDigit())
+                    .contentTransition(.numericText())
+                Text(display.note == nil ? "LISTENING" : "LIVE NOTE")
+                    .font(.caption2.weight(.bold))
+                    .tracking(1)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.white.opacity(0.08), in: Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(display.note.map { "Live note \($0.name)\($0.octave)" } ?? "Listening for a note")
     }
 }
 
@@ -95,13 +148,13 @@ struct ModuleStat: View {
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.title3.weight(.medium))
+                .font(.title2.weight(.semibold))
                 .foregroundStyle(tint ?? .primary)
                 // The value changes as the player interacts; without this a
                 // digit appearing re-lays-out the row around it.
                 .contentTransition(.numericText())
         }
-        .frame(minWidth: 90, alignment: .leading)
+        .frame(minWidth: 112, alignment: .leading)
     }
 }
 
@@ -111,15 +164,15 @@ struct ModuleProse: View {
     let paragraphs: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
                 Text(paragraph)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: 900, alignment: .leading)
     }
 }
 

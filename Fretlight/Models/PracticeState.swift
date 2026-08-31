@@ -65,6 +65,10 @@ extension PracticeState {
         /// tablature's convention, and the orientation the web app draws, so a
         /// shape looks identical in both.
         var isFretboardFlipped = false
+        /// Shows the current detected pitch in the header of every learning
+        /// module. Off by default so lesson screens remain focused unless the
+        /// player explicitly wants continuous feedback while practising.
+        var showsLiveNoteOnModules = false
 
         init() {}
     }
@@ -509,7 +513,7 @@ extension PracticeState {
 
 extension PracticeState.Settings: Codable {
     private enum CodingKeys: String, CodingKey {
-        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID, isFretboardFlipped
+        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID, isFretboardFlipped, showsLiveNoteOnModules
     }
 
     init(from decoder: any Decoder) throws {
@@ -531,6 +535,9 @@ extension PracticeState.Settings: Codable {
         if let value = (try? container.decodeIfPresent(Bool.self, forKey: .isFretboardFlipped)) ?? nil {
             isFretboardFlipped = value
         }
+        if let value = (try? container.decodeIfPresent(Bool.self, forKey: .showsLiveNoteOnModules)) ?? nil {
+            showsLiveNoteOnModules = value
+        }
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -540,5 +547,6 @@ extension PracticeState.Settings: Codable {
         try container.encodeIfPresent(inputDeviceUID, forKey: .inputDeviceUID)
         try container.encodeIfPresent(outputDeviceUID, forKey: .outputDeviceUID)
         try container.encode(isFretboardFlipped, forKey: .isFretboardFlipped)
+        try container.encode(showsLiveNoteOnModules, forKey: .showsLiveNoteOnModules)
     }
 }

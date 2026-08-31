@@ -34,6 +34,18 @@ final class GlobalSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.settings.tuningID, .dropD)
         XCTAssertEqual(decoded.settings.sensitivity, 0.7)
         XCTAssertEqual(decoded.settings.inputDeviceUID, "abc")
+        XCTAssertFalse(decoded.settings.showsLiveNoteOnModules)
+    }
+
+    func testLiveNoteVisibilityRoundTripsAndDefaultsForOlderDocuments() throws {
+        var settings = PracticeState.Settings()
+        XCTAssertFalse(settings.showsLiveNoteOnModules)
+        settings.showsLiveNoteOnModules = true
+
+        var document = PracticeState()
+        document.settings = settings
+        let data = try JSONEncoder().encode(document)
+        XCTAssertTrue(try JSONDecoder().decode(PracticeState.self, from: data).settings.showsLiveNoteOnModules)
     }
 
     /// A malformed value must not take the rest of the document with it — the

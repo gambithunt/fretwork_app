@@ -4,6 +4,7 @@ import SwiftUI
 struct PentatonicModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: PentatonicModuleModel?
+    @State private var showsFullNeck = false
 
     var body: some View {
         Group {
@@ -21,40 +22,35 @@ struct PentatonicModuleScreen: View {
     }
 
     private func content(_ model: PentatonicModuleModel) -> some View {
-        ModuleLayout(module: .pentatonic) {
+        ModuleLayout(module: .pentatonic, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 StandardTuningNotice(tuning: state.tuning, what: "These boxes")
                 controls(model)
             }
         } stage: {
-            FretboardBoardView(
-                dots: model.dots,
-                frets: model.highestFret,
-                tuning: Tunings.standard,
-                flipped: state.isFretboardFlipped,
-                pulses: model.pulses
-            )
-            .frame(minHeight: 260)
+            VStack(alignment: .trailing, spacing: 8) {
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: showsFullNeck ? 22 : model.highestFret,
+                    tuning: Tunings.standard,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses
+                )
+                .frame(minHeight: 260)
+            }
         } readout: {
             readout(model)
         }
     }
 
     private func controls(_ model: PentatonicModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("ROOT")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { value in
-                        rootButton(model, pitchClass: PitchClass(value))
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
+                .moduleNotesCard()
 
-            HStack(spacing: 12) {
+            HStack(spacing: 16) {
                 Picker("Quality", selection: Binding(
                     get: { model.quality },
                     set: { model.selectQuality($0) }
@@ -82,9 +78,10 @@ struct PentatonicModuleScreen: View {
                     ForEach(0...4, id: \.self) { Text("Box \($0 + 1)").tag($0) }
                 }
                 .fixedSize()
-            }
 
-            guidedControls(model)
+                guidedControls(model)
+            }
+            .moduleOptionsCard()
         }
     }
 
@@ -115,23 +112,6 @@ struct PentatonicModuleScreen: View {
         }
     }
 
-    private func rootButton(_ model: PentatonicModuleModel, pitchClass: PitchClass) -> some View {
-        let isActive = model.rootPitchClass == pitchClass
-        let color = NotePalette.color(for: pitchClass)
-        return Button {
-            model.selectRoot(pitchClass)
-        } label: {
-            Text(pitchClass.name())
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isActive ? color : color.opacity(0.16), in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(isActive ? Color.black : color)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(pitchClass.name())
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
 
     private func readout(_ model: PentatonicModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {

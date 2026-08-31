@@ -15,7 +15,13 @@ struct ListenScreen: View {
             header
             if let error = state.errorMessage {
                 audioErrorBanner(error)
-            } else if state.isReconnecting {
+            } else if state.isReconnecting, state.hasStartedAudio {
+                // Only for a genuine mid-session reconnect. A slow *first*
+                // build reaches this same flag through the build watchdog, and
+                // inserting a row there pushes the whole screen down and back
+                // up a beat later, on a launch where nothing has gone wrong.
+                // The status pill in `brand` carries that case instead — it
+                // reserves its width, so it changes without moving anything.
                 reconnectingBanner
             } else if let hint = state.unclearSignalMessage {
                 signalHintBanner(hint)
@@ -64,7 +70,7 @@ struct ListenScreen: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.035, green: 0.045, blue: 0.047))
+        .background(NotePalette.backdrop)
         .preferredColorScheme(.dark)
     }
 
@@ -108,9 +114,38 @@ struct ListenScreen: View {
                 .scaledToFit()
                 .frame(height: HeaderMetrics.blockHeight)
                 .accessibilityLabel("Fretwork")
-            Label(state.errorMessage == nil && !state.isReconnecting ? "Listening" : "Reconnecting", systemImage: "circle.fill")
-                .font(.callout).foregroundStyle(state.errorMessage == nil && !state.isReconnecting ? .green : .orange)
+            statusPill
         }
+    }
+
+    /// Three states, not two. "Starting…" is the honest one for the window
+    /// between the app appearing and the graph coming up — `ContentView` waits
+    /// 100ms before starting the engine at all, and a USB interface can take a
+    /// good deal longer than that to bind — where this used to claim
+    /// "Listening" before anything was, or "Reconnecting" to a device it had
+    /// never reached.
+    ///
+    /// Laid out against "Reconnecting", the widest of the three, with the live
+    /// label overlaid: the pill sits to the left of the whole signal-path row,
+    /// so a word changing width here slides every control in the header. That
+    /// was already true of the old two-state label; reserving the space is what
+    /// makes it stop being true.
+    private var statusPill: some View {
+        let (text, tint): (String, Color) = {
+            if state.errorMessage != nil || state.isReconnecting {
+                return (state.hasStartedAudio ? "Reconnecting" : "Starting…", .orange)
+            }
+            return state.hasStartedAudio ? ("Listening", .green) : ("Starting…", .orange)
+        }()
+        return Label("Reconnecting", systemImage: "circle.fill")
+            .font(.callout)
+            .hidden()
+            .overlay(alignment: .leading) {
+                Label(text, systemImage: "circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(tint)
+                    .fixedSize()
+            }
     }
 
     /// What is left in the header after workstream 005 moved the global
@@ -296,18 +331,25 @@ private struct BoardSection: View {
 private struct TelemetrySection: View {
     let state: AppState
 
+    /// Whether the audio graph has reported anything yet. `ContentView`
+    /// starts the engine 100ms after the window appears, so for the first few
+    /// frames of every launch `display` is still its zero-valued default —
+    /// which rendered as a confident, entirely fictional "0 frames · 0.0 ms ·
+    /// Buffered". Measured with an in-process window capture at 16ms: those
+    /// placeholder numbers were the only thing on the whole Listen screen that
+    /// changed during launch, and swapping them for the real ones was what
+    /// slid the row sideways. A device that is running always reports a
+    /// non-zero IO buffer, so this is the honest test for "nothing to report
+    /// yet".
+    private var hasReading: Bool { state.display.bufferSize > 0 }
+
     var body: some View {
         HStack(spacing: 24) {
-            Label("\(state.display.bufferSize) frames", systemImage: "waveform")
-                .help("Hardware IO buffer actually in force on the input device.")
+            bufferReadout
             Divider().frame(height: 20)
             latencyReadout
             Divider().frame(height: 20)
-            Label(state.display.isDirectMonitoring ? "Direct" : "Buffered",
-                  systemImage: state.display.isDirectMonitoring ? "bolt.fill" : "arrow.triangle.swap")
-                .help(state.display.isDirectMonitoring
-                      ? "One device, one clock: monitoring stays inside a single render graph."
-                      : "Input and output are separate devices, so audio is buffered between them, which costs noticeable delay.")
+            monitoringPathReadout
             if let candidate = state.directMonitoringCandidate {
                 Button("Monitor through \(candidate.name)") { state.useInputDeviceForOutput() }
                     .buttonStyle(.link)
@@ -317,10 +359,17 @@ private struct TelemetrySection: View {
         .font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(maxWidth: .infinity)
     }
 
-    /// Laid out against the widest value it can show, with the live value
-    /// overlaid on top. A digit appearing or disappearing used to re-lay-out
-    /// the whole row, shoving everything to its right sideways; reserving the
-    /// space means the row's geometry no longer depends on the number in it.
+    /// Every readout in this row is laid out against the widest value it can
+    /// show, with the live value overlaid on top — see `reserving`. That is
+    /// load-bearing rather than tidy: the row is *centred* in the window, so
+    /// an item that changes width does not just shove what is to its right,
+    /// it slides every other item too.
+    private var bufferReadout: some View {
+        Self.reserving("9999 frames", systemImage: "waveform",
+                       value: hasReading ? "\(state.display.bufferSize) frames" : "— frames")
+            .help("Hardware IO buffer actually in force on the input device.")
+    }
+
     /// Precision follows the scale: tenths matter at 2ms on the direct path,
     /// and are pure jitter at 100ms on the buffered one.
     private var latencyReadout: some View {
@@ -328,9 +377,37 @@ private struct TelemetrySection: View {
         let text = milliseconds < 10
             ? String(format: "%.1f ms", milliseconds)
             : String(format: "%.0f ms", milliseconds)
-        return Label("999 ms", systemImage: "timer")
+        return Self.reserving("999 ms", systemImage: "timer",
+                              value: hasReading ? text : "— ms")
+    }
+
+    /// Reserved against "Buffered", the wider of the two words, so the path
+    /// flipping to "Direct" mid-session cannot move the row either. The icon
+    /// still swaps with the state; only the width is pinned.
+    private var monitoringPathReadout: some View {
+        let direct = state.display.isDirectMonitoring
+        let symbol = direct ? "bolt.fill" : "arrow.triangle.swap"
+        return Label("Buffered", systemImage: symbol)
             .hidden()
-            .overlay(alignment: .leading) { Label(text, systemImage: "timer") }
+            .overlay(alignment: .leading) {
+                Label(hasReading ? (direct ? "Direct" : "Buffered") : "—", systemImage: symbol)
+            }
+            .contentShape(Rectangle())
+            .help(direct
+                  ? "One device, one clock: monitoring stays inside a single render graph."
+                  : "Input and output are separate devices, so audio is buffered between them, which costs noticeable delay.")
+    }
+
+    /// A label sized by `placeholder` and filled with `value`.
+    ///
+    /// `.contentShape` because `.hidden()` also removes the reserved area from
+    /// hit testing, and every one of these carries a `.help` tooltip that has
+    /// to cover the whole width the reader can see.
+    private static func reserving(_ placeholder: String, systemImage: String, value: String) -> some View {
+        Label(placeholder, systemImage: systemImage)
+            .hidden()
+            .overlay(alignment: .leading) { Label(value, systemImage: systemImage) }
+            .contentShape(Rectangle())
     }
 }
 

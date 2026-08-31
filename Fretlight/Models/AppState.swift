@@ -118,6 +118,16 @@ final class AppState {
         }
     }
 
+    /// An opt-in compact pitch readout for learning modules. The pitch worker
+    /// already runs for the app's audio graph; this only changes whether its
+    /// result is visible outside Listen.
+    var showsLiveNoteOnModules = false {
+        didSet {
+            guard showsLiveNoteOnModules != oldValue else { return }
+            practiceState.update { $0.settings.showsLiveNoteOnModules = showsLiveNoteOnModules }
+        }
+    }
+
     /// Detection costs CPU only while something is looking at it. Screens that
     /// show no live readout leave the workers idle, using the gate
     /// `ChordAnalysisWorker` already has — an idle worker costs one `write` per
@@ -139,6 +149,7 @@ final class AppState {
 
     var isChordDetectionActiveForTesting: Bool { isChordDetectionActive }
     var persistedFretboardFlipForTesting: Bool { practiceState.state.settings.isFretboardFlipped }
+    var persistedLiveNoteVisibilityForTesting: Bool { practiceState.state.settings.showsLiveNoteOnModules }
     /// Where the current note is most likely being played, best candidate
     /// first. Derived here rather than on the analysis thread because it
     /// depends on playing history, not on the audio.
@@ -152,6 +163,15 @@ final class AppState {
     /// multi-second retry window. Surfacing this instead is what turns that
     /// window from "looks frozen" into "visibly reconnecting".
     var isReconnecting = false
+    /// Whether the audio graph has ever come up in this session.
+    ///
+    /// The build watchdog reports a slow *first* build through the same
+    /// `onReconnecting` callback a mid-session device drop uses, and on a first
+    /// build there is nothing to reconnect to — so without this the app told a
+    /// player with a slow-binding interface that it was "Reconnecting to audio
+    /// device" the first time they ever opened it. The two states also deserve
+    /// different weight on screen: see `ListenScreen`.
+    private(set) var hasStartedAudio = false
     /// Set when the live input has real signal but nothing is resolving a
     /// confident note/chord from it for a sustained stretch — heavy
     /// distortion, noise, or (in Notes mode) a strummed chord the detector
@@ -312,6 +332,7 @@ final class AppState {
             Task { @MainActor [weak self] in
                 self?.errorMessage = nil
                 self?.isReconnecting = false
+                self?.hasStartedAudio = true
             }
         }
         audioEngine.onReconnecting = { [weak self] in
@@ -348,6 +369,7 @@ final class AppState {
         // `didSet` only writes the value back, so a missed observer costs
         // nothing. `sensitivity` below is the opposite case.
         isFretboardFlipped = settings.isFretboardFlipped
+        showsLiveNoteOnModules = settings.showsLiveNoteOnModules
         tuning = Tunings.tuning(id: settings.tuningID)
         // Property observers do not fire for a value assigned inside the
         // type's own initialiser, so restoring `sensitivity` above never

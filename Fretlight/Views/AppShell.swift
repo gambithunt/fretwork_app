@@ -112,7 +112,7 @@ struct ModulePlaceholderScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(32)
-        .background(Color(red: 0.035, green: 0.045, blue: 0.047))
+        .background(NotePalette.backdrop)
         .preferredColorScheme(.dark)
     }
 }
