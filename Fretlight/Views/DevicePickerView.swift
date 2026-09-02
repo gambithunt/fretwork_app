@@ -13,6 +13,10 @@ struct DevicePickerView: View {
             ForEach(devices) { device in Text(device.name).tag(Optional(device.id)) }
         }
         .labelsHidden()
-        .frame(maxWidth: 260)
+        // The settings form owns the width. A picker that sizes itself to its
+        // current device name makes every other control look misaligned as
+        // "GP-200 Audio" becomes "MacBook Pro Speakers".
+        .pickerStyle(.menu)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

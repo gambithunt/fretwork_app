@@ -5,6 +5,7 @@ struct OctavesModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: OctavesModuleModel?
     @State private var showsFullNeck = false
+    @State private var labelMode: FretboardLabelMode = .notes
 
     var body: some View {
         Group {
@@ -26,7 +27,12 @@ struct OctavesModuleScreen: View {
     }
 
     private func content(_ model: OctavesModuleModel) -> some View {
-        ModuleLayout(module: .octaves, state: state) {
+        let dots = labelMode == .notes ? model.dots : model.dots.map { dot in
+            var numbered = dot
+            if dot.label != "?" { numbered.label = dot.id.contains("target") ? "8" : "1" }
+            return numbered
+        }
+        return ModuleLayout(module: .octaves, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
@@ -42,7 +48,7 @@ struct OctavesModuleScreen: View {
                     onNext: model.challenge.isRunning ? nil : { model.moveAnchor(by: 1) }
                 ) {
                     FretboardBoardView(
-                        dots: model.dots,
+                        dots: dots,
                         frets: showsFullNeck ? 22 : model.highestFret,
                         tuning: model.tuning,
                         flipped: state.isFretboardFlipped,
@@ -58,6 +64,7 @@ struct OctavesModuleScreen: View {
                             }
                         }
                     )
+                    .moduleLiveNoteGlow(state: state, dots: dots, frets: showsFullNeck ? 22 : model.highestFret, tuning: model.tuning, flipped: state.isFretboardFlipped)
                     .frame(minHeight: 260)
                 }
             }
@@ -72,6 +79,7 @@ struct OctavesModuleScreen: View {
                 .moduleNotesCard()
 
             HStack(spacing: 12) {
+                FretboardLabelPicker(selection: $labelMode)
                 Button {
                     model.hearOctave()
                 } label: {

@@ -40,12 +40,32 @@ final class GlobalSettingsTests: XCTestCase {
     func testLiveNoteVisibilityRoundTripsAndDefaultsForOlderDocuments() throws {
         var settings = PracticeState.Settings()
         XCTAssertFalse(settings.showsLiveNoteOnModules)
+        XCTAssertFalse(settings.highlightsLiveNoteOnFretboards)
         settings.showsLiveNoteOnModules = true
+        settings.highlightsLiveNoteOnFretboards = true
 
         var document = PracticeState()
         document.settings = settings
-        let data = try JSONEncoder().encode(document)
-        XCTAssertTrue(try JSONDecoder().decode(PracticeState.self, from: data).settings.showsLiveNoteOnModules)
+        let restored = try JSONDecoder().decode(PracticeState.self, from: JSONEncoder().encode(document))
+        XCTAssertTrue(restored.settings.showsLiveNoteOnModules)
+        XCTAssertTrue(restored.settings.highlightsLiveNoteOnFretboards)
+    }
+
+    func testAnonymousUsageSharingIsOffByDefaultAndRoundTrips() throws {
+        var settings = PracticeState.Settings()
+        XCTAssertFalse(settings.sharesAnonymousUsageData)
+
+        settings.sharesAnonymousUsageData = true
+        var document = PracticeState()
+        document.settings = settings
+        let restored = try JSONDecoder().decode(PracticeState.self, from: JSONEncoder().encode(document))
+
+        XCTAssertTrue(restored.settings.sharesAnonymousUsageData)
+    }
+
+    func testLiveNoteGlowPreferenceIsRestoredOntoAppState() {
+        let state = AppState()
+        XCTAssertEqual(state.highlightsLiveNoteOnFretboards, state.persistedLiveNoteHighlightForTesting)
     }
 
     /// A malformed value must not take the rest of the document with it — the

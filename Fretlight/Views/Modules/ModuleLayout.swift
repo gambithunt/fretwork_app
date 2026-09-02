@@ -1,5 +1,40 @@
 import SwiftUI
 
+/// The two useful ways to read a contextual fretboard: the note's literal
+/// name, or the job it performs inside the exercise's current harmony.
+enum FretboardLabelMode: String, CaseIterable {
+    case notes
+    case degrees
+}
+
+/// Shared compact selector used in each learning screen's options card.
+struct FretboardLabelPicker: View {
+    @Binding var selection: FretboardLabelMode
+
+    var body: some View {
+        Picker("Labels", selection: $selection) {
+            Text("Notes").tag(FretboardLabelMode.notes)
+            Text("Numbers").tag(FretboardLabelMode.degrees)
+        }
+        .fixedSize()
+        .help("Show note names or the degrees used by this lesson")
+    }
+}
+
+extension Array where Element == FretboardDot {
+    /// The models retain their degree/interval labels as their teaching
+    /// source. This presentation-only transform swaps only labelled dots to
+    /// their real pitch names, so deliberately blank context dots stay quiet.
+    func showingNoteNames(in tuning: Tuning) -> Self {
+        map { dot in
+            guard !dot.label.isEmpty, let pitchClass = dot.pitchClass(in: tuning) else { return dot }
+            var named = dot
+            named.label = pitchClass.name()
+            return named
+        }
+    }
+}
+
 /// The frame every learning module renders into, so layout lives in one place.
 ///
 /// The Swift counterpart of `../fretwork/src/lib/components/ModuleLayout.svelte`
@@ -101,6 +136,90 @@ private struct ModuleLiveNoteReadout: View {
         .background(.white.opacity(0.08), in: Capsule())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(display.note.map { "Live note \($0.name)\($0.octave)" } ?? "Listening for a note")
+    }
+}
+
+/// Draws only the live-note feedback layer over a lesson fretboard. Keeping
+/// this separate from `FretboardBoardView` means a pitch update redraws this
+/// small set of halos, not the board's dots, controls, or teaching copy.
+private struct ModuleLiveNoteGlow: View {
+    let state: AppState
+    let dots: [FretboardDot]
+    let frets: Int
+    let tuning: Tuning
+    let flipped: Bool
+    var margins: BoardGeometry.Margins = .labelled
+
+    @ViewBuilder var body: some View {
+        // Do not read `display` while the feature is off. Besides making the
+        // feature genuinely inert, that removes this view's audio-rate
+        // dependency until the player opts in.
+        if state.showsLiveNoteOnModules, state.highlightsLiveNoteOnFretboards {
+            activeGlow
+        }
+    }
+
+    private var activeGlow: some View {
+        // Keep the layer present while silence arrives so the matching rings
+        // leave with the requested brief fade instead of disappearing as a
+        // whole overlay in one transaction.
+        let note = state.display.note
+        return GeometryReader { proxy in
+            let geometry = BoardGeometry(
+                size: proxy.size,
+                frets: frets,
+                strings: tuning.openMIDINotes.count,
+                flipped: flipped,
+                margins: margins
+            )
+            ZStack {
+                if let note {
+                    let matchingDots = Self.matching(dots, pitchClass: PitchClass(note.midiNote), tuning: tuning)
+                    let color = NotePalette.color(for: note.name)
+                    ForEach(matchingDots) { dot in
+                        Circle()
+                            .strokeBorder(color.opacity(0.72 * dot.alpha), lineWidth: 2)
+                            .frame(width: dot.radius * 2 + 8, height: dot.radius * 2 + 8)
+                            .shadow(color: color.opacity(0.78 * dot.alpha), radius: 9)
+                            .position(geometry.point(dot.position))
+                            .transition(.opacity)
+                    }
+                }
+            }
+            .animation(.easeOut(duration: 0.18), value: note?.midiNote)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    static func matching(_ dots: [FretboardDot], pitchClass: PitchClass, tuning: Tuning) -> [FretboardDot] {
+        dots.filter { $0.pitchClass(in: tuning) == pitchClass }
+    }
+}
+
+extension View {
+    /// Adds live-note feedback to a lesson board without handing the board an
+    /// audio-rate dependency. The active dot model stays the sole authority
+    /// on which lesson positions are visible; this layer merely decorates the
+    /// visible positions that match the detected pitch class.
+    func moduleLiveNoteGlow(
+        state: AppState,
+        dots: [FretboardDot],
+        frets: Int,
+        tuning: Tuning,
+        flipped: Bool,
+        margins: BoardGeometry.Margins = .labelled
+    ) -> some View {
+        overlay {
+            ModuleLiveNoteGlow(
+                state: state,
+                dots: dots,
+                frets: frets,
+                tuning: tuning,
+                flipped: flipped,
+                margins: margins
+            )
+        }
     }
 }
 

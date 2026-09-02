@@ -5,6 +5,7 @@ struct CircleModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: CircleModuleModel?
     @State private var showsFullNeck = false
+    @State private var labelMode: FretboardLabelMode = .notes
 
     var body: some View {
         Group {
@@ -23,7 +24,13 @@ struct CircleModuleScreen: View {
     }
 
     private func content(_ model: CircleModuleModel) -> some View {
-        ModuleLayout(module: .circle, state: state) {
+        let triadDegrees = [model.selected: "1", model.selected.transposed(by: 4): "3", model.selected.transposed(by: 7): "5"]
+        let dots = labelMode == .notes ? model.dots : model.dots.map { dot in
+            var numbered = dot
+            if let pitchClass = dot.pitchClass(in: model.tuning) { numbered.label = triadDegrees[pitchClass] ?? dot.label }
+            return numbered
+        }
+        return ModuleLayout(module: .circle, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
@@ -40,12 +47,13 @@ struct CircleModuleScreen: View {
                         FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: 12)
                     }
                     FretboardBoardView(
-                        dots: model.dots,
+                        dots: dots,
                         frets: showsFullNeck ? 22 : 12,
                         tuning: model.tuning,
                         flipped: state.isFretboardFlipped,
                         pulses: model.pulses
                     )
+                    .moduleLiveNoteGlow(state: state, dots: dots, frets: showsFullNeck ? 22 : 12, tuning: model.tuning, flipped: state.isFretboardFlipped)
                     .frame(minHeight: 200)
                 }
             }
@@ -136,6 +144,7 @@ struct CircleModuleScreen: View {
     // notes-card-plus-options-card split every other module uses.
     private func controls(_ model: CircleModuleModel) -> some View {
         HStack(spacing: 12) {
+            FretboardLabelPicker(selection: $labelMode)
             Button { model.step(by: -1) } label: { Label("Anticlockwise", systemImage: "arrow.counterclockwise") }
             Button { model.step(by: 1) } label: { Label("Clockwise", systemImage: "arrow.clockwise") }
             Button {

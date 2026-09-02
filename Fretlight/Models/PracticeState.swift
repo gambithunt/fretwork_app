@@ -69,6 +69,15 @@ extension PracticeState {
         /// module. Off by default so lesson screens remain focused unless the
         /// player explicitly wants continuous feedback while practising.
         var showsLiveNoteOnModules = false
+        /// Adds a quiet halo to lesson dots whose pitch class matches the
+        /// current live note. This is distinct from the header readout: a
+        /// player may want the note named without also changing the visual
+        /// hierarchy of every lesson board.
+        var highlightsLiveNoteOnFretboards = false
+        /// Explicitly chosen, anonymous product telemetry. This remains off
+        /// until the player enables it in Settings; it is not bundled into the
+        /// microphone permission or any other app preference.
+        var sharesAnonymousUsageData = false
 
         init() {}
     }
@@ -513,7 +522,7 @@ extension PracticeState {
 
 extension PracticeState.Settings: Codable {
     private enum CodingKeys: String, CodingKey {
-        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID, isFretboardFlipped, showsLiveNoteOnModules
+        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID, isFretboardFlipped, showsLiveNoteOnModules, highlightsLiveNoteOnFretboards, sharesAnonymousUsageData
     }
 
     init(from decoder: any Decoder) throws {
@@ -538,6 +547,12 @@ extension PracticeState.Settings: Codable {
         if let value = (try? container.decodeIfPresent(Bool.self, forKey: .showsLiveNoteOnModules)) ?? nil {
             showsLiveNoteOnModules = value
         }
+        if let value = (try? container.decodeIfPresent(Bool.self, forKey: .highlightsLiveNoteOnFretboards)) ?? nil {
+            highlightsLiveNoteOnFretboards = value
+        }
+        if let value = (try? container.decodeIfPresent(Bool.self, forKey: .sharesAnonymousUsageData)) ?? nil {
+            sharesAnonymousUsageData = value
+        }
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -548,5 +563,7 @@ extension PracticeState.Settings: Codable {
         try container.encodeIfPresent(outputDeviceUID, forKey: .outputDeviceUID)
         try container.encode(isFretboardFlipped, forKey: .isFretboardFlipped)
         try container.encode(showsLiveNoteOnModules, forKey: .showsLiveNoteOnModules)
+        try container.encode(highlightsLiveNoteOnFretboards, forKey: .highlightsLiveNoteOnFretboards)
+        try container.encode(sharesAnonymousUsageData, forKey: .sharesAnonymousUsageData)
     }
 }

@@ -68,6 +68,7 @@ struct NotesModuleScreen: View {
                         model.longPressCell(string: position.string, fret: position.fret)
                     }
                 )
+                .moduleLiveNoteGlow(state: state, dots: model.dots, frets: model.highestFret, tuning: model.tuning, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260)
             }
         } readout: {

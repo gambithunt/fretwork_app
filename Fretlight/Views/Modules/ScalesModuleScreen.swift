@@ -37,6 +37,7 @@ struct ScalesModuleScreen: View {
                     tuning: model.tuning,
                     flipped: state.isFretboardFlipped
                 )
+                .moduleLiveNoteGlow(state: state, dots: model.dots, frets: showsFullNeck ? 22 : model.highestFret, tuning: model.tuning, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260)
             }
         } readout: {
@@ -70,7 +71,7 @@ struct ScalesModuleScreen: View {
                 set: { model.selectLabelMode($0) }
             )) {
                 Text("Notes").tag(ScalesModuleModel.LabelMode.notes)
-                Text("Degrees").tag(ScalesModuleModel.LabelMode.degrees)
+                Text("Numbers").tag(ScalesModuleModel.LabelMode.degrees)
             }
             .fixedSize()
 

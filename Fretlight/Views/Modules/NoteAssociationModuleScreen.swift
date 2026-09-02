@@ -38,6 +38,7 @@ struct NoteAssociationModuleScreen: View {
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses
                 )
+                .moduleLiveNoteGlow(state: state, dots: model.dots, frets: showsFullNeck ? 22 : model.highestFret, tuning: model.tuning, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260)
             }
         } readout: {
@@ -66,7 +67,7 @@ struct NoteAssociationModuleScreen: View {
                         set: { model.setLabelMode($0) }
                     )) {
                         Text("Notes").tag(NoteAssociationModuleModel.LabelMode.notes)
-                        Text("Degrees").tag(NoteAssociationModuleModel.LabelMode.degrees)
+                        Text("Numbers").tag(NoteAssociationModuleModel.LabelMode.degrees)
                     }
                     .fixedSize()
                 }

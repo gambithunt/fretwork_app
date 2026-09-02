@@ -24,9 +24,12 @@ struct GlobalSettingsView: View {
     /// cell) let the controls step in and out as "Input" gave way to
     /// "Sensitivity".
     private let labelColumnWidth: CGFloat = 92
-    /// The three menu pickers share one width so their left *and* right edges
-    /// line up, rather than each hugging its current value.
+    /// One reserved column for every setting control. This is deliberately
+    /// wider than the sliders: all controls begin on the same vertical line,
+    /// while menus also finish together instead of changing width with their
+    /// selected value.
     private let pickerWidth: CGFloat = 240
+    private let rowHeight: CGFloat = 32
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -91,6 +94,7 @@ struct GlobalSettingsView: View {
                         }
                     }
                     .labelsHidden()
+                    .pickerStyle(.menu)
                     .frame(width: pickerWidth)
                 }
                 row("Board") {
@@ -110,6 +114,25 @@ struct GlobalSettingsView: View {
                 row("Live note") {
                     Toggle("Show on learning tabs", isOn: $state.showsLiveNoteOnModules)
                         .help("Show the detected note in the top-right corner of every learning tab")
+                }
+                row("Board glow") {
+                    Toggle("Highlight matching notes", isOn: $state.highlightsLiveNoteOnFretboards)
+                        .disabled(!state.showsLiveNoteOnModules)
+                        .help(state.showsLiveNoteOnModules
+                              ? "Add a soft glow to visible fretboard notes matching the live note"
+                              : "Turn on the live note readout first")
+                }
+            }
+
+            section("Privacy") {
+                row("Usage data") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Share anonymous usage data", isOn: $state.sharesAnonymousUsageData)
+                        Text("At most once a day: app version and approximate country. Never audio, notes, devices, or identity.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -138,7 +161,9 @@ struct GlobalSettingsView: View {
             Text(label ?? "")
                 .frame(width: labelColumnWidth, alignment: .leading)
             control()
+                .frame(width: pickerWidth, alignment: .leading)
             Spacer(minLength: 0)
         }
+        .frame(minHeight: rowHeight)
     }
 }

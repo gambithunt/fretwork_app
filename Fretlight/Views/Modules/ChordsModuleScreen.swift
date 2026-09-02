@@ -5,6 +5,7 @@ struct ChordsModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: ChordsModuleModel?
     @State private var showsFullNeck = false
+    @State private var labelMode: FretboardLabelMode = .degrees
 
     var body: some View {
         Group {
@@ -22,7 +23,8 @@ struct ChordsModuleScreen: View {
     }
 
     private func content(_ model: ChordsModuleModel) -> some View {
-        ModuleLayout(module: .chords, state: state) {
+        let dots = labelMode == .notes ? model.dots.showingNoteNames(in: Tunings.standard) : model.dots
+        return ModuleLayout(module: .chords, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 StandardTuningNotice(tuning: state.tuning, what: "These shapes")
@@ -36,12 +38,13 @@ struct ChordsModuleScreen: View {
                     onNext: model.voicings.count < 2 ? nil : { model.movePosition(by: 1) }
                 ) {
                     FretboardBoardView(
-                        dots: model.dots,
+                        dots: dots,
                         frets: showsFullNeck ? 22 : model.highestFret,
                         tuning: Tunings.standard,
                         flipped: state.isFretboardFlipped,
                         pulses: model.pulses
                     )
+                    .moduleLiveNoteGlow(state: state, dots: dots, frets: showsFullNeck ? 22 : model.highestFret, tuning: Tunings.standard, flipped: state.isFretboardFlipped)
                     .frame(minHeight: 260)
                 }
             }
@@ -77,6 +80,8 @@ struct ChordsModuleScreen: View {
                     }
                 }
                 .fixedSize()
+
+                FretboardLabelPicker(selection: $labelMode)
 
                 Button {
                     model.strum()
