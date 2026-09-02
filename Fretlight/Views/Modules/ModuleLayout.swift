@@ -117,23 +117,31 @@ private struct ModuleLiveNoteReadout: View {
 
     var body: some View {
         let display = state.display
-        HStack(spacing: 8) {
-            Circle()
-                .fill(display.note.map { NotePalette.color(for: $0.name) } ?? .white.opacity(0.14))
-                .frame(width: 10, height: 10)
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(display.note.map { "\($0.name)\($0.octave)" } ?? "—")
-                    .font(.title3.weight(.bold).monospacedDigit())
-                    .contentTransition(.numericText())
-                Text(display.note == nil ? "LISTENING" : "LIVE NOTE")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1)
-                    .foregroundStyle(.secondary)
-            }
+        let noteColor = display.note.map { NotePalette.color(for: $0.name) }
+
+        VStack(spacing: 4) {
+            Text("LISTENING")
+                .font(.caption2.weight(.bold))
+                .tracking(1)
+                .foregroundStyle(.secondary)
+
+            Text(display.note.map { "\($0.name)\($0.octave)" } ?? "—")
+                .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
+                .contentTransition(.numericText())
+                .frame(minWidth: 104)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background {
+                    Capsule()
+                        .fill(noteColor?.opacity(0.28) ?? .white.opacity(0.08))
+                        .overlay {
+                            Capsule()
+                                .stroke(noteColor?.opacity(0.52) ?? .white.opacity(0.10), lineWidth: 1)
+                        }
+                        .shadow(color: noteColor?.opacity(0.26) ?? .clear, radius: 12)
+                }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.white.opacity(0.08), in: Capsule())
+        .animation(.easeInOut(duration: 0.2), value: display.note?.midiNote)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(display.note.map { "Live note \($0.name)\($0.octave)" } ?? "Listening for a note")
     }
