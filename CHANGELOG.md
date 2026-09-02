@@ -2,6 +2,12 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.5.4 — 2026-09-02
+
+- Fixed production updates by publishing Sparkle delta archives and purging
+  every generated archive from the download edge cache after a release. This
+  keeps the appcast signature and the file a client downloads in sync.
+
 ## 0.5.3 — 2026-09-02
 
 - Added optional, anonymous usage telemetry. It is off by default and sends at
