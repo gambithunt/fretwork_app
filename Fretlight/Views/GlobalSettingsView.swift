@@ -24,8 +24,8 @@ struct GlobalSettingsView: View {
     /// cell) let the controls step in and out as "Input" gave way to
     /// "Sensitivity".
     private let labelColumnWidth: CGFloat = 92
-    /// The three menu pickers share one width so their left *and* right edges
-    /// line up, rather than each hugging its current value.
+    /// The menu controls share one width; buttons, toggles and sliders keep
+    /// their natural size so a form row never has to trade away its label.
     private let pickerWidth: CGFloat = 240
 
     var body: some View {
@@ -38,7 +38,7 @@ struct GlobalSettingsView: View {
                         selection: state.selectedInputDeviceID,
                         onSelect: state.selectInputDevice
                     )
-                    .frame(width: pickerWidth)
+                    .frame(width: pickerWidth, alignment: .leading)
                 }
                 row("Output") {
                     DevicePickerView(
@@ -47,7 +47,7 @@ struct GlobalSettingsView: View {
                         selection: state.selectedOutputDeviceID,
                         onSelect: state.selectOutputDevice
                     )
-                    .frame(width: pickerWidth)
+                    .frame(width: pickerWidth, alignment: .leading)
                 }
                 row(nil) {
                     Button {
@@ -61,6 +61,8 @@ struct GlobalSettingsView: View {
 
             section("Monitoring") {
                 row("Monitor") {
+                    RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
+                        .frame(width: 140)
                     Button {
                         state.monitorMuted.toggle()
                     } label: {
@@ -69,8 +71,6 @@ struct GlobalSettingsView: View {
                     .buttonStyle(.bordered)
                     .tint(.secondary)
                     .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
-                    RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
-                        .frame(width: 140)
                 }
                 row("Sensitivity") {
                     RulerSlider(value: $state.sensitivity)
@@ -91,7 +91,8 @@ struct GlobalSettingsView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: pickerWidth)
+                    .pickerStyle(.menu)
+                    .frame(width: pickerWidth, alignment: .leading)
                 }
                 row("Board") {
                     Button {
@@ -110,6 +111,25 @@ struct GlobalSettingsView: View {
                 row("Live note") {
                     Toggle("Show on learning tabs", isOn: $state.showsLiveNoteOnModules)
                         .help("Show the detected note in the top-right corner of every learning tab")
+                }
+                row("Board glow") {
+                    Toggle("Highlight matching notes", isOn: $state.highlightsLiveNoteOnFretboards)
+                        .disabled(!state.showsLiveNoteOnModules)
+                        .help(state.showsLiveNoteOnModules
+                              ? "Add a soft glow to visible fretboard notes matching the live note"
+                              : "Turn on the live note readout first")
+                }
+            }
+
+            section("Privacy") {
+                row("Usage data") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("Share anonymous usage data", isOn: $state.sharesAnonymousUsageData)
+                        Text("At most once a day: app version and approximate country. Never audio, notes, devices, or identity.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }

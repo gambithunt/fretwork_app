@@ -40,7 +40,8 @@ echo "==> Archiving (universal, signed as '$IDENTITY')"
 # ordering: the XPC services and Updater.app inside Sparkle.framework must be
 # signed before the framework, and the framework before the app.
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
-  -destination 'generic/platform=macOS' -archivePath "$ARCHIVE" \
+  -destination 'generic/platform=macOS' -derivedDataPath "$WORK/DerivedData" \
+  -archivePath "$ARCHIVE" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$IDENTITY" \
   DEVELOPMENT_TEAM="" \

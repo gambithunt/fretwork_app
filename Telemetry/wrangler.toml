@@ -1,0 +1,10 @@
+name = "fretwork-telemetry"
+main = "src/index.ts"
+compatibility_date = "2026-09-02"
+
+# This Worker is intentionally separate from the download bucket. Deploy it
+# to the proxied telemetry.fretwork.org hostname before shipping a build that
+# offers the opt-in setting; see docs/telemetry.md.
+[[analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "fretwork_usage"

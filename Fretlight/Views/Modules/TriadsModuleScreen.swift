@@ -5,6 +5,7 @@ import SwiftUI
 struct TriadsModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: TriadsModuleModel?
+    @State private var labelMode: FretboardLabelMode = .degrees
 
     var body: some View {
         Group {
@@ -23,7 +24,8 @@ struct TriadsModuleScreen: View {
     }
 
     private func content(_ model: TriadsModuleModel) -> some View {
-        ModuleLayout(module: .triads, state: state) {
+        let dots = labelMode == .notes ? model.dots.showingNoteNames(in: model.tuning) : model.dots
+        return ModuleLayout(module: .triads, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
@@ -37,12 +39,13 @@ struct TriadsModuleScreen: View {
                 onNext: model.isPathMode ? nil : { model.movePosition(by: 1) }
             ) {
                 FretboardBoardView(
-                    dots: model.dots,
+                    dots: dots,
                     frets: model.highestFret,
                     tuning: model.tuning,
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses
                 )
+                .moduleLiveNoteGlow(state: state, dots: dots, frets: model.highestFret, tuning: model.tuning, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260)
             }
         } readout: {
@@ -60,6 +63,10 @@ struct TriadsModuleScreen: View {
             .moduleNotesCard()
 
             VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    FretboardLabelPicker(selection: $labelMode)
+                    Spacer()
+                }
                 Picker("Exercise", selection: Binding(
                     get: { model.isPathMode },
                     set: { model.setPathMode($0) }

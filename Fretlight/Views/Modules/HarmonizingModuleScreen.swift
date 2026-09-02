@@ -5,6 +5,7 @@ struct HarmonizingModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: HarmonizingModuleModel?
     @State private var showsFullNeck = false
+    @State private var labelMode: FretboardLabelMode = .degrees
 
     var body: some View {
         Group {
@@ -22,7 +23,8 @@ struct HarmonizingModuleScreen: View {
     }
 
     private func content(_ model: HarmonizingModuleModel) -> some View {
-        ModuleLayout(module: .harmonizing, state: state) {
+        let dots = labelMode == .notes ? model.dots.showingNoteNames(in: Tunings.standard) : model.dots
+        return ModuleLayout(module: .harmonizing, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 StandardTuningNotice(tuning: state.tuning, what: "These voicings")
@@ -32,12 +34,13 @@ struct HarmonizingModuleScreen: View {
             VStack(alignment: .trailing, spacing: 8) {
                 FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
                 FretboardBoardView(
-                    dots: model.dots,
+                    dots: dots,
                     frets: showsFullNeck ? 22 : model.highestFret,
                     tuning: Tunings.standard,
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses
                 )
+                .moduleLiveNoteGlow(state: state, dots: dots, frets: showsFullNeck ? 22 : model.highestFret, tuning: Tunings.standard, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260)
             }
         } readout: {
@@ -60,6 +63,8 @@ struct HarmonizingModuleScreen: View {
                         Text("Minor").tag(false)
                     }
                     .fixedSize()
+
+                    FretboardLabelPicker(selection: $labelMode)
 
                     Button {
                         model.strum()

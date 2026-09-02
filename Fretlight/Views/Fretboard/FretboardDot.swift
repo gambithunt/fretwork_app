@@ -17,7 +17,7 @@ struct FretboardDot: Identifiable, Equatable {
     /// the content turns a slide into a cross-fade.
     let id: String
     let position: FretPosition
-    let label: String
+    var label: String
     let color: Color
 
     /// For layered views, where the focused box sits full size over recessed
@@ -42,4 +42,12 @@ struct FretboardDot: Identifiable, Equatable {
     /// What this dot is in context — "root", "3rd" — for the legend and for
     /// the accessible description. Not drawn.
     var role: String?
+
+    /// The sounding pitch class at this location in a particular tuning. A
+    /// dot's label cannot answer this: many teaching boards label the same
+    /// position with a scale degree or chord role instead of a note name.
+    func pitchClass(in tuning: Tuning) -> PitchClass? {
+        guard tuning.openMIDINotes.indices.contains(position.string) else { return nil }
+        return PitchClass(tuning.openMIDINotes[position.string] + position.fret)
+    }
 }

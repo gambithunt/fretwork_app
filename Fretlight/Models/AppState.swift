@@ -128,6 +128,28 @@ final class AppState {
         }
     }
 
+    /// A second, independently persisted choice for players who want live
+    /// feedback to reach the fretboard as well as the compact header readout.
+    /// It takes effect only while that header readout is visible; keeping the
+    /// preference when the header is temporarily off avoids making a player
+    /// configure the same practice aid twice.
+    var highlightsLiveNoteOnFretboards = false {
+        didSet {
+            guard highlightsLiveNoteOnFretboards != oldValue else { return }
+            practiceState.update { $0.settings.highlightsLiveNoteOnFretboards = highlightsLiveNoteOnFretboards }
+        }
+    }
+
+    /// A separate, explicit preference: this sends one anonymous activity
+    /// pulse per UTC day. It does not alter audio capture or any feature.
+    var sharesAnonymousUsageData = false {
+        didSet {
+            guard sharesAnonymousUsageData != oldValue else { return }
+            practiceState.update { $0.settings.sharesAnonymousUsageData = sharesAnonymousUsageData }
+            usageTelemetry.recordActiveDayIfEnabled(sharesAnonymousUsageData)
+        }
+    }
+
     /// Detection costs CPU only while something is looking at it. Screens that
     /// show no live readout leave the workers idle, using the gate
     /// `ChordAnalysisWorker` already has — an idle worker costs one `write` per
@@ -150,6 +172,7 @@ final class AppState {
     var isChordDetectionActiveForTesting: Bool { isChordDetectionActive }
     var persistedFretboardFlipForTesting: Bool { practiceState.state.settings.isFretboardFlipped }
     var persistedLiveNoteVisibilityForTesting: Bool { practiceState.state.settings.showsLiveNoteOnModules }
+    var persistedLiveNoteHighlightForTesting: Bool { practiceState.state.settings.highlightsLiveNoteOnFretboards }
     /// Where the current note is most likely being played, best candidate
     /// first. Derived here rather than on the analysis thread because it
     /// depends on playing history, not on the audio.
@@ -188,6 +211,7 @@ final class AppState {
     private static let signalPresenceFloorDB: Double = -50
     private static func decibels(_ level: Float) -> Double { 20 * log10(max(Double(level), 0.000_001)) }
     private let audioEngine = AudioEngine()
+    private let usageTelemetry = UsageTelemetry()
     /// How many times the audio graph has been built this session. Navigation
     /// must never move this — see `AppShellNavigationTests`.
     var graphBuildCount: Int { audioEngine.graphBuildCount }
@@ -370,6 +394,8 @@ final class AppState {
         // nothing. `sensitivity` below is the opposite case.
         isFretboardFlipped = settings.isFretboardFlipped
         showsLiveNoteOnModules = settings.showsLiveNoteOnModules
+        highlightsLiveNoteOnFretboards = settings.highlightsLiveNoteOnFretboards
+        sharesAnonymousUsageData = settings.sharesAnonymousUsageData
         tuning = Tunings.tuning(id: settings.tuningID)
         // Property observers do not fire for a value assigned inside the
         // type's own initialiser, so restoring `sensitivity` above never
@@ -386,6 +412,9 @@ final class AppState {
             $0.settings.inputDeviceUID = inputUID
             $0.settings.outputDeviceUID = outputUID
         }
+        // Property observers do not run for assignments during `init`, so an
+        // existing opt-in needs its one daily pulse requested explicitly.
+        usageTelemetry.recordActiveDayIfEnabled(sharesAnonymousUsageData)
     }
 
     /// Synchronous, on the main actor — fine for an explicit user action

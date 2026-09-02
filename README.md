@@ -56,6 +56,34 @@ offered again.
 by step, how to test it, how to verify a release actually landed, and how to
 back the keys up.
 
+## Viewing anonymous usage telemetry
+
+Anonymous usage telemetry is strictly opt-in: an enabled app sends at most one
+daily activity record containing its version and an approximate country. It
+never includes audio, notes, practice history, device information, identity,
+IP address, or precise location.
+
+Cloudflare stores the records in Workers Analytics Engine. In the Cloudflare
+dashboard, select the Fretwork account and open **Analytics & Logs → Analytics
+Engine**; the dataset is named `fretwork_usage`. The dashboard is useful for
+confirming the dataset and Worker, while the included report gives the useful
+active-user, country, version, and daily-trend summary.
+
+Create a least-privilege read-only token at **Profile → API Tokens → Create
+Token → Create Custom Token**. Give it **Account → Account Analytics → Read**,
+limit it to the Fretwork account, and copy its value (Cloudflare only displays
+it once). Find the account ID in that account's dashboard overview, then run:
+
+```sh
+export CF_ACCOUNT_ID='your Cloudflare account ID'
+export CF_ANALYTICS_TOKEN='your read-only API token'
+./scripts/telemetry-report.sh
+```
+
+Keep the token out of the repository and never place it in the app or Worker.
+See [docs/telemetry.md](docs/telemetry.md) for the data model, deployment, and
+custom SQL-query details.
+
 ## How it works
 
 Audio in, note out:

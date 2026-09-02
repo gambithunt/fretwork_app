@@ -7,6 +7,7 @@ struct IntervalsModuleScreen: View {
     @Bindable var state: AppState
     @State private var model: IntervalsModuleModel?
     @State private var showsFullNeck = false
+    @State private var labelMode: FretboardLabelMode = .degrees
 
     var body: some View {
         Group {
@@ -25,7 +26,12 @@ struct IntervalsModuleScreen: View {
     }
 
     private func content(_ model: IntervalsModuleModel) -> some View {
-        ModuleLayout(module: .intervals, state: state) {
+        let dots = labelMode == .notes ? model.dots.showingNoteNames(in: model.tuning) : model.dots.map { dot in
+            var numbered = dot
+            if dot.id.hasPrefix("root") { numbered.label = "1" }
+            return numbered
+        }
+        return ModuleLayout(module: .intervals, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 controls(model)
@@ -34,7 +40,7 @@ struct IntervalsModuleScreen: View {
             VStack(alignment: .trailing, spacing: 8) {
                 FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
                 FretboardBoardView(
-                    dots: model.dots,
+                    dots: dots,
                     frets: showsFullNeck ? 22 : model.highestFret,
                     tuning: model.tuning,
                     flipped: state.isFretboardFlipped,
@@ -47,6 +53,7 @@ struct IntervalsModuleScreen: View {
                         model.selectAnchor(string: position.string, fret: position.fret)
                     }
                 )
+                .moduleLiveNoteGlow(state: state, dots: dots, frets: showsFullNeck ? 22 : model.highestFret, tuning: model.tuning, flipped: state.isFretboardFlipped)
                 .frame(minHeight: 260)
             }
         } readout: {
@@ -73,6 +80,8 @@ struct IntervalsModuleScreen: View {
                     }
                 }
                 .fixedSize()
+
+                FretboardLabelPicker(selection: $labelMode)
 
                 Button {
                     model.playInterval()

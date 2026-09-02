@@ -2,6 +2,17 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.5.3 — 2026-09-02
+
+- Added optional, anonymous usage telemetry. It is off by default and sends at
+  most one activity pulse per day when enabled in Settings. It records only
+  the app version and a coarse country code inferred at the network edge —
+  never audio, detected notes/chords, practice history, audio-device details,
+  identity, IP address, precise location, or a persistent installation ID.
+- Learning tabs can now show the live detected note and softly highlight
+  matching fretboard dots. Both remain optional, and the controls and module
+  layouts now use the same stable spacing across the app.
+
 ## 0.5.2 — 2026-08-29
 
 - A note placed or played on a module's fretboard no longer lurches. The dot's
