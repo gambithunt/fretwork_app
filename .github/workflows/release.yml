@@ -104,6 +104,22 @@ jobs:
             --content-type application/x-apple-diskimage \
             --cache-control 'public, max-age=31536000, immutable'
 
+      - name: Publish Sparkle delta updates
+        # Sparkle prefers these compact updates when an installed build has a
+        # matching predecessor. They must be published alongside the full DMG
+        # or clients fall back after a needless failed download.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          aws s3 sync build "s3://${{ vars.R2_BUCKET }}" \
+            --endpoint-url "$R2_ENDPOINT" --no-progress \
+            --exclude '*' --include '*.delta' \
+            --content-type application/octet-stream \
+            --cache-control 'public, max-age=31536000, immutable'
+
       - name: Point the stable download URL at this release
         # The website links here so it never needs redeploying for a release,
         # and so the download still works with JavaScript disabled. Copied
@@ -145,16 +161,30 @@ jobs:
             --content-type application/json \
             --cache-control 'public, max-age=300, must-revalidate'
 
-      - name: Purge the edge cache for the mutable files
+      - name: Purge the edge cache
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_CACHE_PURGE_TOKEN }}
           CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
+          # A failed or overlapping release can briefly put a different file
+          # at a versioned URL. Although those URLs are immutable in normal
+          # operation, clear every generated archive and delta here so the
+          # appcast's EdDSA signature always matches what clients receive.
+          PURGE_FILES=$(
+            {
+              printf '%s\n' \
+                'https://downloads.fretwork.org/appcast.xml' \
+                'https://downloads.fretwork.org/version.json' \
+                'https://downloads.fretwork.org/Fretwork-latest.dmg'
+              find build -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.delta' \) \
+                -exec basename {} \; | sed 's#^#https://downloads.fretwork.org/#'
+            } | jq -R . | jq -cs .
+          )
           curl -fsS -X POST \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: application/json" \
             "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
-            --data '{"files":["https://downloads.fretwork.org/appcast.xml","https://downloads.fretwork.org/version.json","https://downloads.fretwork.org/Fretwork-latest.dmg"]}' \
+            --data "$(jq -cn --argjson files "$PURGE_FILES" '{files: $files}')" \
             > /dev/null && echo "purged"
 
       - name: Attach the disk image to the GitHub release
