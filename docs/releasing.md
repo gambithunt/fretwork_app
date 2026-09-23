@@ -4,9 +4,8 @@ How a change on `main` becomes an app on someone's Mac, and how to verify it
 did.
 
 Fretwork is distributed from [fretwork.org/mac](https://fretwork.org/mac) as a
-signed but deliberately un-notarized disk image, and updates itself with
-Sparkle. There is no Apple Developer Program account behind it, which shapes
-almost every decision below.
+Developer ID-signed and Apple-notarized disk image, and updates itself with
+Sparkle.
 
 ## The mental model
 
@@ -175,7 +174,7 @@ are write-only — that copy is not a backup.
 
 | Key | Where it lives | If lost |
 | --- | --- | --- |
-| **"Fretwork Code Signing" certificate** — self-signed, valid to 2046 | login keychain, My Certificates | A replacement changes the designated requirement: every user re-prompts for microphone access, and Sparkle rejects the update as improperly signed. They must reinstall by hand. |
+| **Developer ID Application certificate** | login keychain, My Certificates | Export and retain it with its private key. A replacement changes the designated requirement, so users may need to grant microphone access again after updating. |
 | **Sparkle EdDSA private key** | login keychain, service `https://sparkle-project.org`, account `ed25519` | No further update can ever be offered. Every install is frozen at its current version. |
 
 Exporting them for backup:
@@ -227,13 +226,8 @@ Plus a repository **variable** `R2_BUCKET` naming the bucket.
 
 ## What users see
 
-The app is signed but not notarized, so macOS blocks the first launch and the
-user has to allow it once in System Settings → Privacy & Security. Sparkle
-strips the quarantine attribute from updates it installs and, on macOS 14.4+,
-pre-warms Gatekeeper with `gktool` — so this happens on **first install only**,
-never on an update. [fretwork.org/mac](https://fretwork.org/mac) walks through
-it, including the detail that the "Open Anyway" button disappears about an
-hour after the blocked launch.
+The downloaded disk image is Developer ID-signed, notarized, and stapled. A
+normal first launch does not require the System Settings “Open Anyway” flow.
 
 ## Upgrading Sparkle
 

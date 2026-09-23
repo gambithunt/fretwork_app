@@ -5,16 +5,17 @@
 #
 #   ./scripts/build-release.sh [output-dir]
 #
-# Requires the "Fretwork Code Signing" certificate in the keychain and the
+# Requires a Developer ID Application certificate in the keychain and the
 # Sparkle EdDSA private key (in the keychain locally, or piped in via
-# SPARKLE_PRIVATE_KEY in CI).
+# SPARKLE_PRIVATE_KEY in CI). Set REQUIRE_NOTARIZATION=1 together with a
+# NOTARYTOOL_PROFILE to submit and staple the disk image.
 #
 set -euo pipefail
 
 PROJECT="Fretlight.xcodeproj"
 SCHEME="Fretlight"
 APP_NAME="Fretwork"
-IDENTITY="${CODE_SIGN_IDENTITY:-Fretwork Code Signing}"
+IDENTITY="${CODE_SIGN_IDENTITY:-Developer ID Application}"
 DOWNLOAD_PREFIX="${DOWNLOAD_PREFIX:-https://downloads.fretwork.org/}"
 
 # $OUT holds only what gets published, so CI can sync it to the bucket
@@ -44,7 +45,7 @@ xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
   -archivePath "$ARCHIVE" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$IDENTITY" \
-  DEVELOPMENT_TEAM="" \
+  ENABLE_HARDENED_RUNTIME=YES \
   -quiet archive
 
 APP="$ARCHIVE/Products/Applications/$APP_NAME.app"
@@ -62,15 +63,18 @@ case "$ARCHS" in
 esac
 codesign --verify --deep --strict --verbose=1 "$APP"
 # The designated requirement is what a user's microphone grant and Sparkle's
-# own update check are both pinned to. If this stops naming the certificate
-# and falls back to a bare cdhash, every installed copy will re-prompt for the
-# microphone on next update. A self-signed certificate is its own root, so the
-# requirement names "certificate root" rather than "certificate leaf".
+# own update check are both pinned to. A bare cdhash would make each rebuild a
+# new identity, so a release must have Apple's Developer ID trust anchor.
 REQ=$(codesign -d -r- "$APP" 2>/dev/null | sed 's/^designated => //')
 echo "    requirement: $REQ"
 case "$REQ" in
-  *"certificate leaf"*|*"certificate root"*) ;;
-  *) echo "error: not signed with a certificate — grants would not survive updates" >&2; exit 1 ;;
+  *"anchor apple"*) ;;
+  *) echo "error: not signed with an Apple Developer ID certificate" >&2; exit 1 ;;
+esac
+FLAGS=$(codesign -d -vvv "$APP" 2>&1 | sed -n 's/^.*flags=\([^)]*\).*$/\1/p')
+case "$FLAGS" in
+  *runtime*) ;;
+  *) echo "error: hardened runtime is missing; Apple will reject notarization" >&2; exit 1 ;;
 esac
 
 echo "==> Building disk image"
@@ -83,7 +87,20 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 hdiutil create -volname "$APP_NAME $VERSION" -srcfolder "$STAGE" \
   -ov -format UDZO -quiet "$DMG"
+codesign --force --sign "$IDENTITY" --timestamp "$DMG"
 echo "    $DMG ($(du -h "$DMG" | cut -f1))"
+
+if [ "${REQUIRE_NOTARIZATION:-0}" = "1" ]; then
+  : "${NOTARYTOOL_PROFILE:?set NOTARYTOOL_PROFILE when notarization is required}"
+  echo "==> Notarizing disk image"
+  NOTARY_ARGS=(--keychain-profile "$NOTARYTOOL_PROFILE" --wait)
+  if [ -n "${NOTARYTOOL_KEYCHAIN:-}" ]; then
+    NOTARY_ARGS+=(--keychain "$NOTARYTOOL_KEYCHAIN")
+  fi
+  xcrun notarytool submit "$DMG" "${NOTARY_ARGS[@]}"
+  xcrun stapler staple -v "$DMG"
+  xcrun stapler validate -v "$DMG"
+fi
 
 echo "==> Generating appcast"
 # generate_appcast signs each archive with the EdDSA key and rewrites the

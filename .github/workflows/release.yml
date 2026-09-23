@@ -57,11 +57,22 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          echo "NOTARY_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
 
           rm -f "$CERT_PATH"
-          # A self-signed certificate is never policy-"valid", so list without
-          # -v; the identity only has to be findable by codesign.
-          security find-identity "$KEYCHAIN" | grep "Fretwork Code Signing"
+          security find-identity "$KEYCHAIN" | grep "Developer ID Application:"
+
+      - name: Configure notarization
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_APP_SPECIFIC_PASSWORD: ${{ secrets.NOTARY_APP_SPECIFIC_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+        run: |
+          xcrun notarytool store-credentials FretworkNotarization \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --password "$NOTARY_APP_SPECIFIC_PASSWORD" \
+            --team-id "$NOTARY_TEAM_ID" \
+            --keychain "$NOTARY_KEYCHAIN"
 
       - name: Ensure the AWS CLI is present
         # R2 is driven through its S3-compatible API. The runner image ships
@@ -86,6 +97,10 @@ jobs:
 
       - name: Build release
         env:
+          CODE_SIGN_IDENTITY: Developer ID Application
+          REQUIRE_NOTARIZATION: 1
+          NOTARYTOOL_PROFILE: FretworkNotarization
+          NOTARYTOOL_KEYCHAIN: ${{ env.NOTARY_KEYCHAIN }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           DOWNLOAD_PREFIX: https://downloads.fretwork.org/
         run: ./scripts/build-release.sh build

@@ -2,6 +2,11 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.5.5 — 2026-09-23
+
+- Released Fretwork with Apple Developer ID signing, hardened runtime, and
+  notarization so the direct Mac download is trusted by Gatekeeper.
+
 ## 0.5.4 — 2026-09-02
 
 - Fixed production updates by publishing Sparkle delta archives and purging
