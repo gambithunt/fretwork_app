@@ -97,7 +97,19 @@ if [ "${REQUIRE_NOTARIZATION:-0}" = "1" ]; then
   if [ -n "${NOTARYTOOL_KEYCHAIN:-}" ]; then
     NOTARY_ARGS+=(--keychain "$NOTARYTOOL_KEYCHAIN")
   fi
-  xcrun notarytool submit "$DMG" "${NOTARY_ARGS[@]}"
+  NOTARY_RESULT=$(xcrun notarytool submit "$DMG" "${NOTARY_ARGS[@]}" --output-format json)
+  printf '%s\n' "$NOTARY_RESULT"
+  NOTARY_ID=$(printf '%s' "$NOTARY_RESULT" | plutil -extract id raw -)
+  NOTARY_STATUS=$(printf '%s' "$NOTARY_RESULT" | plutil -extract status raw -)
+  if [ "$NOTARY_STATUS" != "Accepted" ]; then
+    LOG_ARGS=(--keychain-profile "$NOTARYTOOL_PROFILE")
+    if [ -n "${NOTARYTOOL_KEYCHAIN:-}" ]; then
+      LOG_ARGS+=(--keychain "$NOTARYTOOL_KEYCHAIN")
+    fi
+    xcrun notarytool log "$NOTARY_ID" "${LOG_ARGS[@]}"
+    echo "error: Apple notarization status is $NOTARY_STATUS" >&2
+    exit 1
+  fi
   xcrun stapler staple -v "$DMG"
   xcrun stapler validate -v "$DMG"
 fi
