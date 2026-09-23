@@ -51,6 +51,14 @@ xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
 APP="$ARCHIVE/Products/Applications/$APP_NAME.app"
 [ -d "$APP" ] || { echo "error: no app at $APP" >&2; exit 1; }
 
+# Sparkle is vendored as a pre-signed binary framework. Xcode correctly embeds
+# it, but preserves its vendor signatures; notarization requires every nested
+# executable to carry this app's Developer ID signature and secure timestamp.
+# Re-signing the finished hierarchy applies both consistently before we verify
+# and package it.
+echo "==> Re-signing bundled code with Developer ID"
+codesign --force --deep --sign "$IDENTITY" --options runtime --timestamp "$APP"
+
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist")
 echo "==> $APP_NAME $VERSION (build $BUILD)"

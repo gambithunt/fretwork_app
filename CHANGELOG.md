@@ -2,7 +2,7 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
-## 0.5.5 — 2026-09-23
+## 0.5.6 — 2026-09-23
 
 - Released Fretwork with Apple Developer ID signing, hardened runtime, and
   notarization so the direct Mac download is trusted by Gatekeeper.
