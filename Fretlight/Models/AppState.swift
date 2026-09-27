@@ -2,11 +2,6 @@ import Foundation
 import Observation
 import CoreAudio
 
-enum DetectionMode: String, CaseIterable, Sendable {
-    case notes = "Notes"
-    case chords = "Chords"
-}
-
 @MainActor @Observable
 final class AppState {
     var inputDevices: [AudioDevice] = []
