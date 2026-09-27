@@ -13,10 +13,15 @@ import XCTest
 @MainActor
 final class AppStateStartGatingTests: XCTestCase {
 
-    func testRetryThatStartsNothingLeavesTheErrorBannerIntact() {
-        let fake = GatingStubAudioController()
-        fake.starts = false
+    private func makeState(startResult: Bool) -> (AppState, FakeAudioController) {
+        let fake = FakeAudioController()
+        fake.starts = startResult
         let state = AppState(audio: fake, store: PracticeStateStore(storage: InMemoryPracticeStorage()))
+        return (state, fake)
+    }
+
+    func testRetryThatStartsNothingLeavesTheErrorBannerIntact() {
+        let (state, fake) = makeState(startResult: false)
         state.errorMessage = "Audio connection lost"
         state.isReconnecting = true
 
@@ -29,9 +34,7 @@ final class AppStateStartGatingTests: XCTestCase {
     }
 
     func testRetryThatStartsClearsTheErrorBanner() {
-        let fake = GatingStubAudioController()
-        fake.starts = true
-        let state = AppState(audio: fake, store: PracticeStateStore(storage: InMemoryPracticeStorage()))
+        let (state, fake) = makeState(startResult: true)
         state.errorMessage = "Audio connection lost"
         state.isReconnecting = true
 
@@ -41,38 +44,4 @@ final class AppStateStartGatingTests: XCTestCase {
         XCTAssertNil(state.errorMessage)
         XCTAssertFalse(state.isReconnecting)
     }
-}
-
-/// In-memory `PracticeStorage`: these tests must never touch the real defaults
-/// domain, and using `AppState()` would enumerate audio devices in its
-/// initialiser (the documented ~30s HAL cost in the test host).
-private final class InMemoryPracticeStorage: PracticeStorage {
-    private var data: Data?
-
-    func documentData() -> Data? { data }
-    func writeDocument(_ data: Data) { self.data = data }
-    func legacyValue(forKey key: String) -> Any? { nil }
-}
-
-/// A controllable `AudioControlling` whose `start()` result the test decides,
-/// so the gating behaviour can be asserted without a device.
-@MainActor
-private final class GatingStubAudioController: AudioControlling {
-    var onEvent: (@MainActor @Sendable (AudioControllerEvent) -> Void)?
-    var starts = true
-    private(set) var startCount = 0
-
-    @discardableResult
-    func start() -> Bool {
-        startCount += 1
-        return starts
-    }
-
-    func stop() {}
-    func setChordDetectionEnabled(_ enabled: Bool) {}
-    func setSensitivity(_ value: Double) {}
-    func prepareSamplePlayback(completion: (@Sendable (String?) -> Void)?) {}
-    var isSamplePlaybackReady: Bool { false }
-    var isSampleLibraryLoaded: Bool { false }
-    func playSample(string: Int, fret: Int, tuning: Tuning) {}
 }
