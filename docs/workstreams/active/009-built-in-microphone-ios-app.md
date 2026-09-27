@@ -2,26 +2,33 @@
 
 ## Status
 
-**Phase 0 complete (2026-09-18), with one recorded exception.**
+**Phase 0 complete (2026-09-18).** Its one recorded exception — the pre-existing
+Mac test compile failure — was repaired in `3e0a461` before Phase 2.
 **Phase 1 Simulator-first slice implemented (2026-09-19).** Phase 1 is **not**
-complete: the physical-device capture spike (iPhone 14 Pro Max, iPad Pro 13-inch
-M5) is the exit gate. The Simulator slice validated the synthetic detection
+complete: real-guitar detection and the deferred iPad Pro 13-inch (M5)
+measurement remain. The Simulator slice validated the synthetic detection
 pipeline, the manual harness UI and telemetry, permission/inert-launch/fake-
 injection behavior, and realtime-aware callback wiring — all without microphone
 hardware.
+
+**Phase 2 complete (2026-09-27).** The platform-neutral audio seam landed:
+`AppState` depends on `any AudioControlling`, no longer imports CoreAudio or
+names `AudioDeviceID`, and the shared sources now compile into the iOS target
+through a synchronized root plus a per-target exception set. The Mac suite is
+478/0; the iOS suite is 30/0.
 
 The minimal `Fretwork-iOS` app target, `Fretwork-iOSTests` target and their shared
 schemes exist, build and test on the Simulator; the Mac app builds and launches
 unchanged; and every production and test file is classified. Phase 0 added no
 existing production source to the iOS target and moved no files. Phase 1 added
 explicit `PBXFileReference`/`PBXBuildFile` membership for exactly **seven shared
-files** (listed below), while the full synchronized-root plus per-target exception
-set remains **deferred to Phase 2**. The `Fretwork` module rename and the iOS
-`NSMicrophoneUsageDescription` that the shared seam depends on both landed during
-Phase 0. The recorded exception is the pre-existing Mac test compile failure
-(0/453): the suite must be repaired in a separate non-iOS change before Phase 2
-begins. Full evidence, inventories, commands and risks are in the Phase 0 and
-Phase 1 sections and the Implementation Record.
+files** (listed below); Phase 2 then added the full `Fretlight/`
+synchronized-root membership and its per-target exception set. The `Fretwork`
+module rename and the iOS `NSMicrophoneUsageDescription` that the shared seam
+depends on both landed during Phase 0. The recorded exception was the pre-existing
+Mac test compile failure (0/453), repaired separately in `3e0a461` before Phase 2.
+Full evidence, inventories, commands and risks are in the Phase 0, Phase 1 and
+Phase 2 sections and the Implementation Record.
 
 Partially measured on physical hardware: the **iPhone 14 Pro Max (iOS 27.0,
 24A435)** capture spike ran, the sink was selected and the tap path deleted,
@@ -50,7 +57,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-27 (Phase 1 iPhone capture, latency, CPU, thermal and permission states verified; iPad deferred by the owner; acoustic/amplified-electric sweep pending).
+Last updated: 2026-09-27 (Phase 2 complete: platform-neutral audio seam landed and the shared sources compile into the iOS target; Phase 1 iPhone capture, latency, CPU, thermal and permission states verified; iPad deferred by the owner; acoustic/amplified-electric sweep pending).
 
 ## Objective
 
@@ -1071,43 +1078,66 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
 
 ## Phase 2 — Platform-neutral audio seam
 
-**Prerequisite:** C-19/Q-06 option (A) permits the shared-state and
-common-project edits this phase requires, under the minimal, behavior-preserving
-rule with Mac regression verification. Also repair the pre-existing test compile
-failure (Blockers) so the Mac suite can actually run before this phase's "full
-suite is green" gate.
+**Status: complete (2026-09-27).** Commits `754da0b`, `f274b5f`, `826f320`,
+`ccb9b6b`, `c210f6d`, `4899ebf`. Prerequisite C-19/Q-06 option (A) applies, and
+the pre-existing test compile failure was repaired in `3e0a461` before the phase
+began. Full evidence is in the Phase 2 Implementation Record.
 
-### Likely files
+### Files landed
 
-- `Fretlight/Models/AppState.swift`
-- `Fretlight/Audio/AudioEngine.swift`
-- new shared audio-controller protocol/event types
-- new macOS adapter or Mac-only `AppState` extension
-- relevant state and wiring tests
+- `Fretlight/Models/DetectionMode.swift` — extracted from `AppState.swift` (pure
+  move) so the adapter, board and readout views compile without the Mac state.
+- `Fretlight/Models/AudioController.swift` — the `AudioControlling` protocol and
+  `AudioControllerEvent` enum, Foundation-only.
+- `Fretlight/Audio/MacAudioController.swift` — the macOS adapter: device
+  enumeration/selection/persistence, monitoring, direct-path suggestion and the
+  DEBUG recorder, plus 1:1 delegation of the untouched `AudioEngine`.
+- `Fretlight/AppState+Mac.swift` — the macOS `AppState()` default and the
+  `macAudio` cast.
+- `Fretlight/Models/AppState.swift` — rewritten to depend on
+  `any AudioControlling`.
+- `FretlightTests/FakeAudioController.swift`, `AppStateSharedSurfaceTests.swift`,
+  `AppStateStartGatingTests.swift`, `MacAudioControllerTests.swift`.
+- `Fretlight.xcodeproj/project.pbxproj` — the iOS synchronized-root membership
+  and exception set.
 
-### Tasks
+### Tasks (complete)
 
-1. Define the smallest audio surface `AppState` actually needs: lifecycle,
-   sensitivity, note/chord updates, playback readiness, sample playback,
-   detection gating, level/status and error/recovery events.
-2. Inject that surface into `AppState`; production defaults choose the native
-   platform implementation, while tests use a fake.
-3. Move Mac-only device enumeration, selection, monitoring and direct-path
-   suggestions out of shared state or expose them through a Mac-only settings
-   model. Do not leak `AudioDeviceID` into shared declarations.
-4. Adapt the existing Mac engine without changing its runtime behavior.
-5. Add tests proving navigation, module playback and state persistence use the
-   shared surface rather than a concrete engine.
-6. Move only the files whose ownership this refactor proves. Keep pure moves
-   separate from behavior changes where practical; do not reorganize every
-   view and model in this phase.
+1. ✅ **Defined the smallest surface `AppState` needs** — lifecycle, sensitivity,
+   note/chord updates, playback readiness, sample playback, detection gating and
+   error/recovery events (`AudioController.swift`). CoreAudio types are absent by
+   construction.
+2. ✅ **Injected the surface** — `AppState.init(audio:store:)`;
+   `AppState+Mac` supplies `MacAudioController` in production and
+   `FakeAudioController` in tests.
+3. ✅ **Moved Mac-only concerns out of shared state** — device
+   enumeration/selection/persistence, monitoring, direct-path suggestion and the
+   DEBUG recorder now live in `MacAudioController`; `AppState` no longer names
+   `AudioDeviceID`.
+4. ✅ **Adapted the Mac engine without behaviour change** — `AudioEngine`,
+   `AudioDevice`, `AudioDeviceWatcher` and `MonitorRenderer` are untouched;
+   `MacAudioController` delegates 1:1 and preserves each callback's main-actor
+   hop.
+5. ✅ **Tests prove the seam** — `AppStateSharedSurfaceTests` (14) covers module
+   open → `prepareSamplePlayback`, readiness mirroring, the play closure
+   reaching `playSample`, gating, sensitivity persistence/restore, and all five
+   events; `AppStateStartGatingTests` (2) covers the Retry regression;
+   `MacAudioControllerTests` (9) covers the extracted device resolution.
+6. ✅ **Moved only proven files** — `DetectionMode` extracted; no view or model
+   reorganisation. `AppShell`/`GlobalSettingsView`/`ListenScreen` were kept
+   Mac-only (C-list refinement, flagged in the Implementation Record).
 
-### Exit criteria
+### Exit criteria (met)
 
-- Shared state compiles without importing CoreAudio.
-- The Mac app behaves as before and its full suite is green.
-- A fake audio controller can drive note, chord, level, error and recovery
-  states without hardware.
+- ✅ **Shared state compiles without importing CoreAudio** — `AppState.swift`
+  has no `CoreAudio`, `AudioDeviceID` or `AudioEngine` reference (commit
+  `ccb9b6b`).
+- ✅ **The Mac app behaves as before and its full suite is green** — 478 tests,
+  0 failures; the smoke test showed two `com.apple.audio.IOThread.client`
+  threads, flat CPU and no `-10877`.
+- ✅ **A fake audio controller drives note, chord, level, error and recovery
+  states without hardware** — `AppStateSharedSurfaceTests`, using an in-memory
+  `PracticeStateStore` and never `AppState()`.
 
 ## Phase 3 — Production iOS audio and lifecycle
 
@@ -1358,6 +1388,7 @@ TODO placeholders in the phone interface.
 | 2026-09-19 (revision 6) | Recorded the Simulator-first Phase 1 slice as implemented but Phase 1 incomplete; added the seven-file explicit membership inventory, Phase 1 harness file list, completed/pending task split, met-vs-pending exit criteria, and PBXFileReference fragility risk. Updated Phase 0's historical claim about isolated-root membership with a then-vs-now distinction. Appended Phase 1 Implementation Record with 13-test and build evidence. Mac immutable boundary and pre-existing test exception preserved. | Status, Phase 0 (intro callout, architectural choice), Phase 1 (entirely rewritten), change log, Implementation Record. | Phase 1 Simulator slice is now a recorded artifact; the same repository/shell architecture and physical-device prerequisites are unchanged. | Confirm physical-device provisioning and perform tap-vs-sink measurements before closing Phase 1. |
 | 2026-09-27 (revision 7) | Recorded the iPhone 14 Pro Max physical-device capture spike (iOS 27.0, 48 kHz), selected `AVAudioSinkNode` over `installTap` and deleted the losing path and its enum case/helpers, and replaced the tap-block regression test with the sink equivalent. Ticked the tap-vs-sink comparison and the select-one-primitive checkbox; left iPad, CPU/thermal and the permission-state matrix unticked. Appended the physical-device Implementation Record. | Status, Phase 1 (header, harness description, tasks, exit criteria, risks), change log, Implementation Record. | The Phase 1 capture primitive is resolved, so Phase 2 can build the seam on the sink; Phase 1 still cannot close until the iPad and CPU/thermal measurements land. | Real-guitar detection, iPad and CPU/thermal measurement remain before Phase 1 exit. |
 | 2026-09-27 (revision 8) | Added the physical-device metrics record: populated `latencyMs` from the sink host-time stamp to worker publication (min/median/max 27.2/30.9/33.1 ms over 6.0 logged minutes), whole-process CPU flat at 26.9–28.5% per ~1.2-min segment with `nominal` thermal and no callback dropouts (85–94 per 2 s), and the screen-on UI cost (~20 CPU points) that motivated the keep-awake change. Ticked the CPU/thermal task; left iPad and the permission-state matrix unticked, recording that the iPad is deferred by the owner for now. | Status, Phase 1 (header, tasks, exit criteria), decision log, Implementation Record. | CPU/thermal behaviour is now measured on iPhone; Phase 1 still cannot close until the iPad and permission-state matrix land. | iPad measurement (owner-timed), permission-state matrix and real-guitar detection remain before Phase 1 exit. |
+| 2026-09-27 (revision 9) | Recorded Phase 2 complete: the `AudioControlling` seam, the `MacAudioController` move and the iOS synchronized-root membership plus exception set. Kept `AppShell`/`GlobalSettingsView`/`ListenScreen` Mac-only (refining the Phase 0 C list), excluded `NoteAssociationModuleScreen` for its iOS-unavailable `checkbox` Symbol and the note-sample library from the iOS bundle, and recorded that `start()` returns `Bool` so Retry cannot clear the error banner. | Phase 2 Implementation Record and commits `754da0b`–`4899ebf`. | C-06, C-07, C-10, C-15, C-19 | Owner confirms the C-list refinement; Phase 6 adapts `NoteAssociationModuleScreen`; Phase 3/6 decides the iOS sample-library delivery. |
 
 ## Change log
 
@@ -1367,6 +1398,7 @@ TODO placeholders in the phone interface.
 | 2026-09-18 (revision 2) | Moved the C-19/Q-06 Mac-protection decision ahead of the first Phase 0 project mutation, with planning/preflight still allowed; split provisioning so development-level signing/device trust/Developer Mode precede Phase 1 while App Store Connect and distribution signing stay in Phase 8; relabelled C-11 Inferred rather than Accepted; restated the green-suite contract as a recorded exception until the Mac test compile failure is repaired; removed the stale bundle-ID answer from Q-05. | Status, constraints (C-11, C-19, C-23), verified finding 10, selected direction, open questions, Blockers, execution contract, Phases 0/1/2/8, decision log, change log, Implementation Record preflight. | Same direction, but Phase 0 can no longer mutate the common project until Q-06 is answered, and Phase 1 cannot install physically without development provisioning. | Yes — C-19/Q-06 before any Phase 0 target/project mutation; Q-05 subtitle before Phase 8. |
 | 2026-09-18 (revision 3) | Promoted C-19 to Accepted and resolved Q-06 to option (A) after the owner confirmed the exact recommended wording; defined the immutable Mac boundary and the minimal, classified, regression-verified shared-edit allowance; removed the C-19/Q-06 blocker and provisional-interpretation language; marked Phase 0 ready to execute. | Status, C-19, Q-06, selected direction, Blockers, execution contract, Phases 0/1/2, decision log, change log, Implementation Record preflight. | Phase 0 may now execute its common-project mutations; the same-project/shared-core direction is confirmed and the separate/copied-architecture alternative no longer applies. Physical devices and development provisioning remain unconfirmed for Phase 1. | No new architecture decision; the next owner actions are the separate non-iOS Mac test-compile repair and the Phase 1 hardware/provisioning confirmation (Q-07). |
 | 2026-09-18 (revision 5) | Accepted the owner-nominated physical test devices: iPhone 14 Pro Max and iPad Pro 13-inch (M5). Retained OS version, Developer Mode/device trust and provisioning as Phase 1 prerequisites, and retained compact-iPad Simulator coverage because the physical iPad is a large-width model. | Status, C-24, verified finding 10, Q-07, Blockers, Phase 1, validation matrix/reference devices, required physical devices, decision log and Implementation Record. | Hardware selection is no longer a Phase 1 blocker; readiness still depends on device setup and development provisioning. | Record installed OS versions and confirm trust/Developer Mode when the devices are connected. |
+| 2026-09-27 (revision 9) | Recorded Phase 2 complete; the Mac test compile exception is repaired; the shared seam and iOS synchronized-root membership landed; `AppShell`/`GlobalSettingsView`/`ListenScreen` confirmed Mac-only, and `NoteAssociationModuleScreen` plus the note-sample library excluded from iOS. | Status, Phase 2 (status, files, tasks, exit criteria), decision log, Implementation Record. | Shared state now compiles for both platforms and the Phase 2 exit criteria are met; Phase 3/4/5/6 inherit the flagged adaptations. | Owner confirmation of the C-list refinement; no new architecture decision. |
 
 ## References
 
@@ -1685,3 +1717,104 @@ xcodebuild -project Fretlight.xcodeproj -scheme Fretwork-iOS \
 **Still pending.** iPad Pro 13-inch (M5) (deferred by the owner for now);
 the permission-state matrix (granted/denied/undetermined); real
 acoustic/amplified guitar detection at realistic distances.
+
+### Phase 2 (2026-09-27) — complete
+
+**Commits.** `754da0b` extract `DetectionMode`; `f274b5f` add
+`AudioControlling`/`AudioControllerEvent`; `826f320` add `MacAudioController`
+and its pure device-resolution tests; `ccb9b6b` the atomic rewire; `c210f6d`
+shared-surface tests; `4899ebf` iOS target membership and exception set. The Mac
+test compile failure that gated the phase's green-suite exit criterion was
+repaired first in `3e0a461`.
+
+**Outcome.** `AppState` depends on `any AudioControlling` and imports neither
+CoreAudio nor names `AudioDeviceID`/`AudioEngine`. Device enumeration, selection
+and persistence, monitor routing, the direct-path suggestion and the DEBUG
+recorder live in `MacAudioController`. `AppState+Mac` supplies the macOS
+`AppState()` default and the `macAudio` cast. The five engine callbacks collapse
+into one `onEvent` → `handle(_:)`.
+
+**Preserved invariants.** `sensitivity` is restored then explicitly
+`applySensitivity()`d in init; `onEvent` is subscribed before any `start()` can
+fire; device rescans stay off the main actor behind the existing 300 ms debounce;
+navigation never rebuilds the graph (`AppShellNavigationTests` asserts via
+`macAudio`); audio-rate reads stay in their leaf views.
+
+**Reviewed fixes.**
+- `onEvent` is typed `(@MainActor @Sendable (AudioControllerEvent) -> Void)?`, so
+  `AppState` calls `handle(event)` directly instead of adding a second `Task`
+  hop; the controller already hops once per engine callback.
+- `AudioControlling.start() -> Bool` fixes the regression the review caught:
+  clearing `errorMessage`/`isReconnecting` before `MacAudioController`'s device
+  guard let a Retry with no device selected wipe the banner. `AppState.start()`
+  clears only when a start was actually issued; `AppStateStartGatingTests` pins
+  both branches.
+- The designated `AppState.init(audio:store:)` documents that `AppState` and
+  `MacAudioController` must share the same `PracticeStateStore`; `AppState()`
+  guarantees it.
+- `deinit` uses `isolated deinit`, since a plain deinit cannot call the
+  `@MainActor stop()`. Verified to type-check against the macOS 14 deployment
+  target and to launch and run; the Swift concurrency runtime back-deploys the
+  isolated-deinit shim.
+
+**Tests.**
+
+```bash
+xcodebuild -project Fretlight.xcodeproj -scheme Fretlight -destination 'platform=macOS' test
+# ** TEST SUCCEEDED ** — 478 tests, 10 skipped, 0 failures
+# (453 at the start; +9 MacAudioControllerTests, +2 AppStateStartGatingTests,
+#  +14 AppStateSharedSurfaceTests)
+
+xcodebuild -project Fretlight.xcodeproj -scheme Fretwork-iOS \
+  -destination 'platform=iOS Simulator,id=CCF133DA-ABFB-459A-BC8C-1720C8E62FE6' test
+# ** TEST SUCCEEDED ** — 30 tests, 0 failures
+
+xcodebuild -project Fretlight.xcodeproj -scheme Fretwork-iOS \
+  -destination 'id=00008120-001C3D003EA0C01E' -allowProvisioningUpdates \
+  -derivedDataPath /tmp/fretwork-ios-dd build
+# ** BUILD SUCCEEDED **
+```
+
+**Smoke test (Debug `Fretwork.app`, launched directly).** Two
+`com.apple.audio.IOThread.client` threads in `sample <pid> 3`; CPU flat at 0.4%
+(TIME 0.41 s → 0.43 s over 5 s); no `-10877`/`kAudioUnitErr`/error output; only
+the launched PID was killed.
+
+**iOS target membership (commit `4899ebf`).** `A0000...004 /* Fretlight */` was
+added to the iOS target's `fileSystemSynchronizedGroups` with a per-target
+`PBXFileSystemSynchronizedBuildFileExceptionSet`. The seven shared files the
+target previously compiled explicitly (`AudioAnalysisWorker`, `RingBuffer`,
+`SensitivitySettings`, `PitchDetector`, `NoteMapper`, `PitchDisplayState`,
+`PitchClass`) and their `PBXBuildFile`/`PBXFileReference` entries were removed so
+nothing builds twice. `PRODUCT_MODULE_NAME` stays `Fretwork`.
+
+Exception list (17 files + 139 resources = 156 entries): `FretlightApp.swift`,
+`AppState+Mac.swift`, `Audio/{AudioDevice, AudioDeviceWatcher, AudioEngine,
+MacAudioController, MonitorRenderer}.swift`, `Models/SampleCaptureModel.swift`,
+`Views/{AppShell, CheckForUpdatesView, DevicePickerView, GlobalSettingsView,
+ListenScreen, SampleCaptureHost, SampleCaptureView}.swift`, `Assets.xcassets`,
+and every file under `Resources/NoteSamples/`.
+
+Extras beyond the plan's list:
+- `Views/Modules/NoteAssociationModuleScreen.swift` uses the `checkbox` SF
+  Symbol, unavailable on iOS. Excluded rather than changing the Mac rendering;
+  **Phase 6 must adapt it** (a portable symbol or an iPhone screen).
+- `Resources/NoteSamples/*` (138 `.m4a` + `index.json`). Membership exceptions
+  do not honour a plain resource directory, only discrete members, so each file
+  is listed. **Phase 3/6 must decide how iOS obtains the sample library**
+  (bundle it then, download it, or omit it); shipping 13 MB into the Phase 2
+  scaffold was not intended.
+
+**iOS `.app` size.** 1.5 MB scaffold baseline → **8.7 MB** after membership; the
+increase is the shared Swift code. With the samples accidentally included it was
+22 MB, so the exception saved ~13 MB. The Mac app still carries all 138 samples
+plus `index.json`.
+
+**C-list refinement — flagged for the owner.** Phase 0's category C marked
+`AppShell`, `GlobalSettingsView` and `ListenScreen` as "shared after Phase 2".
+Phase 2 keeps them Mac-only: they own device/monitor/direct-path rows that are
+Mac-only by definition, and Phase 4/5 build a fresh iOS shell, settings sheet and
+compact listen header. Only `PitchReadoutView`, `FretboardView`,
+`DetectionBoardAdapter`, `ModuleLayout` and the ten module screens are genuinely
+shared (with `NoteAssociationModuleScreen` excepted above). This refines, rather
+than contradicts, the C list; the owner should confirm.
