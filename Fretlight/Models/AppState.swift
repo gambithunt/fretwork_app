@@ -1,15 +1,11 @@
 import Foundation
 import Observation
-import CoreAudio
 
 @MainActor @Observable
 final class AppState {
-    var inputDevices: [AudioDevice] = []
-    var outputDevices: [AudioDevice] = []
-    var selectedInputDeviceID: AudioDeviceID?
-    var selectedOutputDeviceID: AudioDeviceID?
-    var monitorMuted = true { didSet { applyMonitorVolume() } }
-    var monitorVolume: Double = 0.8 { didSet { applyMonitorVolume() } }
+    /// The platform audio seam. Internal so Mac-only surfaces (see
+    /// `AppState+Mac`) and tests can cast it back to the concrete controller.
+    let audio: any AudioControlling
     var sensitivity: Double = SensitivitySettings.defaultValue { didSet { applySensitivity() } }
     var display = PitchDisplayState()
     /// Notes and chords are read differently enough (a dialed-in single
@@ -156,12 +152,12 @@ final class AppState {
     private func updateDetectionGating() {
         let wanted = selectedScreen.needsDetection && detectionMode == .chords
         isChordDetectionActive = wanted
-        audioEngine.setChordDetectionEnabled(wanted)
+        audio.setChordDetectionEnabled(wanted)
     }
 
     /// Mirrors what was last handed to the engine. Exists so the gate can be
-    /// asserted without reaching into `AudioEngine`'s own queue, where reading
-    /// the flag would race the write.
+    /// asserted without reaching into the audio controller's own queue, where
+    /// reading the flag would race the write.
     private(set) var isChordDetectionActive = false
 
     var isChordDetectionActiveForTesting: Bool { isChordDetectionActive }
@@ -173,9 +169,9 @@ final class AppState {
     /// depends on playing history, not on the audio.
     private(set) var fretPositions: [RankedPosition] = []
     var errorMessage: String?
-    /// True from the moment `AudioEngine` starts an automatic recovery
-    /// attempt until it either succeeds (`onRecovered`) or gives up
-    /// (`onError`). Distinct from `errorMessage`: that only appears once
+    /// True from the moment the audio controller starts an automatic recovery
+    /// attempt until it either succeeds (`.recovered`) or gives up
+    /// (`.error`). Distinct from `errorMessage`: that only appears once
     /// recovery has been exhausted, which otherwise leaves the UI showing
     /// nothing — audio dead, meter silent, no explanation — for the whole
     /// multi-second retry window. Surfacing this instead is what turns that
@@ -205,38 +201,7 @@ final class AppState {
     /// nothing playing.
     private static let signalPresenceFloorDB: Double = -50
     private static func decibels(_ level: Float) -> Double { 20 * log10(max(Double(level), 0.000_001)) }
-    private let audioEngine = AudioEngine()
     private let usageTelemetry = UsageTelemetry()
-    /// How many times the audio graph has been built this session. Navigation
-    /// must never move this — see `AppShellNavigationTests`.
-    var graphBuildCount: Int { audioEngine.graphBuildCount }
-
-#if DEBUG
-    /// The sample-capture screen drives the recorder directly. It is a
-    /// maintainer tool, so this is the one seam it gets rather than the
-    /// recorder's state being folded into the ordinary UI state.
-    var sampleRecorder: SampleRecorder { audioEngine.sampleRecorder }
-
-    func setSampleRecordingEnabled(_ value: Bool) {
-        audioEngine.setSampleRecordingEnabled(value)
-    }
-
-    /// Nil when the recorder is running. Otherwise, why not — so the capture
-    /// window can say it plainly instead of waiting for a note that can never
-    /// arrive.
-    var sampleRecordingBlockedReason: String? {
-        if selectedInputDeviceID == nil {
-            return "No input device is selected. Choose one in the main Fretwork window."
-        }
-        if let errorMessage {
-            return "Audio is not running: \(errorMessage)"
-        }
-        if !audioEngine.sampleRecorder.isRunning {
-            return "The recorder is not draining audio. Check the input device in the main Fretwork window, then reopen this one."
-        }
-        return nil
-    }
-#endif
     /// Which screen the shell is showing. Plain view state that happens to
     /// live on the one `@Observable` owner, per `CLAUDE.md` — not persisted:
     /// the web app deliberately always opens on home rather than restoring the
@@ -268,33 +233,27 @@ final class AppState {
     private func prepareSamplePlaybackIfNeeded() {
         guard case .module = selectedScreen, !hasRequestedSamplePlayback else { return }
         hasRequestedSamplePlayback = true
-        audioEngine.prepareSamplePlayback { [weak self] error in
+        audio.prepareSamplePlayback { [weak self] error in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.samplePlaybackError = error
-                self.isSamplePlaybackReady = self.audioEngine.isSamplePlaybackReady
+                self.isSamplePlaybackReady = self.audio.isSamplePlaybackReady
                 if error != nil { self.hasRequestedSamplePlayback = false }
             }
         }
     }
 
-    var isSampleLibraryLoadedForTesting: Bool { audioEngine.isSampleLibraryLoaded }
+    var isSampleLibraryLoadedForTesting: Bool { audio.isSampleLibraryLoaded }
 
     /// Re-checked when a module asks, because a graph rebuild between then and
     /// now replaces the player.
     func refreshSamplePlaybackReadiness() {
         prepareSamplePlaybackIfNeeded()
-        isSamplePlaybackReady = audioEngine.isSamplePlaybackReady
+        isSamplePlaybackReady = audio.isSamplePlaybackReady
     }
 
     private let resolver = FretPositionResolver()
     private var resolvedMIDI: Int?
-    private let deviceWatcher = AudioDeviceWatcher()
-    /// Coalesces a burst of `deviceWatcher.onChange` notifications (a
-    /// multi-stream interface unplugging can fire several in quick
-    /// succession) into one rescan, and keeps the scan itself off the main
-    /// actor — see `scheduleDeviceRefresh`.
-    private var pendingDeviceRefresh: Task<Void, Never>?
     /// How often the analysis worker's stream is allowed to reach the UI.
     ///
     /// Deliberately chosen here rather than inherited from the audio, because
@@ -315,74 +274,30 @@ final class AppState {
     /// and held for display only; the measurement itself is untouched.
     private var smoothedLatency: Double?
     private var shownLatency: Double?
-    /// What the user actually chose. `selectedInput/OutputDeviceID` is only a
-    /// resolution of these against whatever is plugged in right now.
-    private var selectedInputUID: String?
-    private var selectedOutputUID: String?
+    private let practiceState: PracticeStateStore
 
-    /// Whether a saved output was restored, so a test can tell the "no saved
-    /// device, fell back to the system default" case from the "restored what
-    /// was saved" one.
-    var selectedOutputUIDForTesting: String? { selectedOutputUID }
-    private let practiceState = PracticeStateStore()
-
-    init() {
-        refreshDevices()
-        audioEngine.onUpdate = { [weak self] update in
-            Task { @MainActor [weak self] in
-                self?.publish(update)
-            }
+    /// - Parameters:
+    ///   - audio: the platform implementation of the shared seam.
+    ///   - store: the persisted document. **Must be the same instance the
+    ///     audio controller was built with**, or their two views of the device
+    ///     selection diverge: `MacAudioController` writes the resolved
+    ///     device UIDs into the store it holds, and `AppState` reads and writes
+    ///     sensitivity, tuning and the other preferences through its own
+    ///     reference. `AppState()` (see `AppState+Mac`) constructs one store
+    ///     and passes it to both.
+    init(audio: any AudioControlling, store: PracticeStateStore = PracticeStateStore()) {
+        self.audio = audio
+        self.practiceState = store
+        // Subscribed before anything can call `start()`: the controller's own
+        // callbacks are already installed, and `start()` is only reached from
+        // the UI, after this returns. The controller delivers on the main
+        // actor (see `AudioControlling`), and the closure is `@MainActor`, so
+        // this is a direct call — no extra `Task` past the one the engine
+        // callback already made.
+        audio.onEvent = { [weak self] event in
+            self?.handle(event)
         }
-        audioEngine.onChordUpdate = { [weak self] update in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.chordDisplay = update
-                self.appendToHistory(update.chord)
-                if self.detectionMode == .chords { self.trackSignalClarity(level: update.level, hasResult: update.chord != nil) }
-            }
-        }
-        audioEngine.onError = { [weak self] message in
-            Task { @MainActor [weak self] in
-                self?.errorMessage = message
-                self?.isReconnecting = false
-            }
-        }
-        audioEngine.onRecovered = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.errorMessage = nil
-                self?.isReconnecting = false
-                self?.hasStartedAudio = true
-            }
-        }
-        audioEngine.onReconnecting = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.isReconnecting = true
-            }
-        }
-        // Picks up hardware plugged in after launch — e.g. an interface
-        // connected once the app is already running — without the user
-        // having to notice and hit Rescan themselves.
-        deviceWatcher.onChange = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.scheduleDeviceRefresh()
-            }
-        }
-        let settings = practiceState.state.settings
-        let restoredInput = restoreSelection(uid: settings.inputDeviceUID, legacyIDKey: "selectedInputDeviceID", from: inputDevices)
-        selectedInputUID = restoredInput?.uid
-        // Falls back to the system default rather than the first enumerated
-        // device — see `AudioDeviceEnumerator.defaultDeviceID`. Only if even
-        // that is unavailable does the list order decide.
-        selectedInputDeviceID = restoredInput?.id
-            ?? AudioDeviceEnumerator.defaultDeviceID(scope: kAudioDevicePropertyScopeInput)
-                .flatMap { id in inputDevices.first { $0.id == id }?.id }
-            ?? inputDevices.first?.id
-        let restoredOutput = restoreSelection(uid: settings.outputDeviceUID, legacyIDKey: "selectedOutputDeviceID", from: outputDevices)
-        selectedOutputUID = restoredOutput?.uid
-        selectedOutputDeviceID = restoredOutput?.id
-            ?? AudioDeviceEnumerator.defaultDeviceID(scope: kAudioDevicePropertyScopeOutput)
-                .flatMap { id in outputDevices.first { $0.id == id }?.id }
-            ?? outputDevices.first?.id
+        let settings = store.state.settings
         sensitivity = settings.sensitivity
         // Restored the same way, and safe to assign directly: this one's
         // `didSet` only writes the value back, so a missed observer costs
@@ -398,38 +313,23 @@ final class AppState {
         // the detector kept running at its 0.5 default until the user happened
         // to move it. Applying it explicitly here is what actually restores it.
         applySensitivity()
-        // Persist whatever the restore resolved — which matters for the legacy
-        // numeric-ID path, where the UID is only learned by looking at the
-        // devices present. `update` writes nothing when nothing changed.
-        let inputUID = selectedInputUID
-        let outputUID = selectedOutputUID
-        practiceState.update {
-            $0.settings.inputDeviceUID = inputUID
-            $0.settings.outputDeviceUID = outputUID
-        }
         // Property observers do not run for assignments during `init`, so an
         // existing opt-in needs its one daily pulse requested explicitly.
         usageTelemetry.recordActiveDayIfEnabled(sharesAnonymousUsageData)
     }
 
-    /// Synchronous, on the main actor — fine for an explicit user action
-    /// (launch, the Rescan button, "Refresh devices" in the error banner),
-    /// which isn't the case this is trying to protect against. The
-    /// automatic path triggered by device-change notifications goes through
-    /// `scheduleDeviceRefresh` instead.
     /// Builds the Notes module's model, wired to this app's persisted state and
     /// to sample playback in the current tuning.
     ///
-    /// A factory for the same reason `AudioEngine.makeSequencer` is: it
-    /// captures `self`, which a stored property cannot do during
-    /// initialisation.
+    /// A factory because it captures `self`, which a stored property cannot
+    /// do during initialisation.
     func makeNotesModuleModel() -> NotesModuleModel {
         NotesModuleModel(
             tuning: tuning,
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(
+                self.audio.playSample(
                     string: position.string,
                     fret: position.fret,
                     tuning: self.tuning
@@ -445,7 +345,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -456,7 +356,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -467,7 +367,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -477,7 +377,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -487,7 +387,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -498,7 +398,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -508,7 +408,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -519,7 +419,7 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
@@ -530,121 +430,49 @@ final class AppState {
             store: practiceState,
             play: { [weak self] position in
                 guard let self else { return }
-                self.audioEngine.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
+                self.audio.playSample(string: position.string, fret: position.fret, tuning: self.tuning)
             }
         )
     }
 
-    func refreshDevices() {
-        applyDeviceLists(inputs: AudioDeviceEnumerator.inputDevices(), outputs: AudioDeviceEnumerator.outputDevices())
-    }
-
-    /// `AudioDeviceEnumerator`'s scan does several blocking Core Audio HAL
-    /// calls, and a device disconnect is exactly when those can stall — a
-    /// driver mid-teardown, or a multi-stream interface firing several
-    /// change notifications in a burst. Doing that scan directly on the main
-    /// actor (as a naive `deviceWatcher.onChange` handler would) is what
-    /// used to read as the whole app freezing on unplug. This runs it on a
-    /// detached task instead, and debounces so a burst of notifications
-    /// coalesces into one scan rather than several stacked back to back.
-    private func scheduleDeviceRefresh() {
-        pendingDeviceRefresh?.cancel()
-        pendingDeviceRefresh = Task.detached { [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            let inputs = AudioDeviceEnumerator.inputDevices()
-            let outputs = AudioDeviceEnumerator.outputDevices()
-            guard !Task.isCancelled else { return }
-            await MainActor.run { [weak self] in
-                self?.applyDeviceLists(inputs: inputs, outputs: outputs)
-            }
-        }
-    }
-
-    private func applyDeviceLists(inputs: [AudioDevice], outputs: [AudioDevice]) {
-        inputDevices = inputs
-        outputDevices = outputs
-        selectedInputDeviceID = Self.reresolve(id: selectedInputDeviceID, uid: selectedInputUID, in: inputDevices)
-        selectedOutputDeviceID = Self.reresolve(id: selectedOutputDeviceID, uid: selectedOutputUID, in: outputDevices)
-    }
-
-    /// An interface that is unplugged and plugged back in comes back under a
-    /// different `AudioDeviceID`. Matching on the stable UID first means the
-    /// user's actual choice survives that, instead of silently sliding onto
-    /// whichever device happens to sort first — which is how a carefully
-    /// chosen interface ends up quietly replaced by the built-in one.
-    private static func reresolve(id: AudioDeviceID?, uid: String?, in devices: [AudioDevice]) -> AudioDeviceID? {
-        if let id, devices.contains(where: { $0.id == id }) { return id }
-        if let uid, let match = devices.first(where: { $0.uid == uid }) { return match.id }
-        return devices.first?.id
-    }
-
-    /// Prefers the stable UID, falling back once to the legacy stored
-    /// `AudioDeviceID` so an existing selection survives the upgrade — that ID
-    /// is only trusted if it still resolves to a device that is present.
-    private func restoreSelection(uid: String?, legacyIDKey: String, from devices: [AudioDevice]) -> AudioDevice? {
-        if let uid, let match = devices.first(where: { $0.uid == uid }) {
-            return match
-        }
-        if let legacy = practiceState.legacyDeviceID(forKey: legacyIDKey),
-           let match = devices.first(where: { $0.id == legacy }) {
-            return match
-        }
-        return nil
-    }
-
-    /// Non-nil when the selected input device could also be doing the
-    /// playback but isn't. That pairing is what unlocks single-engine duplex
-    /// monitoring, and it is worth a good deal of latency — but nothing in the
-    /// two separate device pickers hints that matching them matters, so offer
-    /// it explicitly rather than leaving it to be discovered.
-    var directMonitoringCandidate: AudioDevice? {
-        guard let selectedInputDeviceID,
-              selectedInputDeviceID != selectedOutputDeviceID,
-              AudioDeviceEnumerator.isDuplexCapable(selectedInputDeviceID)
-        else { return nil }
-        return outputDevices.first { $0.id == selectedInputDeviceID }
-    }
-
-    func useInputDeviceForOutput() {
-        guard let candidate = directMonitoringCandidate else { return }
-        selectOutputDevice(candidate.id)
-    }
-
-    func selectInputDevice(_ id: AudioDeviceID?) {
-        selectedInputDeviceID = id
-        let uid = inputDevices.first { $0.id == id }?.uid
-        selectedInputUID = uid
-        if uid != nil { practiceState.update { $0.settings.inputDeviceUID = uid } }
-        start()
-    }
-
-    func selectOutputDevice(_ id: AudioDeviceID?) {
-        selectedOutputDeviceID = id
-        let uid = outputDevices.first { $0.id == id }?.uid
-        selectedOutputUID = uid
-        if uid != nil { practiceState.update { $0.settings.outputDeviceUID = uid } }
-        start()
-    }
-
-    private func applyMonitorVolume() {
-        audioEngine.setMonitorVolume(monitorMuted ? 0 : Float(monitorVolume))
-    }
-
     private func applySensitivity() {
         let value = sensitivity
-        audioEngine.setSensitivity(value)
+        audio.setSensitivity(value)
         practiceState.update { $0.settings.sensitivity = value }
     }
 
     func start() {
-        guard let selectedInputDeviceID, let selectedOutputDeviceID else { return }
+        // Clear the banner only when a start was actually issued. `start()` on
+        // a controller with no device selected must not wipe the error message
+        // that explains why — Retry used to blank it in that case.
+        guard audio.start() else { return }
         errorMessage = nil
         isReconnecting = false
-        audioEngine.start(inputDeviceID: selectedInputDeviceID, outputDeviceID: selectedOutputDeviceID, monitorVolume: monitorMuted ? 0 : Float(monitorVolume))
     }
 
     func retryAudio() { start() }
+
+    /// Dispatches one event from the audio seam. The bodies are the verbatim
+    /// five engine callbacks `AppState` used to install directly.
+    private func handle(_ event: AudioControllerEvent) {
+        switch event {
+        case .noteUpdate(let update):
+            publish(update)
+        case .chordUpdate(let update):
+            chordDisplay = update
+            appendToHistory(update.chord)
+            if detectionMode == .chords { trackSignalClarity(level: update.level, hasResult: update.chord != nil) }
+        case .error(let message):
+            errorMessage = message
+            isReconnecting = false
+        case .recovered:
+            errorMessage = nil
+            isReconnecting = false
+            hasStartedAudio = true
+        case .reconnecting:
+            isReconnecting = true
+        }
+    }
 
     /// The analysis worker republishes the held note about thirty times a
     /// second, but only a genuine change of note is a new event to score —
@@ -883,9 +711,5 @@ final class AppState {
         scheduleHistoryAppend(note, positions: fretPositions)
     }
 
-    // pendingDeviceRefresh is left to run out on its own at deinit — it
-    // captures `self` weakly, so there's nothing for it to do once this
-    // instance is gone, and Task.cancel() isn't safe to call from a
-    // nonisolated deinit against a main-actor-isolated property.
-    deinit { audioEngine.stop() }
+    isolated deinit { audio.stop() }
 }

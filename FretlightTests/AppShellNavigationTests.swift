@@ -17,7 +17,11 @@ import XCTest
 final class AppShellNavigationTests: XCTestCase {
     func testChangingScreensNeverRebuildsTheGraph() {
         let state = AppState()
-        let before = state.graphBuildCount
+        guard let mac = state.macAudio else {
+            XCTFail("AppState() must produce a Mac controller on macOS")
+            return
+        }
+        let before = mac.graphBuildCount
 
         for module in LearningModule.allCases {
             state.selectedScreen = .module(module)
@@ -28,8 +32,8 @@ final class AppShellNavigationTests: XCTestCase {
             state.selectedScreen = .listen
         }
 
-        XCTAssertEqual(state.graphBuildCount, before,
-                       "navigating rebuilt the audio graph \(state.graphBuildCount - before) time(s)")
+        XCTAssertEqual(mac.graphBuildCount, before,
+                       "navigating rebuilt the audio graph \(mac.graphBuildCount - before) time(s)")
     }
 
     func testTheSelectedScreenStartsOnListen() {

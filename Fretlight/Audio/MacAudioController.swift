@@ -22,7 +22,7 @@ final class MacAudioController: AudioControlling {
 
     // MARK: - AudioControlling
 
-    var onEvent: (@Sendable (AudioControllerEvent) -> Void)?
+    var onEvent: (@MainActor @Sendable (AudioControllerEvent) -> Void)?
 
     /// How many times the audio graph has been built this session. Navigation
     /// must never move this — see `AppShellNavigationTests`.
@@ -75,6 +75,11 @@ final class MacAudioController: AudioControlling {
     private var selectedInputUID: String?
     private var selectedOutputUID: String?
 
+    /// Whether a saved output was restored, so a test can tell the "no saved
+    /// device, fell back to the system default" case from the "restored what
+    /// was saved" one.
+    var selectedOutputUIDForTesting: String? { selectedOutputUID }
+
     init(store: PracticeStateStore) {
         self.store = store
         // Five engine callbacks fan into one event stream. Each hop to the
@@ -116,10 +121,11 @@ final class MacAudioController: AudioControlling {
 
     // MARK: - AudioControlling lifecycle
 
-    func start() {
-        guard let selectedInputDeviceID, let selectedOutputDeviceID else { return }
+    func start() -> Bool {
+        guard let selectedInputDeviceID, let selectedOutputDeviceID else { return false }
         lastErrorMessage = nil
         engine.start(inputDeviceID: selectedInputDeviceID, outputDeviceID: selectedOutputDeviceID, monitorVolume: monitorMuted ? 0 : Float(monitorVolume))
+        return true
     }
 
     func stop() { engine.stop() }
@@ -189,7 +195,6 @@ final class MacAudioController: AudioControlling {
     /// used to read as the whole app freezing on unplug. This runs it on a
     /// detached task instead, and debounces so a burst of notifications
     /// coalesces into one scan rather than several stacked back to back.
-    // Phase 2 Step 4 moves AppState's copy here
     private func scheduleDeviceRefresh() {
         pendingDeviceRefresh?.cancel()
         pendingDeviceRefresh = Task.detached { [weak self] in
@@ -204,7 +209,6 @@ final class MacAudioController: AudioControlling {
         }
     }
 
-    // Phase 2 Step 4 moves AppState's copy here
     private func applyDeviceLists(inputs: [AudioDevice], outputs: [AudioDevice]) {
         inputDevices = inputs
         outputDevices = outputs
@@ -216,7 +220,6 @@ final class MacAudioController: AudioControlling {
 
     /// Resolves the saved devices once, at construction, and persists whatever
     /// the restore settled on.
-    // Phase 2 Step 4 moves AppState's copy here
     private func restoreSelections() {
         let settings = store.state.settings
         let restoredInput = restoreSelection(uid: settings.inputDeviceUID, legacyIDKey: "selectedInputDeviceID", from: inputDevices)

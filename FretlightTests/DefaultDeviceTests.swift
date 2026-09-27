@@ -54,8 +54,8 @@ final class DefaultDeviceTests: XCTestCase {
         let state = AppState()
         // Only meaningful when nothing was restored; a saved selection rightly
         // wins over the default.
-        if state.selectedOutputUIDForTesting == nil {
-            XCTAssertEqual(state.selectedOutputDeviceID, defaultOutput,
+        if state.macAudio?.selectedOutputUIDForTesting == nil {
+            XCTAssertEqual(state.macAudio?.selectedOutputDeviceID, defaultOutput,
                            "with no saved device the app should open on the system default")
         }
     }

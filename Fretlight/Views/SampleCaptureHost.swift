@@ -43,17 +43,17 @@ struct SampleCaptureHost: View {
         }
         .onAppear {
             if let directory { makeModel(at: directory) }
-            state.setSampleRecordingEnabled(true)
+            state.macAudio?.setSampleRecordingEnabled(true)
         }
         .task {
             while !Task.isCancelled {
-                blockedReason = state.sampleRecordingBlockedReason
+                blockedReason = state.macAudio?.sampleRecordingBlockedReason
                 try? await Task.sleep(for: .seconds(1))
             }
         }
         .onDisappear {
             stopWaiting()
-            state.setSampleRecordingEnabled(false)
+            state.macAudio?.setSampleRecordingEnabled(false)
         }
     }
 
@@ -69,19 +69,20 @@ struct SampleCaptureHost: View {
     }
 
     private func makeModel(at url: URL) {
+        guard let recorder = state.macAudio?.sampleRecorder else { return }
         let model = SampleCaptureModel(directory: url)
         self.model = model
         // Captured directly rather than through `self`: these callbacks fire on
         // the recorder's own queue, and a `View` struct is not `Sendable`.
         let meter = meter
         let arm = arm
-        state.sampleRecorder.onLevel = { reading in
+        recorder.onLevel = { reading in
             Task { @MainActor in meter.update(reading) }
         }
-        state.sampleRecorder.onPhase = { phase in
+        recorder.onPhase = { phase in
             Task { @MainActor in arm.phase = phase }
         }
-        state.sampleRecorder.onTake = { take in
+        recorder.onTake = { take in
             Task { @MainActor in
                 model.handle(take: take)
                 // Every take is a deliberate act, so arming does not persist
@@ -93,12 +94,12 @@ struct SampleCaptureHost: View {
 
     private func startWaiting() {
         arm.isArmed = true
-        state.sampleRecorder.arm()
+        state.macAudio?.sampleRecorder.arm()
     }
 
     private func stopWaiting() {
         arm.isArmed = false
-        state.sampleRecorder.disarm()
+        state.macAudio?.sampleRecorder.disarm()
     }
 }
 #endif

@@ -46,8 +46,8 @@ final class EndToEndPlaybackTests: XCTestCase {
         // name matches an input picks the same physical box on both ends.
         let input = try XCTUnwrap(inputs.first)
         let output = outputs.first { $0.name == input.name } ?? outputs[0]
-        state.selectInputDevice(input.id)
-        state.selectOutputDevice(output.id)
+        state.macAudio?.selectInputDevice(input.id)
+        state.macAudio?.selectOutputDevice(output.id)
 
         // The app starts audio from `ContentView`'s `.task`; a unit test has no
         // view, so it has to do the same thing explicitly. Without this there is

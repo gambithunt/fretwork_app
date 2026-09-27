@@ -22,11 +22,17 @@ enum AudioControllerEvent: Sendable {
 protocol AudioControlling: AnyObject {
     /// Outbound events. Set once by the owner before `start()`. The platform
     /// controller delivers these on the main actor.
-    var onEvent: (@Sendable (AudioControllerEvent) -> Void)? { get set }
+    var onEvent: (@MainActor @Sendable (AudioControllerEvent) -> Void)? { get set }
 
     /// Lifecycle. Parameterless by design: device selection is the Mac
     /// controller's own state; the iOS controller manages its AVAudioSession.
-    func start()
+    ///
+    /// Returns true only when a start was actually issued. `AppState` clears
+    /// the error/reconnecting flags on true and leaves them alone otherwise, so
+    /// a Retry with no device selected cannot wipe the banner that explains
+    /// why nothing is playing.
+    @discardableResult
+    func start() -> Bool
     func stop()
 
     /// Notes/Chords gating. Must only flip the worker flag — never rebuild the

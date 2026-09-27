@@ -167,9 +167,9 @@ struct ListenScreen: View {
     /// when nothing is being detected, so it stays visible on this screen.
     private var devicePathSummary: some View {
         HStack(spacing: 6) {
-            Text(state.inputDevices.first { $0.id == state.selectedInputDeviceID }?.name ?? "No input")
+            Text(state.macAudio?.inputDevices.first { $0.id == state.macAudio?.selectedInputDeviceID }?.name ?? "No input")
             Image(systemName: "arrow.right").foregroundStyle(.secondary)
-            Text(state.outputDevices.first { $0.id == state.selectedOutputDeviceID }?.name ?? "No output")
+            Text(state.macAudio?.outputDevices.first { $0.id == state.macAudio?.selectedOutputDeviceID }?.name ?? "No output")
         }
         .font(.callout)
         .foregroundStyle(.secondary)
@@ -275,7 +275,7 @@ struct ListenScreen: View {
             Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Spacer(minLength: 8)
             Button("Retry") { state.retryAudio() }
-            Button("Refresh devices") { state.refreshDevices(); state.retryAudio() }
+            Button("Refresh devices") { state.macAudio?.refreshDevices(); state.retryAudio() }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
@@ -350,8 +350,8 @@ private struct TelemetrySection: View {
             latencyReadout
             Divider().frame(height: 20)
             monitoringPathReadout
-            if let candidate = state.directMonitoringCandidate {
-                Button("Monitor through \(candidate.name)") { state.useInputDeviceForOutput() }
+            if let candidate = state.macAudio?.directMonitoringCandidate {
+                Button("Monitor through \(candidate.name)") { state.macAudio?.useInputDeviceForOutput() }
                     .buttonStyle(.link)
                     .help("Play back through the same device the guitar comes in on. Capture and playback then share one clock, which removes most of the monitoring delay.")
             }

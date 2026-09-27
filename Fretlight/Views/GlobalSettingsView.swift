@@ -18,6 +18,11 @@ import SwiftUI
 struct GlobalSettingsView: View {
     @Bindable var state: AppState
 
+    /// The Mac-only audio surface. Optional because the shared `AppState` can
+    /// exist behind any `AudioControlling`; on the Mac shell it is always the
+    /// concrete controller, so the fallbacks below are unreachable in the app.
+    private var mac: MacAudioController? { state.macAudio }
+
     /// Every row's label sits in a column this wide, so every control begins
     /// at the same x no matter how long its label is. A plain `VStack` of
     /// `LabeledContent` (or a `Grid`, which centres a menu `Picker` in its
@@ -34,24 +39,24 @@ struct GlobalSettingsView: View {
                 row("Input") {
                     DevicePickerView(
                         title: "INPUT",
-                        devices: state.inputDevices,
-                        selection: state.selectedInputDeviceID,
-                        onSelect: state.selectInputDevice
+                        devices: mac?.inputDevices ?? [],
+                        selection: mac?.selectedInputDeviceID,
+                        onSelect: { mac?.selectInputDevice($0) }
                     )
                     .frame(width: pickerWidth, alignment: .leading)
                 }
                 row("Output") {
                     DevicePickerView(
                         title: "OUTPUT",
-                        devices: state.outputDevices,
-                        selection: state.selectedOutputDeviceID,
-                        onSelect: state.selectOutputDevice
+                        devices: mac?.outputDevices ?? [],
+                        selection: mac?.selectedOutputDeviceID,
+                        onSelect: { mac?.selectOutputDevice($0) }
                     )
                     .frame(width: pickerWidth, alignment: .leading)
                 }
                 row(nil) {
                     Button {
-                        state.refreshDevices()
+                        mac?.refreshDevices()
                     } label: {
                         Label("Rescan", systemImage: "arrow.clockwise")
                     }
@@ -61,16 +66,22 @@ struct GlobalSettingsView: View {
 
             section("Monitoring") {
                 row("Monitor") {
-                    RulerSlider(value: $state.monitorVolume, isEnabled: !state.monitorMuted)
+                    RulerSlider(
+                        value: Binding(
+                            get: { mac?.monitorVolume ?? 0 },
+                            set: { mac?.monitorVolume = $0 }
+                        ),
+                        isEnabled: !(mac?.monitorMuted ?? true)
+                    )
                         .frame(width: 140)
                     Button {
-                        state.monitorMuted.toggle()
+                        mac?.monitorMuted.toggle()
                     } label: {
-                        Image(systemName: state.monitorMuted ? "speaker.slash" : "speaker.wave.2")
+                        Image(systemName: (mac?.monitorMuted ?? true) ? "speaker.slash" : "speaker.wave.2")
                     }
                     .buttonStyle(.bordered)
                     .tint(.secondary)
-                    .help(state.monitorMuted ? "Unmute direct monitoring" : "Mute direct monitoring")
+                    .help((mac?.monitorMuted ?? true) ? "Unmute direct monitoring" : "Mute direct monitoring")
                 }
                 row("Sensitivity") {
                     RulerSlider(value: $state.sensitivity)

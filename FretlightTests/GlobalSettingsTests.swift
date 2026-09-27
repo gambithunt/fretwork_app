@@ -124,13 +124,17 @@ final class GlobalSettingsTests: XCTestCase {
     /// because an uncapped restart loop was a real bug.
     func testGatingNeverRebuildsTheGraph() {
         let state = AppState()
-        let before = state.graphBuildCount
+        guard let mac = state.macAudio else {
+            XCTFail("AppState() must produce a Mac controller on macOS")
+            return
+        }
+        let before = mac.graphBuildCount
         for _ in 0..<20 {
             state.detectionMode = .chords
             state.selectedScreen = .module(.notes)
             state.selectedScreen = .listen
             state.detectionMode = .notes
         }
-        XCTAssertEqual(state.graphBuildCount, before)
+        XCTAssertEqual(mac.graphBuildCount, before)
     }
 }
