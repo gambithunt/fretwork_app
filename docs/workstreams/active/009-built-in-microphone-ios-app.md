@@ -26,8 +26,8 @@ Phase 1 sections and the Implementation Record.
 Partially measured on physical hardware: the **iPhone 14 Pro Max (iOS 27.0,
 24A435)** capture spike ran, the sink was selected and the tap path deleted,
 and the latency, CPU and thermal metrics are now measured on that iPhone. The
-iPad Pro 13-inch (M5) is **deferred by the owner for now**, and the
-permission-state matrix remains **pending**.
+permission-state matrix passed on that iPhone. The iPad Pro 13-inch (M5) is
+**deferred by the owner for now**.
 
 **C-19/Q-06 resolved 2026-09-18 — option (A) accepted.** The owner confirmed
 option A ("ok lets go") after discussing the exact recommended wording, so
@@ -50,7 +50,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-27 (Phase 1 iPhone capture, latency, CPU and thermal measured; iPad deferred by the owner; permission-state matrix pending).
+Last updated: 2026-09-27 (Phase 1 iPhone capture, latency, CPU, thermal and permission states verified; iPad deferred by the owner; acoustic/amplified-electric sweep pending).
 
 ## Objective
 
@@ -890,7 +890,7 @@ Deliberate choices and omissions, not defects:
    explicitly. iPhone SE (2nd gen) is the smallest *reference* but is not
    installed.
 
-## Phase 1 — Simulator-first audio spike (implemented; iPhone capture, latency, CPU/thermal measured; iPad/permission pending)
+## Phase 1 — Simulator-first audio spike (implemented; iPhone capture, latency, CPU/thermal and permissions verified; iPad deferred)
 
 **Prerequisites:** Phase 0 complete. The Simulator-first slice (synthetic
 pipeline + harness UI + manual capture stubs) was built and verified on
@@ -1021,7 +1021,11 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
       14 Pro Max, iOS 27.0** (metrics record below): CPU flat across ~1.2-min
       segments (26.9, 25.7, 26.4, 29.0, 28.5%; no uptime ramp) and thermal
       `nominal` throughout. **iPad deferred by the owner for now.**
-- [ ] Test permission granted, denied and undetermined states on real device.
+- [x] Test permission granted, denied and undetermined states on real device.
+      **Done on iPhone 14 Pro Max (2026-09-27), owner-run:** granted listens;
+      denied (toggled off in Settings) shows "Microphone permission denied"
+      with no hang; undetermined (fresh install) prompts, and both Don't Allow
+      and Allow then behave as their states above.
 - [ ] Play acoustic guitar and amplified electric guitar at realistic distances;
       note useful sensitivity range and false triggers.
 - [x] Select one capture primitive and document why; delete the losing path.
