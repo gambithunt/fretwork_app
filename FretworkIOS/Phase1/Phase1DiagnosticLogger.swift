@@ -83,7 +83,20 @@ final class Phase1DiagnosticLogger: @unchecked Sendable {
 
     private func logOnce() {
         guard let sample = sample() else { return }
-        let line = "phase1 raw=\(sample.rawCallbacks) updates=\(sample.updates)"
+        var line = "phase1 raw=\(sample.rawCallbacks) updates=\(sample.updates)"
+        stateLock.lock()
+        let pipeline = self.pipeline
+        stateLock.unlock()
+        if let t = pipeline?.snapshot() {
+            // Enough to compare capture primitives from the console alone:
+            // callback size and its spread, then what the detector made of it.
+            let histogram = t.callbackFrameHistogram.sorted { $0.key < $1.key }
+                .map { "\($0.key)x\($0.value)" }.joined(separator: ",")
+            let p = t.latestPitch
+            line += " sr=\(Int(t.sampleRate)) frames=\(t.lastCallbackFrameCount) hist=[\(histogram)]"
+            line += " note=\(t.latestNoteLabel) hz=\(p.frequency.map { String(format: "%.1f", $0) } ?? "-")"
+            line += String(format: " conf=%.2f level=%.4f latencyMs=%.1f", p.confidence, p.level, p.latencyMilliseconds)
+        }
         log.notice("\(line, privacy: .public)")
         // stderr mirror for `devicectl ... --console`, which needs no root and
         // unlike `log collect` works against a device.

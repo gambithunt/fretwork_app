@@ -91,7 +91,7 @@ final class Phase1HarnessModelTests: XCTestCase {
     func testManualDeniedPermissionSurfacesRecoverableDeniedStateWithoutRealAudio() async {
         let source = FakeManualCaptureSource(result: .failure(Phase1MicrophoneHarnessError.permissionDenied))
         let model = Phase1HarnessModel(makeManualSource: { source })
-        model.selectedMode = .microphoneTap
+        model.selectedMode = .microphoneSink
         model.start()
         await source.waitForStart()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -117,7 +117,7 @@ final class Phase1HarnessModelTests: XCTestCase {
     func testStopDuringStartLeavesStateIdleEvenAfterStaleCompletion() async {
         let source = FakeManualCaptureSource(result: .success, holdUntilResumed: true)
         let model = Phase1HarnessModel(makeManualSource: { source })
-        model.selectedMode = .microphoneTap
+        model.selectedMode = .microphoneSink
         model.start()
         // Deterministic handshake: wait until the fake has installed its hold
         // continuation before we call Stop.
@@ -160,12 +160,12 @@ final class Phase1HarnessModelTests: XCTestCase {
         XCTAssertEqual(model.state, .idle)
         XCTAssertEqual(source.stopCount, 1)
 
-        // Second cycle with different mode.
-        model.selectedMode = .microphoneTap
+        // Second cycle — a fresh pipeline must start cleanly.
+        model.selectedMode = .microphoneSink
         model.start()
         await source.waitForStart()
         try? await Task.sleep(nanoseconds: 20_000_000)
-        XCTAssertEqual(model.state, .running(.microphoneTap))
+        XCTAssertEqual(model.state, .running(.microphoneSink))
         model.stop()
         XCTAssertEqual(model.state, .idle)
         XCTAssertEqual(source.startCount, 2)
@@ -206,12 +206,11 @@ final class Phase1HarnessModelTests: XCTestCase {
     func testDiagnosticToneRemainsExplicitlySelectable() {
         XCTAssertTrue(Phase1CaptureMode.allCases.contains(.synthetic))
         XCTAssertFalse(Phase1CaptureMode.synthetic.isLiveMicrophone)
-        XCTAssertTrue(Phase1CaptureMode.microphoneTap.isLiveMicrophone)
         XCTAssertTrue(Phase1CaptureMode.microphoneSink.isLiveMicrophone)
     }
 
     func testStatusLabelDistinguishesLiveMicrophoneFromDiagnosticTone() {
-        let live = Phase1HarnessState.running(.microphoneTap).label.lowercased()
+        let live = Phase1HarnessState.running(.microphoneSink).label.lowercased()
         XCTAssertTrue(live.contains("microphone"))
         XCTAssertFalse(live.contains("diagnostic"))
 
@@ -263,23 +262,39 @@ final class Phase1DiagnosticLoggerTests: XCTestCase {
     }
 }
 
-/// Regression for the MainActor-inherited realtime block. Before the fix the tap
-/// block was a closure literal inside `Phase1MicrophoneHarness`, which is
+/// Regression for the MainActor-inherited realtime block. Before the fix the
+/// sink block was a closure literal inside `Phase1MicrophoneHarness`, which is
 /// `@MainActor`; the first background invocation tripped Swift's executor check
 /// and trapped. Building it through the `nonisolated` factory must let it run
 /// off the main thread and count the callback.
 final class Phase1MicrophoneHarnessBlockTests: XCTestCase {
-    func testTapBlockRunsOnBackgroundThreadAndCountsCallback() async {
+    func testSinkBlockRunsOnBackgroundThreadAndCountsCallback() async {
         let pipeline = Phase1AnalysisPipeline(ringCapacity: 4096)
         pipeline.start(sampleRate: 48_000, bufferSize: 1024)
         defer { pipeline.stop() }
 
         await Task.detached {
-            let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false)!
-            let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1024)!
-            buffer.frameLength = 1024
-            let block = Phase1MicrophoneHarness.makeTapBlock(pipeline: pipeline)
-            block(buffer, AVAudioTime(hostTime: 0))
+            let frameCount: AVAudioFrameCount = 1024
+            let samples = [Float](repeating: 0.1, count: Int(frameCount))
+            var timeStamp = AudioTimeStamp()
+            let block = Phase1MicrophoneHarness.makeSinkBlock(pipeline: pipeline)
+
+            samples.withUnsafeBufferPointer { source in
+                let raw = UnsafeMutableRawPointer.allocate(
+                    byteCount: MemoryLayout<AudioBufferList>.size,
+                    alignment: MemoryLayout<AudioBufferList>.alignment
+                )
+                defer { raw.deallocate() }
+                let list = raw.assumingMemoryBound(to: AudioBufferList.self)
+                list.pointee.mNumberBuffers = 1
+                list.pointee.mBuffers = AudioBuffer(
+                    mNumberChannels: 1,
+                    mDataByteSize: UInt32(frameCount) * UInt32(MemoryLayout<Float>.size),
+                    mData: UnsafeMutableRawPointer(mutating: source.baseAddress)
+                )
+                let status = block(&timeStamp, frameCount, list)
+                XCTAssertEqual(status, noErr)
+            }
         }.value
 
         XCTAssertEqual(pipeline.rawCallbackCountSnapshot(), 1)

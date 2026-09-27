@@ -55,7 +55,7 @@ struct Phase1HarnessView: View {
                 Phase1TelemetrySection(model: model)
 
                 Section("Graph rule") {
-                    Label("No microphone-to-speaker connection is created. Tap writes input callbacks to analysis only; sink connects input to AVAudioSinkNode only.", systemImage: "speaker.slash")
+                    Label("No microphone-to-speaker connection is created. The sink connects input to AVAudioSinkNode for analysis only.", systemImage: "speaker.slash")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

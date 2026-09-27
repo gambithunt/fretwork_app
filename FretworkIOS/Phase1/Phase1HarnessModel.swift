@@ -2,9 +2,12 @@ import Foundation
 import Observation
 
 enum Phase1CaptureMode: String, CaseIterable, Identifiable, Sendable {
-    // Live microphone first: it is the default and the only source that
-    // reflects what the player is actually doing.
-    case microphoneTap
+    // The sink is the selected capture primitive. Physical-device measurement
+    // (iPhone 14 Pro Max, iOS 27.0) showed the tap delivering its requested
+    // 1024-frame chunks as 4800-frame (~100 ms) callbacks at ~10/s, while the
+    // sink delivered 1120-frame (~23 ms) callbacks at ~44/s — so the tap was
+    // deleted (Workstream 009 Phase 1). Sink first: it is the default and the
+    // only source that reflects what the player is actually doing.
     case microphoneSink
     case synthetic
 
@@ -16,7 +19,6 @@ enum Phase1CaptureMode: String, CaseIterable, Identifiable, Sendable {
 
     var label: String {
         switch self {
-        case .microphoneTap: "Live microphone (tap)"
         case .microphoneSink: "Live microphone (sink)"
         case .synthetic: "Diagnostic tone (synthetic A4)"
         }
@@ -25,7 +27,6 @@ enum Phase1CaptureMode: String, CaseIterable, Identifiable, Sendable {
     /// Phrased for the status row so the running source is never ambiguous.
     var statusLabel: String {
         switch self {
-        case .microphoneTap: "Listening — live microphone (tap)"
         case .microphoneSink: "Listening — live microphone (sink)"
         case .synthetic: "Diagnostic — synthetic 440 Hz, not the microphone"
         }
@@ -78,7 +79,7 @@ final class Phase1HarnessModel {
 
     // Default to a live microphone: tapping Start must exercise the real input,
     // not the deterministic diagnostic tone. Synthetic stays selectable above.
-    var selectedMode: Phase1CaptureMode = .microphoneTap
+    var selectedMode: Phase1CaptureMode = .microphoneSink
     private(set) var state: Phase1HarnessState = .idle
     private(set) var telemetry = Phase1AnalysisTelemetry()
     /// Realtime capture-callback count, sampled by `pollTask` while a live
@@ -118,7 +119,7 @@ final class Phase1HarnessModel {
             feeder.start()
             state = .running(.synthetic)
 
-        case .microphoneTap, .microphoneSink:
+        case .microphoneSink:
             let source = makeManualSource()
             manualSource = source
             let mode = selectedMode

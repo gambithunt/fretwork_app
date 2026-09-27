@@ -19,32 +19,17 @@ enum Phase1MicrophoneHarnessError: LocalizedError, Equatable {
 
 @MainActor
 final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
-    private enum CaptureKind {
-        case none
-        case tap
-        case sink
-    }
-
     private var engine: AVAudioEngine?
     private var sinkNode: AVAudioSinkNode?
     private var pipeline: Phase1AnalysisPipeline?
-    private var captureKind: CaptureKind = .none
 
-    /// `AVAudioNodeTapBlock` / `AVAudioSinkNodeReceiverBlock` are imported as
+    /// `AVAudioSinkNodeReceiverBlock` is imported as
     /// `NS_SWIFT_NONSENDABLE`. A closure literal written inside this
     /// `@MainActor` type therefore inherits MainActor isolation and carries a
     /// runtime executor check. The first realtime callback fails that check and
     /// traps, freezing the app with zero callbacks and zero updates. Build the
-    /// blocks in `nonisolated` static functions so they are created off the
+    /// block in a `nonisolated` static function so it is created off the
     /// actor; the pipeline capture stays weak, exactly as before.
-    nonisolated static func makeTapBlock(pipeline: Phase1AnalysisPipeline) -> AVAudioNodeTapBlock {
-        { [weak pipeline] buffer, time in
-            guard let channel = buffer.floatChannelData?[0] else { return }
-            let sampleTime = max(0, time.sampleTime)
-            pipeline?.write(samples: channel, frameCount: Int(buffer.frameLength), captureTime: UInt64(sampleTime))
-        }
-    }
-
     nonisolated static func makeSinkBlock(pipeline: Phase1AnalysisPipeline) -> AVAudioSinkNodeReceiverBlock {
         { [weak pipeline] timeStamp, frameCount, audioBufferList in
             guard let firstBuffer = audioBufferList.pointee.mBuffers.mData else { return noErr }
@@ -56,7 +41,7 @@ final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
     }
 
     func start(mode: Phase1CaptureMode, pipeline: Phase1AnalysisPipeline) async throws {
-        guard mode == .microphoneTap || mode == .microphoneSink else {
+        guard mode == .microphoneSink else {
             throw Phase1MicrophoneHarnessError.unsupportedMode
         }
         try await ensurePermissionGranted()
@@ -89,17 +74,11 @@ final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
 
         do {
             switch mode {
-            case .microphoneTap:
-                input.installTap(onBus: 0, bufferSize: 1024, format: format,
-                                 block: Self.makeTapBlock(pipeline: pipeline))
-                captureKind = .tap
-
             case .microphoneSink:
                 let sink = AVAudioSinkNode(receiverBlock: Self.makeSinkBlock(pipeline: pipeline))
                 engine.attach(sink)
                 engine.connect(input, to: sink, format: format)
                 sinkNode = sink
-                captureKind = .sink
 
             case .synthetic:
                 throw Phase1MicrophoneHarnessError.unsupportedMode
@@ -120,9 +99,6 @@ final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
     private func cleanup() {
         if let engine {
             engine.stop()
-            if captureKind == .tap {
-                engine.inputNode.removeTap(onBus: 0)
-            }
             if let sinkNode {
                 engine.disconnectNodeInput(sinkNode)
                 engine.detach(sinkNode)
@@ -132,7 +108,6 @@ final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
         engine = nil
         pipeline?.stop()
         pipeline = nil
-        captureKind = .none
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 

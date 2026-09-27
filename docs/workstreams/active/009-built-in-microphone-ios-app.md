@@ -23,10 +23,10 @@ Phase 0. The recorded exception is the pre-existing Mac test compile failure
 begins. Full evidence, inventories, commands and risks are in the Phase 0 and
 Phase 1 sections and the Implementation Record.
 
-Phase 1 physical-device measurements remain **pending**: the nominated
-hardware — iPhone 14 Pro Max and iPad Pro 13-inch (M5) — still needs OS-version
-recording, Developer Mode/device-trust confirmation, and working development-
-level signing/provisioning.
+Partially measured on physical hardware: the **iPhone 14 Pro Max (iOS 27.0,
+24A435)** capture spike ran, the sink was selected and the tap path deleted.
+The iPad Pro 13-inch (M5) and the CPU/thermal and permission-state
+measurements remain **pending**.
 
 **C-19/Q-06 resolved 2026-09-18 — option (A) accepted.** The owner confirmed
 option A ("ok lets go") after discussing the exact recommended wording, so
@@ -49,7 +49,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-19 (Phase 1 Simulator slice implemented; physical-device spike pending).
+Last updated: 2026-09-27 (Phase 1 iPhone capture spike measured; sink selected and tap path deleted; iPad/CPU/thermal pending).
 
 ## Objective
 
@@ -889,7 +889,7 @@ Deliberate choices and omissions, not defects:
    explicitly. iPhone SE (2nd gen) is the smallest *reference* but is not
    installed.
 
-## Phase 1 — Simulator-first audio spike (implemented; physical-device capture pending)
+## Phase 1 — Simulator-first audio spike (implemented; iPhone capture measured, iPad/CPU/thermal pending)
 
 **Prerequisites:** Phase 0 complete. The Simulator-first slice (synthetic
 pipeline + harness UI + manual capture stubs) was built and verified on
@@ -916,13 +916,13 @@ or `AppState`. The harness provides:
   hardware. Runs as a detached `Task` with adjustable tone, amplitude, frame
   count and cadence.
 - **`Phase1MicrophoneHarness`** — temporary `AVAudioSession`/`AVAudioEngine`
-  spike supporting both `installTap` and `AVAudioSinkNode` capture paths.
-  Validates Float32 non-interleaved format; clamps negative sample times;
-  tracks installed capture mode so `stop()` only removes a tap when a tap
-  exists. `self.engine` / `self.pipeline` are set before any fallible setup so
-  `cleanup()` can undo an installed tap/sink if `engine.start()` throws.
-  `try Task.checkCancellation()` after `ensurePermissionGranted()` prevents
-  Stop-during-prompt from later activating audio.
+  spike using `AVAudioSinkNode`. Validates Float32 non-interleaved format;
+  clamps negative sample times. `self.engine` / `self.pipeline` are set before
+  any fallible setup so `cleanup()` can detach an attached sink if
+  `engine.start()` throws. `try Task.checkCancellation()` after
+  `ensurePermissionGranted()` prevents Stop-during-prompt from later
+  activating audio. The `installTap` path was deleted after physical-device
+  measurement selected the sink (see Tasks completed).
 - **`Phase1HarnessModel`** — `@MainActor @Observable` state machine with
   `.idle` / `.starting` / `.running(mode)` / `.permissionDenied` / `.failed`
   states. Creates a **fresh `Phase1AnalysisPipeline` on every explicit Start**
@@ -977,9 +977,9 @@ All under `FretworkIOS/Phase1/`:
    session, no permission request, no engine).
 3. **Done.** Start/Stop idempotence, permission-denied state, and injected fake
    source isolation are unit-tested with no real audio.
-4. **Done.** Tap and sink capture primitives are wired in
-   `Phase1MicrophoneHarness` for physical-device comparison when hardware is
-   available.
+4. **Done.** The `AVAudioSinkNode` capture primitive is wired in
+   `Phase1MicrophoneHarness` and selected from physical-device measurement; the
+   `installTap` path has been deleted.
 5. **Done.** `AVAudioSession` category `.playAndRecord`/mode `.measurement` is
    configured; the graph rule (no microphone-to-speaker connection) is
    documented and enforced in the harness design.
@@ -1001,13 +1001,28 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
 
 - [ ] Connect iPhone 14 Pro Max and iPad Pro 13-inch (M5); record OS versions
       and confirm Developer Mode/device trust / development provisioning.
-- [ ] Compare `installTap` vs `AVAudioSinkNode` callback cadence, frame counts,
-      and detector latency on physical hardware. Record actual device model, OS
-      version, sample rate, callback characteristics, CPU and thermal behavior.
+      **Partial:** iPhone 14 Pro Max (iPhone15,3, "Phoebe") recorded at **iOS
+      27.0 (24A435)**, Developer Mode enabled, wired; iPad still pending.
+- [x] Compare `installTap` vs `AVAudioSinkNode` callback cadence and frame counts
+      on physical hardware. **Done for iPhone 14 Pro Max, iOS 27.0, 48 kHz:**
+      tap delivered its requested 1024-frame chunks as **4800-frame (~100 ms)
+      callbacks at ~10/s**; sink delivered **1120-frame (~23 ms) callbacks at
+      ~44/s**. Both detected the same open-string pitches (guitar in Drop D, low
+      string ~73 Hz). `latencyMs` read 0 in both because the iOS path never
+      populates `PitchDisplayState.latencyMilliseconds`, so end-to-end latency is
+      **not measured** — callback size is the evidence. Root cause of the
+      oversized tap/output coupling is the Swift 6 `@MainActor`-inherited
+      realtime closure (commit `e858416`); both blocks are now built in
+      `nonisolated` factories.
+- [ ] Record CPU and thermal behavior on physical hardware. **Not measured.**
 - [ ] Test permission granted, denied and undetermined states on real device.
 - [ ] Play acoustic guitar and amplified electric guitar at realistic distances;
       note useful sensitivity range and false triggers.
-- [ ] Select one capture primitive and document why; delete the losing path.
+- [x] Select one capture primitive and document why; delete the losing path.
+      **Done:** `AVAudioSinkNode` selected; `installTap`, `Phase1CaptureMode
+      .microphoneTap`, `CaptureKind.tap` and `makeTapBlock` deleted. The sink
+      returns the hardware block size (~1120 frames at 48 kHz) against the
+      tap's fixed ~100 ms chunks, so detection sees each buffer ~4x sooner.
 - [ ] Verify sample playback is at least configuration-compatible with capture.
 
 ### Exit criteria
@@ -1023,9 +1038,9 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
 - **Met.** Manual Simulator harness Start/Stop is idempotent and shows
   permission/error/telemetry states.
 - **Met.** The harness graph has no microphone-to-speaker connection.
-- **Pending.** The available physical iPhone and iPad detect played notes
-  through their microphones, with acceptable callback cadence and no audible
-  feedback.
+- **Pending.** The available physical iPad and the CPU/thermal measurements
+  remain outstanding; the iPhone 14 Pro Max detected played notes through its
+  microphone at the sink cadence above with no audible feedback.
 
 ### Phase 1 risks carried forward
 
@@ -1038,9 +1053,10 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
 2. **Phase 1 is not complete without physical devices.** Simulator validation
    is a build/unit-test gate, not a substitute for tap-vs-sink measurement or
    real-guitar detection.
-3. **Tap vs sink is unresolved.** Both `installTap` and `AVAudioSinkNode` paths
-   exist in the harness. Physical measurements must select one; the other must
-   be deleted before Phase 2.
+3. **Tap vs sink is resolved.** `AVAudioSinkNode` is the selected capture
+   primitive; the `installTap` path was deleted after iPhone 14 Pro Max
+   measurement (4800-frame/100 ms tap chunks at ~10/s versus 1120-frame/23 ms
+   sink chunks at ~44/s).
 
 ## Phase 2 — Platform-neutral audio seam
 
@@ -1329,6 +1345,7 @@ TODO placeholders in the phone interface.
 | 2026-09-18 | Use representative recent iPhone/iPad references (iPhone SE 2nd gen, a recent Face ID iPhone, iPad mini A17 Pro, iPad A16, 13-inch iPad Air M3+) instead of assuming owned hardware. | Exact owned devices are unknown; reference coverage must not be mistaken for measured hardware. | C-08, C-09 | When the owner names the actual Phase 1 devices. |
 | 2026-09-18 (revision 4) | Marked Phase 0 **complete** with full source/test ownership inventories, the proven iOS type-check evidence, the current architectural choice (isolated `FretworkIOS` root; shared membership deferred to Phase 2), created/edited files, git-status snapshot, build/test/product-inspection results and carried-forward risks. Recorded the pre-existing Mac test compile failure (0/453) as the one exception that must be repaired separately before Phase 2; the `Fretwork` module rename and the iOS `NSMicrophoneUsageDescription` landed during Phase 0; Phase 1 hardware/provisioning is not ready. | Status, Phase 0 (tasks, exit criteria, full Phase 0 record), change log, Implementation Record. | Phase 0 is now a complete, self-contained baseline; Phase 2 inherits the shared-membership + exception-set work now that the module is `Fretwork`; Phase 1 remains blocked on hardware and development provisioning. | Phase 2 applies the target-filtered exception set; the separate non-iOS test repair lands before Phase 2; the owner names Phase 1 devices and confirms provisioning (Q-07). |
 | 2026-09-19 (revision 6) | Recorded the Simulator-first Phase 1 slice as implemented but Phase 1 incomplete; added the seven-file explicit membership inventory, Phase 1 harness file list, completed/pending task split, met-vs-pending exit criteria, and PBXFileReference fragility risk. Updated Phase 0's historical claim about isolated-root membership with a then-vs-now distinction. Appended Phase 1 Implementation Record with 13-test and build evidence. Mac immutable boundary and pre-existing test exception preserved. | Status, Phase 0 (intro callout, architectural choice), Phase 1 (entirely rewritten), change log, Implementation Record. | Phase 1 Simulator slice is now a recorded artifact; the same repository/shell architecture and physical-device prerequisites are unchanged. | Confirm physical-device provisioning and perform tap-vs-sink measurements before closing Phase 1. |
+| 2026-09-27 (revision 7) | Recorded the iPhone 14 Pro Max physical-device capture spike (iOS 27.0, 48 kHz), selected `AVAudioSinkNode` over `installTap` and deleted the losing path and its enum case/helpers, and replaced the tap-block regression test with the sink equivalent. Ticked the tap-vs-sink comparison and the select-one-primitive checkbox; left iPad, CPU/thermal and the permission-state matrix unticked. Appended the physical-device Implementation Record. | Status, Phase 1 (header, harness description, tasks, exit criteria, risks), change log, Implementation Record. | The Phase 1 capture primitive is resolved, so Phase 2 can build the seam on the sink; Phase 1 still cannot close until the iPad and CPU/thermal measurements land. | Real-guitar detection, iPad and CPU/thermal measurement remain before Phase 1 exit. |
 
 ## Change log
 
@@ -1547,12 +1564,70 @@ git diff --check   # clean (exit 0)
 - No production lifecycle, interruption/route recovery or status surfaces (Phase 3).
 - No navigation shell or settings (Phase 4).
 - No sample-playback or detection gating (Phase 7).
-- Both `installTap` and `AVAudioSinkNode` paths exist; physical measurements must
-  select one and delete the other.
+- Only the `AVAudioSinkNode` capture path exists; the losing `installTap` path
+  was deleted after physical-device measurement.
 
-**Phase 1 physical-device spike not started.**
+**Phase 1 physical-device spike partially measured (iPhone only).**
 
-The nominated devices (iPhone 14 Pro Max, iPad Pro 13-inch M5) still require
-OS-version recording, Developer Mode/device-trust confirmation, and working
-development-level automatic signing/provisioning. Tap-vs-sink selection, callback
-cadence/latency/CPU measurements, and real-guitar detection remain pending.
+The iPhone 14 Pro Max capture spike ran (iOS 27.0, 24A435, Developer Mode
+enabled). `AVAudioSinkNode` was selected over `installTap`, and the losing path
+plus its enum case, `CaptureKind.tap` and `makeTapBlock` were deleted. The iPad
+Pro 13-inch (M5), CPU/thermal measurement, the permission-state matrix and
+real-guitar detection remain pending.
+
+### Phase 1 physical-device capture spike — iPhone (2026-09-27) — partial
+
+**Device.** iPhone 14 Pro Max (iPhone15,3, "Phoebe"), **iOS 27.0 (24A435)**,
+Developer Mode enabled, wired; UDID `00008120-001C3D003EA0C01E`
+(`xcrun devicectl device info details`). 48 kHz session
+(`.playAndRecord`/`.measurement`). Guitar in Drop D, low string ~73 Hz.
+
+**Raw console log.** `/tmp/fretwork-phase1-console.log` — lines 3–18 tap run,
+19–31 sink run, both driven by `Phase1HarnessView` Start/Stop through
+`Phase1DiagnosticLogger` (2 s interval).
+
+| Primitive | Callback frames | Callback rate | Update rate | `latencyMs` |
+| --- | --- | --- | --- | --- |
+| `installTap(onBus:bufferSize: 1024)` | 4800 (~100 ms) | ~10/s | ~10/s | 0 (unpopulated) |
+| `AVAudioSinkNode` | 1120 (~23.3 ms) | ~44/s | ~22/s | 0 (unpopulated) |
+
+Both detected the same open-string pitches (D2 72.9 Hz, D3 145 Hz, A2 109.7 Hz,
+E4 329 Hz). One tap sample reported B3 hz=123.9 — a one-off octave slip, not
+reproduced.
+
+**Latency gap.** `latencyMs` is 0 in both because the iOS path never populates
+`PitchDisplayState.latencyMilliseconds`. End-to-end latency is therefore **not
+measured**; callback size/rate is the evidence, and the tap's fixed ~100 ms
+chunks made detection ~4x staler than the sink's ~23 ms.
+
+**Root cause (commit `e858416`).** `AVAudioNodeTapBlock` /
+`AVAudioSinkNodeReceiverBlock` are `NS_SWIFT_NONSENDABLE`; a closure literal
+inside the `@MainActor` harness inherits MainActor isolation and traps on the
+first realtime callback. Both are built in `nonisolated` factories; the iOS
+target enables the Swift 6 language mode.
+
+**Decision.** Select `AVAudioSinkNode`; delete the losing path. Removed
+`Phase1CaptureMode.microphoneTap`, `CaptureKind.tap`, `makeTapBlock` and
+`installTap`; default mode is now `.microphoneSink`. The tap-block regression
+test was replaced by the sink equivalent (hand-built `AudioBufferList`, called
+from a detached task, asserting `rawCallbackCountSnapshot() == 1`).
+
+**Commands and results.**
+
+```bash
+xcrun devicectl device info details --device 00008120-001C3D003EA0C01E
+# OS Version: 27.0 (24A435); Developer Mode Status: Enabled (1)
+
+xcodebuild -project Fretlight.xcodeproj -scheme Fretwork-iOS \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
+# ** TEST SUCCEEDED ** — 21 tests, 0 failures
+#   FretworkIOSScaffoldTests 4/4
+#   Phase1DiagnosticLoggerTests 2/2
+#   Phase1HarnessModelTests 11/11
+#   Phase1MicrophoneHarnessBlockTests 1/1
+#   Phase1SyntheticPipelineTests 3/3
+```
+
+**Still pending.** iPad Pro 13-inch (M5); CPU/thermal measurement; the
+permission-state matrix (granted/denied/undetermined); real acoustic/amplified
+guitar detection at realistic distances.
