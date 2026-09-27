@@ -22,21 +22,20 @@ built against real audio than against a placeholder tone.
 | ~~003~~ | ~~Sampled playback engine~~ — **complete**, see `completed/` | 001, 002 |
 | ~~004~~ | ~~General-purpose fretboard view~~ — **complete**, see `completed/` | 001 |
 | ~~005~~ | ~~Multi-module app shell~~ — **complete**, see `completed/` | 001 |
-| 006 | Learning modules | 003, 004, 005 |
+| 006 | Learning modules — **implementation complete**, record remains in `active/` | 003, 004, 005 |
 | 007 | Microphone-verified guided practice | 006 |
+| 008 | Live-note chip feedback | 006 |
+| 009 | Built-in-microphone iPhone and iPad app | 006 |
 
-001, 002 and 004 are complete. The theory layer, the 15 tunings and the
-persisted practice-state document all landed in 001; 002's recording session
-is done, so all 138 positions exist as real DI audio and ship in the bundle at
-`Fretlight/Resources/NoteSamples/`. That was the one piece of human time that
-could not be parallelised, and it unblocks 003.
+Workstreams 001–006 have landed. The theory layer, 15 tunings, 138-position DI
+sample library, sampled playback, general fretboard, app shell and all ten
+learning modules are present in the Mac app. Workstream 006's implementation
+record reports completion, though its document has not yet been moved out of
+`active/`.
 
-Everything 006 depends on is now in place. 003 plays the note library
-polyphonically in all fifteen tunings with independent monitor and playback
-levels, and 005 gives the ten modules a shell to live in, global settings
-reachable from any screen, and detection that idles when no visible screen
-consumes it. 006 is the remaining work: ten module screens and the two session
-engines they share.
+007 and 008 are follow-on practice and feedback work. 009 can begin without
+waiting for either one; if 007 lands first, 009 should reuse its app-playback
+detection gate rather than building a second mechanism.
 
 ## Source of truth
 
