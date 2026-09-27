@@ -24,9 +24,10 @@ begins. Full evidence, inventories, commands and risks are in the Phase 0 and
 Phase 1 sections and the Implementation Record.
 
 Partially measured on physical hardware: the **iPhone 14 Pro Max (iOS 27.0,
-24A435)** capture spike ran, the sink was selected and the tap path deleted.
-The iPad Pro 13-inch (M5) and the CPU/thermal and permission-state
-measurements remain **pending**.
+24A435)** capture spike ran, the sink was selected and the tap path deleted,
+and the latency, CPU and thermal metrics are now measured on that iPhone. The
+iPad Pro 13-inch (M5) is **deferred by the owner for now**, and the
+permission-state matrix remains **pending**.
 
 **C-19/Q-06 resolved 2026-09-18 — option (A) accepted.** The owner confirmed
 option A ("ok lets go") after discussing the exact recommended wording, so
@@ -49,7 +50,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-27 (Phase 1 iPhone capture spike measured; sink selected and tap path deleted; iPad/CPU/thermal pending).
+Last updated: 2026-09-27 (Phase 1 iPhone capture, latency, CPU and thermal measured; iPad deferred by the owner; permission-state matrix pending).
 
 ## Objective
 
@@ -889,7 +890,7 @@ Deliberate choices and omissions, not defects:
    explicitly. iPhone SE (2nd gen) is the smallest *reference* but is not
    installed.
 
-## Phase 1 — Simulator-first audio spike (implemented; iPhone capture measured, iPad/CPU/thermal pending)
+## Phase 1 — Simulator-first audio spike (implemented; iPhone capture, latency, CPU/thermal measured; iPad/permission pending)
 
 **Prerequisites:** Phase 0 complete. The Simulator-first slice (synthetic
 pipeline + harness UI + manual capture stubs) was built and verified on
@@ -1002,19 +1003,24 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
 - [ ] Connect iPhone 14 Pro Max and iPad Pro 13-inch (M5); record OS versions
       and confirm Developer Mode/device trust / development provisioning.
       **Partial:** iPhone 14 Pro Max (iPhone15,3, "Phoebe") recorded at **iOS
-      27.0 (24A435)**, Developer Mode enabled, wired; iPad still pending.
+      27.0 (24A435)**, Developer Mode enabled, wired; **iPad deferred by the
+      owner for now.**
 - [x] Compare `installTap` vs `AVAudioSinkNode` callback cadence and frame counts
       on physical hardware. **Done for iPhone 14 Pro Max, iOS 27.0, 48 kHz:**
       tap delivered its requested 1024-frame chunks as **4800-frame (~100 ms)
       callbacks at ~10/s**; sink delivered **1120-frame (~23 ms) callbacks at
       ~44/s**. Both detected the same open-string pitches (guitar in Drop D, low
-      string ~73 Hz). `latencyMs` read 0 in both because the iOS path never
-      populates `PitchDisplayState.latencyMilliseconds`, so end-to-end latency is
-      **not measured** — callback size is the evidence. Root cause of the
+      string ~73 Hz). `latencyMs` read 0 in both because the iOS path did not
+      yet populate `PitchDisplayState.latencyMilliseconds`; that gap is fixed
+      and end-to-end latency is now measured in the metrics record below. Root
+      cause of the
       oversized tap/output coupling is the Swift 6 `@MainActor`-inherited
       realtime closure (commit `e858416`); both blocks are now built in
       `nonisolated` factories.
-- [ ] Record CPU and thermal behavior on physical hardware. **Not measured.**
+- [x] Record CPU and thermal behavior on physical hardware. **Done for iPhone
+      14 Pro Max, iOS 27.0** (metrics record below): CPU flat across ~1.2-min
+      segments (26.9, 25.7, 26.4, 29.0, 28.5%; no uptime ramp) and thermal
+      `nominal` throughout. **iPad deferred by the owner for now.**
 - [ ] Test permission granted, denied and undetermined states on real device.
 - [ ] Play acoustic guitar and amplified electric guitar at realistic distances;
       note useful sensitivity range and false triggers.
@@ -1038,9 +1044,10 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
 - **Met.** Manual Simulator harness Start/Stop is idempotent and shows
   permission/error/telemetry states.
 - **Met.** The harness graph has no microphone-to-speaker connection.
-- **Pending.** The available physical iPad and the CPU/thermal measurements
-  remain outstanding; the iPhone 14 Pro Max detected played notes through its
-  microphone at the sink cadence above with no audible feedback.
+- **Pending.** The available physical iPad (deferred by the owner for now) and
+  the permission-state matrix remain outstanding; the iPhone 14 Pro Max
+  detected played notes through its microphone at the sink cadence above with
+  no audible feedback, and its latency/CPU/thermal metrics are recorded below.
 
 ### Phase 1 risks carried forward
 
@@ -1346,6 +1353,7 @@ TODO placeholders in the phone interface.
 | 2026-09-18 (revision 4) | Marked Phase 0 **complete** with full source/test ownership inventories, the proven iOS type-check evidence, the current architectural choice (isolated `FretworkIOS` root; shared membership deferred to Phase 2), created/edited files, git-status snapshot, build/test/product-inspection results and carried-forward risks. Recorded the pre-existing Mac test compile failure (0/453) as the one exception that must be repaired separately before Phase 2; the `Fretwork` module rename and the iOS `NSMicrophoneUsageDescription` landed during Phase 0; Phase 1 hardware/provisioning is not ready. | Status, Phase 0 (tasks, exit criteria, full Phase 0 record), change log, Implementation Record. | Phase 0 is now a complete, self-contained baseline; Phase 2 inherits the shared-membership + exception-set work now that the module is `Fretwork`; Phase 1 remains blocked on hardware and development provisioning. | Phase 2 applies the target-filtered exception set; the separate non-iOS test repair lands before Phase 2; the owner names Phase 1 devices and confirms provisioning (Q-07). |
 | 2026-09-19 (revision 6) | Recorded the Simulator-first Phase 1 slice as implemented but Phase 1 incomplete; added the seven-file explicit membership inventory, Phase 1 harness file list, completed/pending task split, met-vs-pending exit criteria, and PBXFileReference fragility risk. Updated Phase 0's historical claim about isolated-root membership with a then-vs-now distinction. Appended Phase 1 Implementation Record with 13-test and build evidence. Mac immutable boundary and pre-existing test exception preserved. | Status, Phase 0 (intro callout, architectural choice), Phase 1 (entirely rewritten), change log, Implementation Record. | Phase 1 Simulator slice is now a recorded artifact; the same repository/shell architecture and physical-device prerequisites are unchanged. | Confirm physical-device provisioning and perform tap-vs-sink measurements before closing Phase 1. |
 | 2026-09-27 (revision 7) | Recorded the iPhone 14 Pro Max physical-device capture spike (iOS 27.0, 48 kHz), selected `AVAudioSinkNode` over `installTap` and deleted the losing path and its enum case/helpers, and replaced the tap-block regression test with the sink equivalent. Ticked the tap-vs-sink comparison and the select-one-primitive checkbox; left iPad, CPU/thermal and the permission-state matrix unticked. Appended the physical-device Implementation Record. | Status, Phase 1 (header, harness description, tasks, exit criteria, risks), change log, Implementation Record. | The Phase 1 capture primitive is resolved, so Phase 2 can build the seam on the sink; Phase 1 still cannot close until the iPad and CPU/thermal measurements land. | Real-guitar detection, iPad and CPU/thermal measurement remain before Phase 1 exit. |
+| 2026-09-27 (revision 8) | Added the physical-device metrics record: populated `latencyMs` from the sink host-time stamp to worker publication (min/median/max 27.2/30.9/33.1 ms over 6.0 logged minutes), whole-process CPU flat at 26.9–28.5% per ~1.2-min segment with `nominal` thermal and no callback dropouts (85–94 per 2 s), and the screen-on UI cost (~20 CPU points) that motivated the keep-awake change. Ticked the CPU/thermal task; left iPad and the permission-state matrix unticked, recording that the iPad is deferred by the owner for now. | Status, Phase 1 (header, tasks, exit criteria), decision log, Implementation Record. | CPU/thermal behaviour is now measured on iPhone; Phase 1 still cannot close until the iPad and permission-state matrix land. | iPad measurement (owner-timed), permission-state matrix and real-guitar detection remain before Phase 1 exit. |
 
 ## Change log
 
@@ -1572,8 +1580,9 @@ git diff --check   # clean (exit 0)
 The iPhone 14 Pro Max capture spike ran (iOS 27.0, 24A435, Developer Mode
 enabled). `AVAudioSinkNode` was selected over `installTap`, and the losing path
 plus its enum case, `CaptureKind.tap` and `makeTapBlock` were deleted. The iPad
-Pro 13-inch (M5), CPU/thermal measurement, the permission-state matrix and
-real-guitar detection remain pending.
+Pro 13-inch (M5) is **deferred by the owner for now**; CPU/thermal and latency
+are recorded below, and the permission-state matrix and real-guitar detection
+remain pending.
 
 ### Phase 1 physical-device capture spike — iPhone (2026-09-27) — partial
 
@@ -1628,6 +1637,47 @@ xcodebuild -project Fretlight.xcodeproj -scheme Fretwork-iOS \
 #   Phase1SyntheticPipelineTests 3/3
 ```
 
-**Still pending.** iPad Pro 13-inch (M5); CPU/thermal measurement; the
-permission-state matrix (granted/denied/undetermined); real acoustic/amplified
-guitar detection at realistic distances.
+**Still pending (capture spike).** iPad Pro 13-inch (M5) (deferred by the
+owner for now); the permission-state matrix (granted/denied/undetermined);
+real acoustic/amplified guitar detection at realistic distances. CPU/thermal
+and latency are recorded next.
+
+### Phase 1 physical-device metrics — iPhone (2026-09-27)
+
+Same device and session as the capture spike: iPhone 14 Pro Max (iPhone15,3),
+iOS 27.0 (24A435), `AVAudioSinkNode`, 48 kHz, 1120-frame callbacks (~44/s).
+Raw console logs: `/tmp/fretwork-phase1-metrics-run1.log` (short runs; screen
+dimmed mid-session, before keep-awake existed) and
+`/tmp/fretwork-phase1-metrics-run2.log` (keep-awake build, screen on).
+
+**`latencyMs` (now populated).** `Phase1AnalysisPipeline` computes it from the
+host-time stamp in the sink callback to `mach_absolute_time()` on the analysis
+worker (`Phase1Diagnostics.swift`). Run 2 logged **180 samples = 6.0 min** of
+capture (the user reports a 10-minute session; only 6 min reached the log, so
+these figures describe the logged 6 min, not the full 10). min/median/max
+**27.2 / 30.9 / 33.1 ms**. The session reported `inputLatencyMs=1.37`,
+`ioBufferMs=23.33`, so mic-to-detection is **~30–35 ms**, excluding
+analog/HAL latency beyond `inputLatency`. It is a **lower bound**: the stamp is
+the most recent ring write, understating the oldest analysed sample by up to
+one 2048-frame window (~43 ms).
+
+**CPU/thermal.** Whole-process CPU (Mach `thread_basic_info`) per ~1.2-min
+segment: **26.9, 25.7, 26.4, 29.0, 28.5%** — flat, no uptime ramp. Thermal
+`nominal` throughout. Callbacks **85–94 per 2 s** across the whole run: **no
+dropouts**. Run 1 showed the screen dimming mid-session and CPU falling from
+~35% to ~15% at that point: screen-on UI rendering costs roughly **20 CPU
+points**. `Phase1HarnessView` now disables the idle timer while capturing
+(`UIApplication.isIdleTimerDisabled`) so the screen stays on.
+
+**Commands and results.**
+
+```bash
+xcodebuild -project Fretlight.xcodeproj -scheme Fretwork-iOS \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
+# ** TEST SUCCEEDED ** — 30 tests, 0 failures
+#   Phase1DiagnosticFormatterTests 9/9 (latency math, CPU scale, wording)
+```
+
+**Still pending.** iPad Pro 13-inch (M5) (deferred by the owner for now);
+the permission-state matrix (granted/denied/undetermined); real
+acoustic/amplified guitar detection at realistic distances.

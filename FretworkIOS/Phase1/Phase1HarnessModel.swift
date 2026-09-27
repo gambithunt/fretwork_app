@@ -60,6 +60,14 @@ enum Phase1HarnessState: Equatable, Sendable {
 protocol Phase1ManualCaptureSource: AnyObject {
     func start(mode: Phase1CaptureMode, pipeline: Phase1AnalysisPipeline) async throws
     func stop()
+    /// Fixed session latencies, available once capture has started. Defaults to
+    /// `nil` so non-hardware sources (the fakes, the synthetic feeder) need not
+    /// know about `AVAudioSession`.
+    func sessionMetrics() -> Phase1SessionMetrics?
+}
+
+extension Phase1ManualCaptureSource {
+    func sessionMetrics() -> Phase1SessionMetrics? { nil }
 }
 
 @MainActor
@@ -132,6 +140,9 @@ final class Phase1HarnessModel {
                     guard gen == generation else {
                         source.stop()
                         return
+                    }
+                    if let metrics = source.sessionMetrics() {
+                        diagnostics.logSessionStart(metrics)
                     }
                     state = .running(mode)
                 } catch Phase1MicrophoneHarnessError.permissionDenied {

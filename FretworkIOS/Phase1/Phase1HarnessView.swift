@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct Phase1HarnessView: View {
     @State private var model = Phase1HarnessModel()
@@ -67,6 +68,16 @@ struct Phase1HarnessView: View {
                 model.stop()
             }
         }
+        // A player's hands are on the guitar, not the screen: keep the display
+        // awake while capturing, and hand the idle timer back on stop.
+        .onChange(of: isCapturing, initial: true) { _, capturing in
+            UIApplication.shared.isIdleTimerDisabled = capturing
+        }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    private var isCapturing: Bool {
+        model.state == .starting || model.state.isRunning
     }
 
     /// What the selected source means for the Start button, phrased so live

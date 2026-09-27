@@ -1,4 +1,5 @@
 import AVFoundation
+import Darwin
 import Foundation
 
 enum Phase1MicrophoneHarnessError: LocalizedError, Equatable {
@@ -34,8 +35,15 @@ final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
         { [weak pipeline] timeStamp, frameCount, audioBufferList in
             guard let firstBuffer = audioBufferList.pointee.mBuffers.mData else { return noErr }
             let samples = firstBuffer.assumingMemoryBound(to: Float.self)
-            let sampleTime = max(0, timeStamp.pointee.mSampleTime)
-            pipeline?.write(samples: samples, frameCount: Int(frameCount), captureTime: UInt64(sampleTime))
+            // Host-time stamp of when this buffer arrived from the input HAL,
+            // read here on the realtime thread (`mach_absolute_time` is a vDSO
+            // call: no lock, no allocation). `mHostTime` is normally valid for a
+            // sink callback; fall back to the current clock when it is zero
+            // (e.g. synthetic timestamp structs in tests). This is the start of
+            // the interval `latencyMs` reports — not the sample position.
+            let hostTime = timeStamp.pointee.mHostTime
+            let captureTime = hostTime != 0 ? hostTime : mach_absolute_time()
+            pipeline?.write(samples: samples, frameCount: Int(frameCount), captureTime: captureTime)
             return noErr
         }
     }
@@ -94,6 +102,17 @@ final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
 
     func stop() {
         cleanup()
+    }
+
+    /// Session-level fixed latencies for the diagnostic log. Read after the
+    /// engine has started so `inputLatency`/`ioBufferDuration` reflect the
+    /// active route rather than the pre-activation defaults.
+    func sessionMetrics() -> Phase1SessionMetrics? {
+        let session = AVAudioSession.sharedInstance()
+        return Phase1SessionMetrics(
+            inputLatency: session.inputLatency,
+            ioBufferDuration: session.ioBufferDuration
+        )
     }
 
     private func cleanup() {

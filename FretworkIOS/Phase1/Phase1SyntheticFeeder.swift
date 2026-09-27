@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct Phase1SyntheticTone: Sendable {
@@ -63,7 +64,10 @@ final class Phase1SyntheticFeeder: @unchecked Sendable {
         let samples = tone.samples(frameCount: frameCount, startingFrame: nextFrame)
         samples.withUnsafeBufferPointer { buffer in
             if let baseAddress = buffer.baseAddress {
-                pipeline.write(samples: baseAddress, frameCount: samples.count, captureTime: nextFrame)
+                // Host-time stamp, same units as the microphone sink, so the
+                // synthetic path reports a comparable `latencyMs` rather than
+                // a sample index that would dwarf the clock.
+                pipeline.write(samples: baseAddress, frameCount: samples.count, captureTime: mach_absolute_time())
             }
         }
         nextFrame += UInt64(frameCount)

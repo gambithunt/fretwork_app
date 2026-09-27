@@ -145,6 +145,26 @@ final class Phase1AnalysisPipeline: @unchecked Sendable {
     }
 
     private func record(display: PitchDisplayState, captureTime: UInt64) {
+        var display = display
+        // What `latencyMs` measures, precisely: the interval from the host-time
+        // stamp taken in the AVAudioSinkNode receive block for the *most recent*
+        // buffer written to the ring, to `mach_absolute_time()` here, on the
+        // analysis worker, immediately before the detection is published. It
+        // therefore covers ring buffering, the 2048-frame analysis window, YIN
+        // detection and the 33 ms publish gate — the app's own pipeline delay.
+        //
+        // It excludes hardware/analog input latency (sound reaching the mic
+        // before the HAL hands us a buffer; `Phase1SessionMetrics.inputLatency`
+        // reports the session's own figure) and any output/monitor latency.
+        // Because the stamp is the latest write rather than the first sample of
+        // the analysed window, it also understates the age of the oldest sample
+        // by up to one window plus one callback chunk.
+        display.latencyMilliseconds = Phase1DiagnosticFormatter.latencyMilliseconds(
+            captureHostTime: captureTime,
+            publishHostTime: mach_absolute_time(),
+            timebaseNumer: Phase1LatencyClock.timebaseNumer,
+            timebaseDenom: Phase1LatencyClock.timebaseDenom
+        )
         lock.lock()
         telemetry.latestPitch = display
         telemetry.lastCaptureTime = captureTime

@@ -81,6 +81,13 @@ final class Phase1DiagnosticLogger: @unchecked Sendable {
         )
     }
 
+    /// One-off line with the fixed session latencies, so `latencyMs` can be
+    /// converted into an end-to-end figure: add `inputLatencyMs` and one
+    /// `ioBufferMs`. Called after the engine has started.
+    func logSessionStart(_ metrics: Phase1SessionMetrics) {
+        emit(Phase1DiagnosticFormatter.sessionLine(metrics))
+    }
+
     private func logOnce() {
         guard let sample = sample() else { return }
         var line = "phase1 raw=\(sample.rawCallbacks) updates=\(sample.updates)"
@@ -97,6 +104,17 @@ final class Phase1DiagnosticLogger: @unchecked Sendable {
             line += " note=\(t.latestNoteLabel) hz=\(p.frequency.map { String(format: "%.1f", $0) } ?? "-")"
             line += String(format: " conf=%.2f level=%.4f latencyMs=%.1f", p.confidence, p.level, p.latencyMilliseconds)
         }
+        // Process load and thermal pressure, both read on this detached task —
+        // never on the audio thread. A climbing `cpu` with a flat `updates` is
+        // the signal that the pipeline, not the audio hardware, is the cost.
+        line += Phase1DiagnosticFormatter.cpuThermalSuffix(
+            cpuPercent: Phase1ProcessMetrics.currentCPUPercent(),
+            thermalState: ProcessInfo.processInfo.thermalState
+        )
+        emit(line)
+    }
+
+    private func emit(_ line: String) {
         log.notice("\(line, privacy: .public)")
         // stderr mirror for `devicectl ... --console`, which needs no root and
         // unlike `log collect` works against a device.
