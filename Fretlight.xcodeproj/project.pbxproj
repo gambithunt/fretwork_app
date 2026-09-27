@@ -9,13 +9,6 @@
 /* Begin PBXBuildFile section */
 		A00000000000000000000017 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* AVFoundation.framework */; };
 		A00000000000000000000019 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000020 /* Accelerate.framework */; };
-		B20000000000000000000011 /* Fretlight/Audio/AudioAnalysisWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000001 /* Fretlight/Audio/AudioAnalysisWorker.swift */; };
-		B20000000000000000000012 /* Fretlight/Audio/RingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* Fretlight/Audio/RingBuffer.swift */; };
-		B20000000000000000000013 /* Fretlight/Audio/SensitivitySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000003 /* Fretlight/Audio/SensitivitySettings.swift */; };
-		B20000000000000000000014 /* Fretlight/Pitch/PitchDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000004 /* Fretlight/Pitch/PitchDetector.swift */; };
-		B20000000000000000000015 /* Fretlight/Pitch/NoteMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000005 /* Fretlight/Pitch/NoteMapper.swift */; };
-		B20000000000000000000016 /* Fretlight/Models/PitchDisplayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000006 /* Fretlight/Models/PitchDisplayState.swift */; };
-		B20000000000000000000017 /* Fretlight/Theory/PitchClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000007 /* Fretlight/Theory/PitchClass.swift */; };
 		FW0000000000000000000002 /* Sparkle.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FW0000000000000000000001 /* Sparkle.xcframework */; };
 		FW0000000000000000000003 /* Sparkle.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FW0000000000000000000001 /* Sparkle.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -58,22 +51,190 @@
 		A00000000000000000000020 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		B100000000000000000000A2 /* Fretwork.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = Fretwork.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B100000000000000000000B2 /* FretworkIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = FretworkIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		B20000000000000000000001 /* Fretlight/Audio/AudioAnalysisWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fretlight/Audio/AudioAnalysisWorker.swift; sourceTree = "<group>"; };
-		B20000000000000000000002 /* Fretlight/Audio/RingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fretlight/Audio/RingBuffer.swift; sourceTree = "<group>"; };
-		B20000000000000000000003 /* Fretlight/Audio/SensitivitySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fretlight/Audio/SensitivitySettings.swift; sourceTree = "<group>"; };
-		B20000000000000000000004 /* Fretlight/Pitch/PitchDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fretlight/Pitch/PitchDetector.swift; sourceTree = "<group>"; };
-		B20000000000000000000005 /* Fretlight/Pitch/NoteMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fretlight/Pitch/NoteMapper.swift; sourceTree = "<group>"; };
-		B20000000000000000000006 /* Fretlight/Models/PitchDisplayState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fretlight/Models/PitchDisplayState.swift; sourceTree = "<group>"; };
-		B20000000000000000000007 /* Fretlight/Theory/PitchClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fretlight/Theory/PitchClass.swift; sourceTree = "<group>"; };
 		FW0000000000000000000001 /* Sparkle.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Sparkle.xcframework; path = Frameworks/Sparkle.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A00000000000000000000004 /* Fretlight */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Fretlight; sourceTree = "<group>"; };
+		A00000000000000000000004 /* Fretlight */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B100000000000000000000C1 /* Exceptions for "Fretlight" folder in "Fretwork-iOS" target */,
+			);
+			explicitFileTypes = {};
+			explicitFolders = (
+			);
+			path = Fretlight;
+			sourceTree = "<group>";
+		};
 		A00000000000000000000005 /* FretlightTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretlightTests; sourceTree = "<group>"; };
 		B100000000000000000000A9 /* FretworkIOS */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretworkIOS; sourceTree = "<group>"; };
 		B100000000000000000000B8 /* FretworkIOSTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretworkIOSTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B100000000000000000000C1 /* Exceptions for "Fretlight" folder in "Fretwork-iOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"AppState+Mac.swift",
+				Assets.xcassets,
+				Audio/AudioDevice.swift,
+				Audio/AudioDeviceWatcher.swift,
+				Audio/AudioEngine.swift,
+				Audio/MacAudioController.swift,
+				Audio/MonitorRenderer.swift,
+				FretlightApp.swift,
+				Models/SampleCaptureModel.swift,
+				Resources/NoteSamples/index.json,
+				Resources/NoteSamples/s0-f00-m040.m4a,
+				Resources/NoteSamples/s0-f01-m041.m4a,
+				Resources/NoteSamples/s0-f02-m042.m4a,
+				Resources/NoteSamples/s0-f03-m043.m4a,
+				Resources/NoteSamples/s0-f04-m044.m4a,
+				Resources/NoteSamples/s0-f05-m045.m4a,
+				Resources/NoteSamples/s0-f06-m046.m4a,
+				Resources/NoteSamples/s0-f07-m047.m4a,
+				Resources/NoteSamples/s0-f08-m048.m4a,
+				Resources/NoteSamples/s0-f09-m049.m4a,
+				Resources/NoteSamples/s0-f10-m050.m4a,
+				Resources/NoteSamples/s0-f11-m051.m4a,
+				Resources/NoteSamples/s0-f12-m052.m4a,
+				Resources/NoteSamples/s0-f13-m053.m4a,
+				Resources/NoteSamples/s0-f14-m054.m4a,
+				Resources/NoteSamples/s0-f15-m055.m4a,
+				Resources/NoteSamples/s0-f16-m056.m4a,
+				Resources/NoteSamples/s0-f17-m057.m4a,
+				Resources/NoteSamples/s0-f18-m058.m4a,
+				Resources/NoteSamples/s0-f19-m059.m4a,
+				Resources/NoteSamples/s0-f20-m060.m4a,
+				Resources/NoteSamples/s0-f21-m061.m4a,
+				Resources/NoteSamples/s0-f22-m062.m4a,
+				Resources/NoteSamples/s1-f00-m045.m4a,
+				Resources/NoteSamples/s1-f01-m046.m4a,
+				Resources/NoteSamples/s1-f02-m047.m4a,
+				Resources/NoteSamples/s1-f03-m048.m4a,
+				Resources/NoteSamples/s1-f04-m049.m4a,
+				Resources/NoteSamples/s1-f05-m050.m4a,
+				Resources/NoteSamples/s1-f06-m051.m4a,
+				Resources/NoteSamples/s1-f07-m052.m4a,
+				Resources/NoteSamples/s1-f08-m053.m4a,
+				Resources/NoteSamples/s1-f09-m054.m4a,
+				Resources/NoteSamples/s1-f10-m055.m4a,
+				Resources/NoteSamples/s1-f11-m056.m4a,
+				Resources/NoteSamples/s1-f12-m057.m4a,
+				Resources/NoteSamples/s1-f13-m058.m4a,
+				Resources/NoteSamples/s1-f14-m059.m4a,
+				Resources/NoteSamples/s1-f15-m060.m4a,
+				Resources/NoteSamples/s1-f16-m061.m4a,
+				Resources/NoteSamples/s1-f17-m062.m4a,
+				Resources/NoteSamples/s1-f18-m063.m4a,
+				Resources/NoteSamples/s1-f19-m064.m4a,
+				Resources/NoteSamples/s1-f20-m065.m4a,
+				Resources/NoteSamples/s1-f21-m066.m4a,
+				Resources/NoteSamples/s1-f22-m067.m4a,
+				Resources/NoteSamples/s2-f00-m050.m4a,
+				Resources/NoteSamples/s2-f01-m051.m4a,
+				Resources/NoteSamples/s2-f02-m052.m4a,
+				Resources/NoteSamples/s2-f03-m053.m4a,
+				Resources/NoteSamples/s2-f04-m054.m4a,
+				Resources/NoteSamples/s2-f05-m055.m4a,
+				Resources/NoteSamples/s2-f06-m056.m4a,
+				Resources/NoteSamples/s2-f07-m057.m4a,
+				Resources/NoteSamples/s2-f08-m058.m4a,
+				Resources/NoteSamples/s2-f09-m059.m4a,
+				Resources/NoteSamples/s2-f10-m060.m4a,
+				Resources/NoteSamples/s2-f11-m061.m4a,
+				Resources/NoteSamples/s2-f12-m062.m4a,
+				Resources/NoteSamples/s2-f13-m063.m4a,
+				Resources/NoteSamples/s2-f14-m064.m4a,
+				Resources/NoteSamples/s2-f15-m065.m4a,
+				Resources/NoteSamples/s2-f16-m066.m4a,
+				Resources/NoteSamples/s2-f17-m067.m4a,
+				Resources/NoteSamples/s2-f18-m068.m4a,
+				Resources/NoteSamples/s2-f19-m069.m4a,
+				Resources/NoteSamples/s2-f20-m070.m4a,
+				Resources/NoteSamples/s2-f21-m071.m4a,
+				Resources/NoteSamples/s2-f22-m072.m4a,
+				Resources/NoteSamples/s3-f00-m055.m4a,
+				Resources/NoteSamples/s3-f01-m056.m4a,
+				Resources/NoteSamples/s3-f02-m057.m4a,
+				Resources/NoteSamples/s3-f03-m058.m4a,
+				Resources/NoteSamples/s3-f04-m059.m4a,
+				Resources/NoteSamples/s3-f05-m060.m4a,
+				Resources/NoteSamples/s3-f06-m061.m4a,
+				Resources/NoteSamples/s3-f07-m062.m4a,
+				Resources/NoteSamples/s3-f08-m063.m4a,
+				Resources/NoteSamples/s3-f09-m064.m4a,
+				Resources/NoteSamples/s3-f10-m065.m4a,
+				Resources/NoteSamples/s3-f11-m066.m4a,
+				Resources/NoteSamples/s3-f12-m067.m4a,
+				Resources/NoteSamples/s3-f13-m068.m4a,
+				Resources/NoteSamples/s3-f14-m069.m4a,
+				Resources/NoteSamples/s3-f15-m070.m4a,
+				Resources/NoteSamples/s3-f16-m071.m4a,
+				Resources/NoteSamples/s3-f17-m072.m4a,
+				Resources/NoteSamples/s3-f18-m073.m4a,
+				Resources/NoteSamples/s3-f19-m074.m4a,
+				Resources/NoteSamples/s3-f20-m075.m4a,
+				Resources/NoteSamples/s3-f21-m076.m4a,
+				Resources/NoteSamples/s3-f22-m077.m4a,
+				Resources/NoteSamples/s4-f00-m059.m4a,
+				Resources/NoteSamples/s4-f01-m060.m4a,
+				Resources/NoteSamples/s4-f02-m061.m4a,
+				Resources/NoteSamples/s4-f03-m062.m4a,
+				Resources/NoteSamples/s4-f04-m063.m4a,
+				Resources/NoteSamples/s4-f05-m064.m4a,
+				Resources/NoteSamples/s4-f06-m065.m4a,
+				Resources/NoteSamples/s4-f07-m066.m4a,
+				Resources/NoteSamples/s4-f08-m067.m4a,
+				Resources/NoteSamples/s4-f09-m068.m4a,
+				Resources/NoteSamples/s4-f10-m069.m4a,
+				Resources/NoteSamples/s4-f11-m070.m4a,
+				Resources/NoteSamples/s4-f12-m071.m4a,
+				Resources/NoteSamples/s4-f13-m072.m4a,
+				Resources/NoteSamples/s4-f14-m073.m4a,
+				Resources/NoteSamples/s4-f15-m074.m4a,
+				Resources/NoteSamples/s4-f16-m075.m4a,
+				Resources/NoteSamples/s4-f17-m076.m4a,
+				Resources/NoteSamples/s4-f18-m077.m4a,
+				Resources/NoteSamples/s4-f19-m078.m4a,
+				Resources/NoteSamples/s4-f20-m079.m4a,
+				Resources/NoteSamples/s4-f21-m080.m4a,
+				Resources/NoteSamples/s4-f22-m081.m4a,
+				Resources/NoteSamples/s5-f00-m064.m4a,
+				Resources/NoteSamples/s5-f01-m065.m4a,
+				Resources/NoteSamples/s5-f02-m066.m4a,
+				Resources/NoteSamples/s5-f03-m067.m4a,
+				Resources/NoteSamples/s5-f04-m068.m4a,
+				Resources/NoteSamples/s5-f05-m069.m4a,
+				Resources/NoteSamples/s5-f06-m070.m4a,
+				Resources/NoteSamples/s5-f07-m071.m4a,
+				Resources/NoteSamples/s5-f08-m072.m4a,
+				Resources/NoteSamples/s5-f09-m073.m4a,
+				Resources/NoteSamples/s5-f10-m074.m4a,
+				Resources/NoteSamples/s5-f11-m075.m4a,
+				Resources/NoteSamples/s5-f12-m076.m4a,
+				Resources/NoteSamples/s5-f13-m077.m4a,
+				Resources/NoteSamples/s5-f14-m078.m4a,
+				Resources/NoteSamples/s5-f15-m079.m4a,
+				Resources/NoteSamples/s5-f16-m080.m4a,
+				Resources/NoteSamples/s5-f17-m081.m4a,
+				Resources/NoteSamples/s5-f18-m082.m4a,
+				Resources/NoteSamples/s5-f19-m083.m4a,
+				Resources/NoteSamples/s5-f20-m084.m4a,
+				Resources/NoteSamples/s5-f21-m085.m4a,
+				Resources/NoteSamples/s5-f22-m086.m4a,
+				Views/AppShell.swift,
+				Views/CheckForUpdatesView.swift,
+				Views/DevicePickerView.swift,
+				Views/GlobalSettingsView.swift,
+				Views/ListenScreen.swift,
+				Views/Modules/NoteAssociationModuleScreen.swift,
+				Views/SampleCaptureHost.swift,
+				Views/SampleCaptureView.swift,
+			);
+			target = B100000000000000000000A1 /* Fretwork-iOS */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A00000000000000000000010 /* Frameworks */ = {
@@ -116,13 +277,6 @@
 				A00000000000000000000018 /* AVFoundation.framework */,
 				A00000000000000000000020 /* Accelerate.framework */,
 				FW0000000000000000000001 /* Sparkle.xcframework */,
-				B20000000000000000000001 /* Fretlight/Audio/AudioAnalysisWorker.swift */,
-				B20000000000000000000002 /* Fretlight/Audio/RingBuffer.swift */,
-				B20000000000000000000003 /* Fretlight/Audio/SensitivitySettings.swift */,
-				B20000000000000000000004 /* Fretlight/Pitch/PitchDetector.swift */,
-				B20000000000000000000005 /* Fretlight/Pitch/NoteMapper.swift */,
-				B20000000000000000000006 /* Fretlight/Models/PitchDisplayState.swift */,
-				B20000000000000000000007 /* Fretlight/Theory/PitchClass.swift */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -208,6 +362,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				B100000000000000000000A9 /* FretworkIOS */,
+				A00000000000000000000004 /* Fretlight */,
 			);
 			name = "Fretwork-iOS";
 			productName = Fretwork;
@@ -317,13 +472,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B20000000000000000000011 /* Fretlight/Audio/AudioAnalysisWorker.swift in Sources */,
-				B20000000000000000000012 /* Fretlight/Audio/RingBuffer.swift in Sources */,
-				B20000000000000000000013 /* Fretlight/Audio/SensitivitySettings.swift in Sources */,
-				B20000000000000000000014 /* Fretlight/Pitch/PitchDetector.swift in Sources */,
-				B20000000000000000000015 /* Fretlight/Pitch/NoteMapper.swift in Sources */,
-				B20000000000000000000016 /* Fretlight/Models/PitchDisplayState.swift in Sources */,
-				B20000000000000000000017 /* Fretlight/Theory/PitchClass.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
