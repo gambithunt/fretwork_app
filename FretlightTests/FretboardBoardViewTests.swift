@@ -14,8 +14,8 @@ final class FretboardBoardViewTests: XCTestCase {
             color: .orange
         )
 
-        XCTAssertEqual(degreeLabelledDot.pitchClass(in: .standard), PitchClass(7), "low E at fret 3 is G, whatever lesson label the dot displays")
-        XCTAssertEqual(degreeLabelledDot.pitchClass(in: .dropD), PitchClass(5), "the same visual cell follows the board's active tuning")
+        XCTAssertEqual(degreeLabelledDot.pitchClass(in: Tunings.standard), PitchClass(7), "low E at fret 3 is G, whatever lesson label the dot displays")
+        XCTAssertEqual(degreeLabelledDot.pitchClass(in: Tunings.dropD), PitchClass(5), "the same visual cell follows the board's active tuning")
     }
     private func dot(_ id: String, string: Int, fret: Int) -> FretboardDot {
         FretboardDot(id: id, position: FretPosition(string: string, fret: fret), label: "A", color: .green)
