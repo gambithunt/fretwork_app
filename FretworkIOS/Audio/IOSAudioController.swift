@@ -311,7 +311,11 @@ final class IOSAudioController: AudioControlling {
     private func scheduleRun(leg: IOSAudioGraphLeg, notifyRecovered: Bool) {
         generation &+= 1
         let gen = generation
-        status = .starting
+        // Only a capture run is "starting"/"listening". A playback-only run
+        // (samples loaded, mic never opened) must leave the status alone, or the
+        // UI claims to be listening while no input exists.
+        let captures = leg == .captureAndOutput
+        if captures { status = .starting }
 
         // Replace any current run here, synchronously, instead of capturing it
         // in the transition closure below. A closure chained behind previous
@@ -371,6 +375,9 @@ final class IOSAudioController: AudioControlling {
                     newRun.player = player
                 }
                 self.run = newRun
+                // Nothing feeds the rings without the input leg, so detection
+                // workers would only poll empty buffers.
+                guard captures else { return }
                 analysisWorker.start(sampleRate: sampleRate, bufferSize: 1024)
                 chordWorker.setEnabled(chordEnabled)
                 chordWorker.start(sampleRate: sampleRate)

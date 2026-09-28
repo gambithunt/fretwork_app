@@ -540,7 +540,8 @@ final class IOSAudioControllerTests: XCTestCase {
         await controller.settleGraphWork()
 
         XCTAssertEqual(builder.builds.last, .outputOnly, "playback must not wait for a play attempt")
-        XCTAssertEqual(controller.status, .listening)
+        XCTAssertEqual(controller.status, .idle,
+                       "a playback-only run opens no microphone, so it must not report listening")
         XCTAssertTrue(controller.isSamplePlaybackReady)
         XCTAssertEqual(builder.lastGraph?.attachedPlayers.count, 1)
 
