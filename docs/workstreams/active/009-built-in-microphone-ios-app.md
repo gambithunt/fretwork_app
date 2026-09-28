@@ -4,9 +4,11 @@
 
 **Phase 0 complete (2026-09-18).** Its one recorded exception — the pre-existing
 Mac test compile failure — was repaired in `3e0a461` before Phase 2.
-**Phase 1 Simulator-first slice implemented (2026-09-19).** Phase 1 is **not**
-complete: real-guitar detection and the deferred iPad Pro 13-inch (M5)
-measurement remain. The Simulator slice validated the synthetic detection
+**Phase 1 complete on iPhone (2026-09-28).** Capture, primitive selection,
+latency, CPU/thermal, permission states and the acoustic/amplified-electric
+guitar sweep all pass on the iPhone 14 Pro Max. The iPad Pro 13-inch (M5)
+measurement is deferred by the owner and is the only open Phase 1 item.
+**Phase 1 Simulator-first slice implemented (2026-09-19).** The Simulator slice validated the synthetic detection
 pipeline, the manual harness UI and telemetry, permission/inert-launch/fake-
 injection behavior, and realtime-aware callback wiring — all without microphone
 hardware.
@@ -57,7 +59,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-27 (Phase 2 complete: platform-neutral audio seam landed and the shared sources compile into the iOS target; Phase 1 iPhone capture, latency, CPU, thermal and permission states verified; iPad deferred by the owner; acoustic/amplified-electric sweep pending).
+Last updated: 2026-09-28 (Phase 1 complete on iPhone incl. acoustic/amplified-electric sweep; iPad deferred by the owner; sharing principle and view/sample/chip decisions recorded; Phase 2 complete).
 
 ## Objective
 
@@ -1033,8 +1035,19 @@ These require physical iPhone/iPad hardware and are **not** met by Simulator:
       denied (toggled off in Settings) shows "Microphone permission denied"
       with no hang; undetermined (fresh install) prompts, and both Don't Allow
       and Allow then behave as their states above.
-- [ ] Play acoustic guitar and amplified electric guitar at realistic distances;
+- [x] Play acoustic guitar and amplified electric guitar at realistic distances;
       note useful sensitivity range and false triggers.
+      **Done on iPhone 14 Pro Max (2026-09-28), owner-played:** acoustic and
+      amplified electric in one ~86 s run at normal playing distance, default
+      sensitivity. Detected A2 109.5, B2 123.0, C♯3 138.6, D♯3 155.0, E3 164.5 Hz
+      — every reading within a few cents, **no octave errors and no false
+      triggers**; silence between phrases read "—". 30 of 37 sounding samples
+      had confidence ≥ 0.9 (the rest were decays or the label lag below). Input
+      level peak 0.030, median 0.011. Latency median 31 ms, CPU ~34%, thermal
+      nominal. **Observation for Phase 7 (shared, not iOS-specific):** the note
+      *label* follows a 3-of-5 median rule in `AudioAnalysisWorker` while the
+      frequency is instantaneous, so on a leap (e.g. B2→E3) the label trails the
+      pitch by ~100–150 ms; 7 samples caught that window. The Mac shares it.
 - [x] Select one capture primitive and document why; delete the losing path.
       **Done:** `AVAudioSinkNode` selected; `installTap`, `Phase1CaptureMode
       .microphoneTap`, `CaptureKind.tap` and `makeTapBlock` deleted. The sink
@@ -1367,6 +1380,10 @@ TODO placeholders in the phone interface.
 
 | Date | Decision | Evidence / rationale | Constraints affected | Revisit when |
 | --- | --- | --- | --- | --- |
+| 2026-09-28 | **Sharing principle (owner):** the best platform-specific result takes precedence over sharing, and clean, neat code does too. Share a piece only when doing so is easy, effortless and clean; never bend a view to fit both platforms. | Owner decision. Sharing already meets the bar below the view layer — theory, pitch, the audio seam, `AppState`, module models, fretboard/readout components. | C-06, C-07, C-19 | Never lightly; this governs Phases 4–6. |
+| 2026-09-28 | `AppShell`, `GlobalSettingsView` and `ListenScreen` stay **Mac-only**; iOS builds its own. | Applying the sharing principle: AppShell is Mac window chrome (minimum widths, desktop sidebar, toolbar popover) — iPhone navigation is a Phase 4 decision on the device. GlobalSettingsView is a fixed-column desktop form — iOS gets a native `Form` in a sheet bound to the same `AppState` settings (sharing the *settings*, not the view). ListenScreen is heavily Mac routing — iOS gets a phone-first Listen screen; individual readout pieces (tuner, board section) are shared in Phase 5 only where one drops in cleanly, without restructuring the Mac file. No `#if os(macOS)` splicing inside these views. Supersedes the Phase 0 C-list note marking them "shared after Phase 2". | C-06, C-19 | If a Phase 4/5 piece turns out identical on both platforms with no adaptation. |
+| 2026-09-28 | The iOS app **bundles the 138-note sample library** (~13 MB). | Owner decision: lessons need the samples and 13 MB is acceptable. Lands in Phase 3 with the iOS audio controller and sample player, plus a test that the iOS bundle contains all 138 `.m4a` files and `index.json` loads, so the library cannot silently drop out (Phase 2's exception set excludes it today). Playback-time detection gating stays Phase 7. | C-04, C-05 | Only if app size becomes a store constraint. |
+| 2026-09-28 | Replace `.toggleStyle(.checkbox)` (macOS-only) in `NoteAssociationModuleScreen` with **chips on both platforms** (owner chose option A). | The screen already uses `ChipPicker` for chords, so layer toggles (chord tones, pentatonic, rest of scale) and Loop as tappable chips match it and are touch-friendly. Mac-visible change: update/compare pixel snapshots per CLAUDE.md. Removes that screen from the iOS exception set. Alternatives considered: custom checkbox (small tap targets), platform split (switches too bulky), keep excluded. | C-06, C-19 | — |
 | 2026-09-16 | Build a native universal iPhone/iPad app, not Catalyst. | The code is already SwiftUI, while the audio lifecycle and compact interface require native iOS treatment either way. | C-06, C-08, C-13 | Only if native target constraints prove impossible. |
 | 2026-09-16 | Treat the device microphone as the primary input and omit routing UI. | Intended users are unlikely to connect audio interfaces; the system route is sufficient for the product promise. | C-01, C-02 | If real users demonstrate meaningful interface demand. |
 | 2026-09-16 | Remove live microphone monitoring on iOS. | Device-speaker monitoring recaptures itself and creates echo/feedback; analysis does not require audible monitoring. | C-03 | If a future headphones-only monitoring feature has a validated need. |
@@ -1394,6 +1411,7 @@ TODO placeholders in the phone interface.
 
 | Date | Constraint delta | Sections rewritten | Direction impact | New decision needed |
 | --- | --- | --- | --- | --- |
+| 2026-09-28 | Owner sharing principle recorded; three Mac views confirmed Mac-only; iOS sample bundling and checkbox→chips decided; Phase 1 closed on iPhone with the guitar sweep. | Status, Phase 1 tasks, decision log. | Phases 4–6 build native iOS views and share below the view layer only where clean. Next: chips (Mac-visible, snapshot-verified), then Phase 3 with bundled samples. | iPad Phase 1 measurement when the owner schedules it. |
 | 2026-09-18 | Accepted same-repository/separate-target ownership, incremental migration, independent platform configuration and deferred package extraction. | Status, constraints, selected direction, alternatives, execution contract, Phases 0/2/4/8 and decision log. | The selected direction is now an executable repository/target plan rather than only a conceptual shared-core split. | Its bundle-ID question was later resolved by C-21. |
 | 2026-09-18 (revision 2) | Moved the C-19/Q-06 Mac-protection decision ahead of the first Phase 0 project mutation, with planning/preflight still allowed; split provisioning so development-level signing/device trust/Developer Mode precede Phase 1 while App Store Connect and distribution signing stay in Phase 8; relabelled C-11 Inferred rather than Accepted; restated the green-suite contract as a recorded exception until the Mac test compile failure is repaired; removed the stale bundle-ID answer from Q-05. | Status, constraints (C-11, C-19, C-23), verified finding 10, selected direction, open questions, Blockers, execution contract, Phases 0/1/2/8, decision log, change log, Implementation Record preflight. | Same direction, but Phase 0 can no longer mutate the common project until Q-06 is answered, and Phase 1 cannot install physically without development provisioning. | Yes — C-19/Q-06 before any Phase 0 target/project mutation; Q-05 subtitle before Phase 8. |
 | 2026-09-18 (revision 3) | Promoted C-19 to Accepted and resolved Q-06 to option (A) after the owner confirmed the exact recommended wording; defined the immutable Mac boundary and the minimal, classified, regression-verified shared-edit allowance; removed the C-19/Q-06 blocker and provisional-interpretation language; marked Phase 0 ready to execute. | Status, C-19, Q-06, selected direction, Blockers, execution contract, Phases 0/1/2, decision log, change log, Implementation Record preflight. | Phase 0 may now execute its common-project mutations; the same-project/shared-core direction is confirmed and the separate/copied-architecture alternative no longer applies. Physical devices and development provisioning remain unconfirmed for Phase 1. | No new architecture decision; the next owner actions are the separate non-iOS Mac test-compile repair and the Phase 1 hardware/provisioning confirmation (Q-07). |
