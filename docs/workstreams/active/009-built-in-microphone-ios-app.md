@@ -13,6 +13,8 @@ pipeline, the manual harness UI and telemetry, permission/inert-launch/fake-
 injection behavior, and realtime-aware callback wiring — all without microphone
 hardware.
 
+**Phase 3 complete on iPhone (2026-09-28).** Production iOS audio controller, bundled samples and all on-device lifecycle checks pass; see Phase 3 result.
+
 **Phase 2 complete (2026-09-27).** The platform-neutral audio seam landed:
 `AppState` depends on `any AudioControlling`, no longer imports CoreAudio or
 names `AudioDeviceID`, and the shared sources now compile into the iOS target
@@ -59,7 +61,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-28 (Phase 1 complete on iPhone incl. acoustic/amplified-electric sweep; iPad deferred by the owner; sharing principle and view/sample/chip decisions recorded; Phase 2 complete).
+Last updated: 2026-09-28 (Phase 3 complete on iPhone: production iOS audio controller, bundled samples, device lifecycle checks; Phases 1–2 complete; iPad deferred by the owner).
 
 ## Objective
 
@@ -1152,7 +1154,7 @@ began. Full evidence is in the Phase 2 Implementation Record.
   states without hardware** — `AppStateSharedSurfaceTests`, using an in-memory
   `PracticeStateStore` and never `AppState()`.
 
-## Phase 3 — Production iOS audio and lifecycle
+## Phase 3 — Production iOS audio and lifecycle (complete on iPhone, 2026-09-28)
 
 Promote the selected Phase 1 primitive into a production controller. Everything
 Phase 1 deliberately left out — real lifecycle, interruptions, route changes,
@@ -1187,6 +1189,39 @@ here.
 - Repeated foreground/background cycles neither leak engines nor duplicate
   callbacks.
 - Sample playback works while the microphone session is configured.
+
+### Phase 3 result (2026-09-28)
+
+**Complete on iPhone 14 Pro Max (iOS 27.0).** Design reviewed by DeepSeek Pro
+before implementation and again before commit.
+
+| Commit | Step |
+| --- | --- |
+| `98a6ea4` | Session / foreground / graph seams (iOS-only, `FretworkIOS/Audio/`) |
+| `44655b6` | 138 samples + `index.json` bundled into the iOS app (exception entries removed; presence, index and full-decode tests); Mac bundle unchanged |
+| `b7abac8` | `IOSAudioController` + `AppState+IOS` + 17 controller tests. One engine, sink capture dead-ended (no input→output path, C-03 structural), `.playAndRecord/.measurement/.defaultToSpeaker` for listening, `.playback` for playback-only; reuses `CaptureSink`/`SamplePlayer` (realtime blocks built nonisolated). Review fixes before commit: stopped runs were retained by the transition chain (engine leak across fg/bg — now released, with a deallocation test); samples loaded without building an output graph so the first note was silent (now eager, tested) |
+| `b19e83b` | DEBUG smoke entry (`-FretworkPhase1Harness` still reaches the Phase 1 harness) |
+| `766f16b` | Device-found: a playback-only run reported `listening` and started detection workers with no input; only a capture run now changes status/starts workers. The unit test had asserted the bug |
+| `15e67d8` | Device-found: smoke-view Start/Stop shared one List row, so every tap fired both (smoke UI only) |
+| `05613e1` | Smoke view shows live detection + 1 Hz stderr line |
+
+**Device checks (owner-run; log corroborates where noted):**
+listening — `playAndRecord/measurement`, **mono input (channelCount=1)**, 48 kHz,
+notes detected (D3 143.6, A2 108.8, G3, B3, C2 in log), two clean start/stop
+cycles, no Core Audio errors (log); sample playback while listening — audible,
+**loud enough on the built-in speaker** despite `.measurement`, no feedback;
+phone-call interruption auto-resumes; headphone plug/unplug keeps listening with
+no microphone audio in the headphones; background/foreground ×5 resumes
+listening each time; microphone denied → permission-denied state, no hang. The
+interruption, route and background transitions happen while the smoke view is
+not on screen, so its status log does not show them — those are owner-verified.
+
+**Tests:** iOS 54/0; Mac suite unchanged (479 executed, 0 failures at Step 2).
+
+**Carried forward:** the smoke view keeps the last level after Stop (cosmetic;
+Phase 4 screens should reset the readout on stop). The Settings action on the
+denied state is a Phase 4 UI task — Phase 3 verified the state itself. iPad
+remains deferred. Detection gating around sample playback remains Phase 7.
 
 ## Phase 4 — iOS shell, navigation and settings
 
