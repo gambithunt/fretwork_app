@@ -13,7 +13,7 @@ struct IOSAudioInterruption: Sendable {
 
 /// `AVAudioSession.RouteChangeReason` reduced to the cases the controller
 /// actually distinguishes. Everything else collapses to `.unknown`.
-enum IOSAudioRouteChangeReason: Sendable {
+enum IOSAudioRouteChangeReason: Sendable, Equatable {
     case newDeviceAvailable
     case oldDeviceUnavailable
     case categoryChange
@@ -43,6 +43,7 @@ protocol IOSAudioSessionControlling: AnyObject {
     func setActive(_ active: Bool) throws
 
     var sampleRate: Double { get }
+    var inputChannelCount: Int { get }
     var inputLatency: TimeInterval { get }
     var ioBufferDuration: TimeInterval { get }
 
@@ -152,10 +153,11 @@ final class SystemIOSAudioSession: IOSAudioSessionControlling {
     }
 
     var sampleRate: Double { AVAudioSession.sharedInstance().sampleRate }
+    var inputChannelCount: Int { AVAudioSession.sharedInstance().inputNumberOfChannels }
     var inputLatency: TimeInterval { AVAudioSession.sharedInstance().inputLatency }
     var ioBufferDuration: TimeInterval { AVAudioSession.sharedInstance().ioBufferDuration }
 
-    static func mapRouteChangeReason(_ reason: AVAudioSession.RouteChangeReason?) -> IOSAudioRouteChangeReason {
+    nonisolated static func mapRouteChangeReason(_ reason: AVAudioSession.RouteChangeReason?) -> IOSAudioRouteChangeReason {
         switch reason {
         case .newDeviceAvailable: .newDeviceAvailable
         case .oldDeviceUnavailable: .oldDeviceUnavailable

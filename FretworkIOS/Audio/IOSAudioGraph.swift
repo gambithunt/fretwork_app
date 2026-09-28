@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 /// Which legs an iOS graph is built with.
-enum IOSAudioGraphLeg: Sendable {
+enum IOSAudioGraphLeg: Sendable, Equatable {
     /// Microphone capture (dead-ended into the analysis sink) plus the sample
     /// playback output path. Used while the player is listening.
     case captureAndOutput
@@ -60,7 +60,7 @@ struct SystemIOSAudioGraphBuilder: IOSAudioGraphBuilding {
     }
 }
 
-enum IOSAudioGraphError: Error, CustomStringConvertible {
+enum IOSAudioGraphError: Error, Sendable, CustomStringConvertible {
     case unsupportedFormat(sampleRate: Double)
     case unsupportedInputFormat
 
