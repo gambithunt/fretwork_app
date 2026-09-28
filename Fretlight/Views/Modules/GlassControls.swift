@@ -274,6 +274,37 @@ private struct OptionalAccessibilityValue: ViewModifier {
     }
 }
 
+/// A lone independent on/off chip — the one-value counterpart to
+/// `ToggleChipGrid`. Same fill, spring press and `.isSelected` trait as a grid
+/// chip, for a boolean that is its own switch (Note Association's Loop) rather
+/// than a choice among many. Kept separate from the grid because a
+/// single-element grid stretches its chip to a column's width, which reads as
+/// a button, not a chip.
+struct ToggleChip: View {
+    let title: String
+    let isOn: Bool
+    let tint: Color
+    let onTap: () -> Void
+    var help: String? = nil
+
+    var body: some View {
+        Button {
+            withAnimation(FretworkMotion.gravity) { onTap() }
+        } label: {
+            Text(title)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(isOn ? Color.black : tint)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(ChipFill(color: tint, lit: isOn))
+        }
+        .buttonStyle(ElasticPressStyle())
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
+        .accessibilityLabel(title)
+        .modifier(OptionalHelp(text: help))
+    }
+}
+
 /// `.help(_:)` only accepts a `String`, never an optional — this applies it
 /// only when the caller actually has one, so `ChipPicker` can offer a tooltip
 /// closure without forcing every caller to supply one.

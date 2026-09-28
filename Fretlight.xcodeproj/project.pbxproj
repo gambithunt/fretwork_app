@@ -228,7 +228,6 @@
 				Views/DevicePickerView.swift,
 				Views/GlobalSettingsView.swift,
 				Views/ListenScreen.swift,
-				Views/Modules/NoteAssociationModuleScreen.swift,
 				Views/SampleCaptureHost.swift,
 				Views/SampleCaptureView.swift,
 			);

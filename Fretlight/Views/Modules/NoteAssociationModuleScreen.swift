@@ -74,22 +74,36 @@ struct NoteAssociationModuleScreen: View {
 
                 // The layer switches. Seeing the scale alone, or the chord
                 // tones alone, is a different exercise from seeing all three
-                // at once.
-                HStack(spacing: 16) {
-                    Toggle("Chord tones", isOn: Binding(
-                        get: { model.showsChordTones },
-                        set: { model.setLayer(chordTones: $0) }
-                    ))
-                    Toggle("Pentatonic", isOn: Binding(
-                        get: { model.showsPentatonic },
-                        set: { model.setLayer(pentatonic: $0) }
-                    ))
-                    Toggle("Rest of scale", isOn: Binding(
-                        get: { model.showsScale },
-                        set: { model.setLayer(scale: $0) }
-                    ))
+                // at once. Chips, not the macOS-only checkbox style, so the
+                // same control works on the Mac and on touch — and because a
+                // chip is what every other selection on this screen already is.
+                // A row of independent `ToggleChip`s rather than a
+                // `ToggleChipGrid`: with three longer labels the grid's
+                // adaptive columns hyphenate them ("Penta-tonic"), while these
+                // stay one line each.
+                HStack(spacing: 8) {
+                    ToggleChip(
+                        title: "Chord tones",
+                        isOn: model.showsChordTones,
+                        tint: NotePalette.accent,
+                        onTap: { model.setLayer(chordTones: !model.showsChordTones) },
+                        help: "Show the notes of the chord in focus"
+                    )
+                    ToggleChip(
+                        title: "Pentatonic",
+                        isOn: model.showsPentatonic,
+                        tint: NotePalette.accent,
+                        onTap: { model.setLayer(pentatonic: !model.showsPentatonic) },
+                        help: "Show the safe notes around them"
+                    )
+                    ToggleChip(
+                        title: "Rest of scale",
+                        isOn: model.showsScale,
+                        tint: NotePalette.accent,
+                        onTap: { model.setLayer(scale: !model.showsScale) },
+                        help: "Show the rest of the key's scale"
+                    )
                 }
-                .toggleStyle(.checkbox)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("CHORD")
@@ -133,11 +147,12 @@ struct NoteAssociationModuleScreen: View {
             .fixedSize()
             .disabled(model.progressions.isEmpty)
 
-            Toggle("Loop", isOn: Binding(
-                get: { model.loop },
-                set: { model.setLoop($0) }
-            ))
-            .toggleStyle(.checkbox)
+            ToggleChip(
+                title: "Loop",
+                isOn: model.loop,
+                tint: NotePalette.accent,
+                onTap: { model.setLoop(!model.loop) }
+            )
 
             Button {
                 model.startProgression()
