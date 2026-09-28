@@ -27,6 +27,10 @@ struct IOSAudioControllerSmokeView: View {
                 // One button per row: a List row holding several buttons is a
                 // single tap target that fires all of them, so Start+Stop in one
                 // HStack started and immediately stopped on every tap.
+                Section("Detection") {
+                    SmokeDetectionReadout(appState: appState)
+                }
+
                 Section("Capture") {
                     Button("Start") { appState.start() }
                         .disabled(isCapturing(controller?.status))
@@ -99,4 +103,31 @@ struct IOSAudioControllerSmokeView: View {
 
 #Preview {
     IOSAudioControllerSmokeView()
+}
+
+/// Audio-rate reads live in this leaf only (CLAUDE.md: one small view per
+/// fast-changing readout), so the controls above don't rebuild with every
+/// detector update. Also logs one line a second to stderr, so a device run
+/// proves detection from the console alone.
+private struct SmokeDetectionReadout: View {
+    let appState: AppState
+    @State private var updates = 0
+
+    var body: some View {
+        let display = appState.display
+        LabeledContent("Note", value: display.note.map { "\($0.name)\($0.octave)" } ?? "—")
+        LabeledContent("Frequency", value: display.frequency.map { String(format: "%.1f Hz", $0) } ?? "—")
+        LabeledContent("Level", value: String(format: "%.4f", display.level))
+            .onChange(of: display.level) { _, _ in updates += 1 }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    let d = appState.display
+                    let note = d.note.map { "\($0.name)\($0.octave)" } ?? "-"
+                    let hz = d.frequency.map { String(format: "%.1f", $0) } ?? "-"
+                    FileHandle.standardError.write(Data(
+                        "ios-detect note=\(note) hz=\(hz) level=\(String(format: "%.4f", d.level)) displayUpdates=\(updates)\n".utf8))
+                }
+            }
+    }
 }
