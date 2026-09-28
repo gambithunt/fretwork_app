@@ -1,15 +1,30 @@
 import SwiftUI
 
-/// Workstream 009 Phase 1 iOS harness entry point.
+/// iOS entry point.
 ///
-/// Launch remains inert: the root view constructs no audio session, requests no
-/// permission and starts no engine. Synthetic or manual capture begins only from
-/// the explicit Start button in the harness.
+/// The production root is the Phase 3 smoke view until the Phase 4 shell lands.
+/// The Phase 1 capture harness is kept reachable in DEBUG behind a launch
+/// argument (`-FretworkPhase1Harness`) because it is the only no-mic synthetic
+/// pipeline and carries the latency/CPU/thermal instrumentation Phase 7 will
+/// need again. It is never the default, so an ordinary launch is inert and does
+/// not open a real session until Start is tapped.
 @main
 struct FretworkIOSApp: App {
+    private var showsPhase1Harness: Bool {
+        #if DEBUG
+        CommandLine.arguments.contains("-FretworkPhase1Harness")
+        #else
+        false
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
-            Phase1HarnessView()
+            if showsPhase1Harness {
+                Phase1HarnessView()
+            } else {
+                IOSAudioControllerSmokeView()
+            }
         }
     }
 }

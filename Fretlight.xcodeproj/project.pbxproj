@@ -54,25 +54,8 @@
 		FW0000000000000000000001 /* Sparkle.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Sparkle.xcframework; path = Frameworks/Sparkle.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		A00000000000000000000004 /* Fretlight */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				B100000000000000000000C1 /* Exceptions for "Fretlight" folder in "Fretwork-iOS" target */,
-			);
-			explicitFileTypes = {};
-			explicitFolders = (
-			);
-			path = Fretlight;
-			sourceTree = "<group>";
-		};
-		A00000000000000000000005 /* FretlightTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretlightTests; sourceTree = "<group>"; };
-		B100000000000000000000A9 /* FretworkIOS */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretworkIOS; sourceTree = "<group>"; };
-		B100000000000000000000B8 /* FretworkIOSTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretworkIOSTests; sourceTree = "<group>"; };
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		B100000000000000000000C1 /* Exceptions for "Fretlight" folder in "Fretwork-iOS" target */ = {
+		B100000000000000000000C1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				"AppState+Mac.swift",
@@ -95,6 +78,13 @@
 			target = B100000000000000000000A1 /* Fretwork-iOS */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A00000000000000000000004 /* Fretlight */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (B100000000000000000000C1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Fretlight; sourceTree = "<group>"; };
+		A00000000000000000000005 /* FretlightTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretlightTests; sourceTree = "<group>"; };
+		B100000000000000000000A9 /* FretworkIOS */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretworkIOS; sourceTree = "<group>"; };
+		B100000000000000000000B8 /* FretworkIOSTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = FretworkIOSTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A00000000000000000000010 /* Frameworks */ = {
@@ -221,8 +211,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				B100000000000000000000A9 /* FretworkIOS */,
 				A00000000000000000000004 /* Fretlight */,
+				B100000000000000000000A9 /* FretworkIOS */,
 			);
 			name = "Fretwork-iOS";
 			productName = Fretwork;
