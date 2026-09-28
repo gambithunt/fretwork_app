@@ -24,23 +24,24 @@ struct IOSAudioControllerSmokeView: View {
                     LabeledContent("Sample library", value: libraryLabel(controller))
                 }
 
+                // One button per row: a List row holding several buttons is a
+                // single tap target that fires all of them, so Start+Stop in one
+                // HStack started and immediately stopped on every tap.
                 Section("Capture") {
-                    HStack {
-                        Button("Start") { appState.start() }
-                        Button("Stop") { appState.iosAudio?.stop() }
-                    }
+                    Button("Start") { appState.start() }
+                        .disabled(isCapturing(controller?.status))
+                    Button("Stop") { appState.iosAudio?.stop() }
+                        .disabled(!isCapturing(controller?.status))
                 }
 
                 Section("Sample playback") {
                     Button("Load samples") { controller?.prepareSamplePlayback(completion: nil) }
-                    HStack {
+                        .disabled(controller?.isSampleLibraryLoaded ?? false)
+                    Group {
                         Button("Play low E") { play(string: 0, fret: 0) }
                         Button("Play A2") { play(string: 1, fret: 0) }
                     }
                     .disabled(!(controller?.isSamplePlaybackReady ?? false))
-                    Text("The first tap after loading builds the output-only graph; tap again to hear it.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section("Console") {
@@ -59,6 +60,13 @@ struct IOSAudioControllerSmokeView: View {
 
     private func play(string: Int, fret: Int) {
         appState.iosAudio?.playSample(string: string, fret: fret, tuning: appState.tuning)
+    }
+
+    private func isCapturing(_ status: IOSAudioStatus?) -> Bool {
+        switch status {
+        case .starting, .listening, .interrupted: true
+        default: false
+        }
     }
 
     private func statusLabel(_ status: IOSAudioStatus?) -> String {
