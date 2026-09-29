@@ -158,16 +158,8 @@ struct IOSAppRootView: View {
         switch screen {
         case .listen:
             IOSListenScreen(state: appState, isShowingSettings: $isShowingSettings)
-        case .module(.chords):
-            IOSChordsScreen(state: appState)
-                .navigationTitle("Chords")
-                .navigationBarTitleDisplayMode(.inline)
-                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
         case .module(let module):
-            IOSModulePlaceholder(module: module)
-                .navigationTitle(module.title)
-                .navigationBarTitleDisplayMode(.inline)
-                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
+            IOSModuleScreen(module: module, state: appState, isShowingSettings: $isShowingSettings)
         }
     }
 
