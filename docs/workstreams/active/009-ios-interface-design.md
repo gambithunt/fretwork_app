@@ -1,6 +1,6 @@
 # Fretwork iOS Interface Design (workstream 009, Phases 4–6)
 
-- **Status:** selected — navigation **C (Sidebar Mirror)** + module landscape **M2 (bottom drawer, owner's variant)**; round 3 mocks the selection only
+- **Status:** ready — C + M2 prototype signed off on the iPhone; production build of Phases 4–5 next, Phase 6 needs the per-module control table (§7).
 - **Owner:** Delon (product owner); design facilitation by Claude
 - **Last updated:** 2026-09-28 (round 3)
 - **Decision needed now:** sign off the round-3 mocks of C + M2, then a SwiftUI
@@ -51,6 +51,9 @@ Parent-doc constraints are cited by their 009 ID; design constraints here are
 | D-19 | **Sample Capture (the note-recording tool) is developer-only and never ships on iOS.** Its only purpose was recording the 138 notes into the library. | Accepted | Hard | Owner 2026-09-28 | Already true: Mac `#if DEBUG` (`FretlightApp.swift:64–79`), iOS exception set. Recorded so no phase reintroduces it. |
 | D-20 | **Module landscape (M2): only the position arrows and the live note are always visible**; everything else (key/note, menus, play, explanation) lives in a drawer the player slides up, and taps or slides down to return to the board. | Accepted | Hard | Owner 2026-09-28 | Landscape is for the neck; moving along it is the one control needed while playing. |
 | D-22 | **Landscape spacing and M2 layout:** 12 pt top margin and 16 pt inside the side safe areas on every landscape screen; the neck is centred; fret numbers sit on the neck's top edge; the ‹ › position arrows are translucent round buttons in the band just below the low E string at the neck's bottom-left and bottom-right corners (never over dots), with the drawer handle between them; the position name ("Open C · 1 of 5") sits under the title; the live note is a single horizontal "LISTENING  A2" in the top bar. | Accepted | Hard | Owner 2026-09-28 (round 3 feedback) | Round 3 felt cramped at the edges and the separate arrow row cost neck height. |
+| D-23 | **Chrome is native iOS 26 Liquid Glass; Fretwork identity lives only in content** (note colours, the neck, the readouts). Sheets use system glass with the system grabber (no painted backgrounds); buttons use `.glass` / `.glassProminent`; note-colour chips stay. | Accepted | Hard | Owner 2026-09-29 (device test) | The first drawer painted Fretwork's backdrop over the sheet and hand-drew its grabber and arrows — it read as non-native. |
+| D-24 | **iPhone always navigates as a full-screen stack** (list → push) in both orientations; the split view is iPad-only. Decide by device idiom, not size class. | Accepted | Hard | Device test 2026-09-29 | A Pro Max is regular-width in landscape, so a size-class split view put the list beside the neck and took ~40% of the width. |
+| D-25 | **Landscape Listen is one row of chrome + the neck:** back · "● Listening" (dot pulses with level) · centred live-note pill with cents ("A2 +8¢", green within ±5) · Notes/Chords · gear; no tuner strip or level meter. Built as content with the nav bar hidden in landscape. | Accepted | Hard | Owner 2026-09-29 | Three stacked chrome rows took ~half the height. iOS 26 collapses toolbar items to icons and merges neighbouring items into one glass shape, so this row cannot live in the system toolbar. |
 | D-21 | **C launches into the last screen used** (Listen by default), with the list one "back" away. | Accepted | Soft | Owner 2026-09-28 (agreed) | Native state restoration, like Mail reopening the last mailbox; keeps D-02's zero-tap tuner. |
 | D-18 | **Modules are designed landscape-first** (full neck in view) and remain fully usable in portrait (board scrolls, controls stack). No "rotate your phone" gate. | Accepted | Hard | Owner 2026-09-28 | Rotation lock must never block a lesson. |
 | D-04 | Fretwork identity expressed with native iOS navigation, sheets and controls: dark backdrop `#090B0C`, glass cards, 12-note palette, accent `#5DCAA5`, flat translucent chips. | Accepted | Hard | Owner 2026-09-28; 009 C-13 | Same product on both platforms; iOS idioms for structure. Dark only (no light palette exists). |
@@ -220,7 +223,7 @@ rises.
 on the phone-sized canvas; then the chosen one (or a named hybrid) gets a SwiftUI
 pass on the iPhone.
 
-**Owner decision:** _pending_.
+**Owner decision:** C + M2, signed off after the SwiftUI device prototype (branch `ios-prototype-c-m2`), 2026-09-29.
 
 ## 7. Component and prototype plan
 
