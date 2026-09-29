@@ -44,10 +44,9 @@ struct IOSListenScreen: View {
             }
         }
         .task {
-            // Screenshot mode skips the real audio session (the simulator's mic
-            // permission prompt would cover the chrome); the status pill is
-            // overridden to "Listening" below for the layout capture.
-            if protoScreenshotMode() { return }
+            // Snapshot captures skip the real audio session (the simulator's
+            // mic permission prompt would cover the chrome).
+            if IOSSnapshot.shouldSkipAudioSession { return }
             // Start listening once, on first appear. A later re-appear (after
             // browsing a module) must not restart the engine — that would
             // re-prompt for the mic and re-negotiate the route. The controller
@@ -208,19 +207,37 @@ struct IOSListenScreen: View {
 
     @ViewBuilder
     private var statusBanner: some View {
-        if state.iosAudio?.status == .permissionDenied {
-            HStack(spacing: 10) {
-                Image(systemName: "mic.slash.fill").foregroundStyle(.red)
-                Text("Microphone access is off.")
-                    .font(.callout)
-                Spacer()
+        let status = IOSSnapshot.effectiveStatus(state.iosAudio?.status)
+        switch IOSStatusSurfaceMapper.surface(for: status) {
+        case .none:
+            EmptyView()
+        case .permissionDenied:
+            IOSStatusBanner(
+                title: "Microphone access is off",
+                message: "Fretwork listens to your guitar to identify notes. Turn on microphone access in Settings to start listening.",
+                systemImage: "mic.slash.fill",
+                tint: .red
+            ) {
                 Button("Open Settings") { openSettings() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(.glass)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+        case .interrupted:
+            IOSStatusBanner(
+                title: "Paused",
+                message: "Audio will resume automatically.",
+                systemImage: "pause.circle.fill",
+                tint: .orange
+            )
+        case .failed(let message):
+            IOSStatusBanner(
+                title: "Audio unavailable",
+                message: message,
+                systemImage: "exclamationmark.triangle.fill",
+                tint: .red
+            ) {
+                Button("Retry") { state.retryAudio() }
+                    .buttonStyle(.glass)
+            }
         }
     }
 
@@ -235,48 +252,28 @@ struct IOSListenScreen: View {
 
 /// The event-driven listening status, as a small pill. Reads the iOS
 /// controller's status — not the audio-rate `display`.
-/// Whether a debug launch argument is driving a deterministic screenshot
-/// capture of the prototype chrome.
-private func protoScreenshotMode() -> Bool {
-    #if DEBUG
-    return CommandLine.arguments.contains("-ProtoLandscapeListen")
-        || CommandLine.arguments.contains("-ProtoPortraitListen")
-    #else
-    return false
-    #endif
-}
-
-/// Maps the iOS controller status to the pill's text and tint.
-private func iosStatusAppearance(_ status: IOSAudioStatus?) -> (String, Color) {
-    if protoScreenshotMode() { return ("Listening", .green) }
-    switch status {
-    case .listening: return ("Listening", .green)
-    case .starting: return ("Starting…", .orange)
-    case .interrupted: return ("Paused", .orange)
-    case .permissionDenied: return ("Mic off", .red)
-    case .failed: return ("Audio error", .red)
-    case .idle, nil: return ("Stopped", .secondary)
-    }
-}
-
 private struct IOSStatusPill: View {
     let state: AppState
 
     var body: some View {
-        let (text, tint) = iosStatusAppearance(state.iosAudio?.status)
+        let appearance = IOSStatusAppearanceMapper.appearance(
+            for: IOSSnapshot.effectiveStatus(state.iosAudio?.status)
+        )
         HStack(spacing: 8) {
             Circle()
-                .fill(tint)
+                .fill(appearance.tint)
                 .frame(width: 6, height: 6)
-                .shadow(color: tint.opacity(0.9), radius: 4)
-            Text(text)
+                .shadow(color: appearance.tint.opacity(0.9), radius: 4)
+            Text(appearance.title)
                 .font(.caption.weight(.semibold))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.white.opacity(0.06), in: Capsule())
         .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
-        .animation(.easeInOut(duration: 0.2), value: text)
+        .animation(.easeInOut(duration: 0.2), value: appearance.title)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(appearance.title)
     }
 }
 
@@ -289,24 +286,30 @@ private struct IOSLandscapeListeningPill: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let (text, tint) = iosStatusAppearance(state.iosAudio?.status)
-        let normalized = InputLevelPanel.normalized(state.display.level)
-        let scale = reduceMotion ? 1.0 : 1.0 + normalized * 0.4
+        let appearance = IOSStatusAppearanceMapper.appearance(
+            for: IOSSnapshot.effectiveStatus(state.iosAudio?.status)
+        )
+        let scale = IOSReadoutFormat.pulseScale(
+            normalizedLevel: IOSReadoutFormat.normalizedLevel(state.display.level),
+            reduceMotion: reduceMotion
+        )
 
         HStack(spacing: 6) {
             Circle()
-                .fill(tint)
+                .fill(appearance.tint)
                 .frame(width: 6, height: 6)
                 .scaleEffect(scale)
-                .shadow(color: tint.opacity(0.9), radius: 4)
-            Text(text)
+                .shadow(color: appearance.tint.opacity(0.9), radius: 4)
+            Text(appearance.title)
                 .font(.caption.weight(.semibold))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .glassEffect(in: .capsule)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: normalized)
-        .animation(.easeInOut(duration: 0.2), value: text)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: scale)
+        .animation(.easeInOut(duration: 0.2), value: appearance.title)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(appearance.title)
     }
 }
 
@@ -318,19 +321,17 @@ private struct IOSLandscapeNotePill: View {
     let state: AppState
 
     var body: some View {
-        let display = state.display
-        let note = display.note
+        let note = state.display.note
         let tint = note.map { NotePalette.color(for: $0.name) } ?? Color.white.opacity(0.14)
-        let cents = note?.cents ?? 0
-        let centsColor: Color = abs(cents) <= 5 ? .green : .secondary
+        let centsColor: Color = IOSReadoutFormat.centsTint(note?.cents) == .inTune ? .green : .secondary
 
         HStack(spacing: 6) {
-            if let note {
-                Text("\(note.name)\(note.octave)")
+            if note != nil {
+                Text(IOSReadoutFormat.noteLabel(note))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text(String(format: "%+.0f¢", cents))
+                Text(IOSReadoutFormat.centsText(note?.cents))
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(centsColor)
             } else {
@@ -345,6 +346,8 @@ private struct IOSLandscapeNotePill: View {
         .overlay(Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 1))
         .contentTransition(.numericText())
         .animation(.easeInOut(duration: 0.2), value: note?.midiNote)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(note.map { "Live note \($0.name)\($0.octave)" } ?? "Listening for a note")
     }
 }
 
@@ -359,8 +362,8 @@ private struct IOSLandscapeChordPill: View {
         let tint = chord.map { NotePalette.color(for: $0.root) } ?? Color.white.opacity(0.14)
 
         HStack(spacing: 6) {
-            if let chord {
-                Text(chord.name)
+            if chord != nil {
+                Text(IOSReadoutFormat.chordLabel(chord))
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -375,6 +378,45 @@ private struct IOSLandscapeChordPill: View {
         .background(Capsule().fill(tint.opacity(0.28)))
         .overlay(Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 1))
         .animation(.easeInOut(duration: 0.2), value: chord?.name)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(chord.map { "Live chord \($0.name)" } ?? "Listening for a chord")
+    }
+}
+
+/// One explicit audio-state surface (D-10): an icon, a title, a short
+/// explanation and an optional recovery action.
+private struct IOSStatusBanner<Action: View>: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    let tint: Color
+    @ViewBuilder let action: Action
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            action
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension IOSStatusBanner where Action == EmptyView {
+    init(title: String, message: String, systemImage: String, tint: Color) {
+        self.init(title: title, message: message, systemImage: systemImage, tint: tint) { EmptyView() }
     }
 }
 
@@ -501,7 +543,7 @@ private struct IOSCompactLevelMeter: View {
     var barHeight: CGFloat = 4
 
     var body: some View {
-        let normalized = InputLevelPanel.normalized(level)
+        let normalized = IOSReadoutFormat.normalizedLevel(level)
         GeometryReader { proxy in
             let columns = max(2, Int(proxy.size.width / 9))
             HStack(spacing: 2) {
@@ -536,7 +578,7 @@ private struct IOSInputLevelLeaf: View {
                 .tracking(1.4)
                 .foregroundStyle(.secondary)
             IOSCompactLevelMeter(level: level, barHeight: 20)
-            Text(String(format: "%.0f", InputLevelPanel.decibels(level)))
+            Text(IOSReadoutFormat.decibelsText(level))
                 .font(.system(size: 15, weight: .bold, design: .monospaced))
                 .monospacedDigit()
             Text("dB")
@@ -548,6 +590,9 @@ private struct IOSInputLevelLeaf: View {
         .frame(height: 44)
         .frame(maxWidth: .infinity)
         .glassCard(cornerRadius: 14, fill: 0.035)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Input level")
+        .accessibilityValue("\(IOSReadoutFormat.decibelsText(level)) decibels")
     }
 }
 

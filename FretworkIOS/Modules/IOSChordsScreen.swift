@@ -42,7 +42,7 @@ struct IOSChordsScreen: View {
 private struct IOSChordsLandscape: View {
     let state: AppState
     let model: ChordsModuleModel
-    @State private var showsDrawer = false
+    @State private var showsDrawer = IOSSnapshot.showsChordsDrawer
 
     private var positionLabel: String {
         guard let index = model.positionIndex else { return model.positionLabel }

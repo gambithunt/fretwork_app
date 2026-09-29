@@ -1,13 +1,11 @@
 import SwiftUI
 import UIKit
 
-/// Direction C shell, split by device idiom rather than size class.
+/// The production iOS shell: direction C, split by device idiom (D-24).
 ///
 /// - **iPhone** (D-21): a `NavigationStack` whose root is the list and whose
 ///   path starts on `[.listen]`, so the app opens straight into Listen with the
-///   list one "back" away — in *both* orientations. A landscape iPhone is
-///   regular-width, so the split view would otherwise sit the sidebar beside
-///   the detail and eat ~40% of the neck.
+///   list one "back" away — in *both* orientations.
 /// - **iPad**: a `NavigationSplitView` with the same list as a sidebar.
 ///
 /// The visible screen is kept in step with `AppState.selectedScreen` so the
@@ -17,20 +15,21 @@ import UIKit
 /// **The list is static chrome and must stay that way (D-08).** It reads the
 /// navigation state and nothing else — no detection state, no level, no chord —
 /// so an audio-rate read can never invalidate the whole sidebar.
-struct IOSPrototypeRootView: View {
+struct IOSAppRootView: View {
     @State private var appState = AppState()
-    @State private var path: [AppScreen] = [.listen]
+    @State private var path: [AppScreen] = IOSSnapshot.initialPath
     @State private var selection: AppScreen? = .listen
-    @State private var isShowingSettings = false
+    @State private var isShowingSettings = IOSSnapshot.showsSettingsSheet
 
-    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    private var navigationKind: IOSNavigationKind {
+        IOSNavigation.kind(for: UIDevice.current.userInterfaceIdiom)
+    }
 
     var body: some View {
         Group {
-            if isPhone {
-                phoneShell
-            } else {
-                padShell
+            switch navigationKind {
+            case .stack: phoneShell
+            case .split: padShell
             }
         }
         .sheet(isPresented: $isShowingSettings) {
@@ -39,21 +38,12 @@ struct IOSPrototypeRootView: View {
         .tint(NotePalette.accent)
         .preferredColorScheme(.dark)
         .task {
-            #if DEBUG
-            // -ProtoLandscapeListen: open on Listen and force landscape so a
-            // screenshot run can capture the landscape chrome deterministically.
-            if CommandLine.arguments.contains("-ProtoLandscapeListen"),
-               let scene = UIApplication.shared.connectedScenes
-                   .compactMap({ $0 as? UIWindowScene })
-                   .first {
-                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
-            }
-            #endif
+            IOSSnapshot.requestLandscapeIfNeeded()
         }
         // The readout resets to neutral whenever the controller is actually
         // stopped (foreground/background, an interruption) rather than holding
-        // the last note forever (D-15). Audio-rate neutral: fires once per
-        // status transition, not per detector frame.
+        // the last note forever (D-15). Fires once per status transition, not
+        // per detector frame.
         .onChange(of: appState.iosAudio?.status) { _, newStatus in
             if newStatus == .idle {
                 appState.display = PitchDisplayState()

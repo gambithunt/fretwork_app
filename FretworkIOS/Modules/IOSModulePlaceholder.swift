@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Stands in for the nine modules this prototype does not implement yet. The
-/// real title, blurb and icon come from the `LearningModule` catalogue, so the
-/// list stays honest; only the body is a placeholder.
+/// Stands in for the nine modules Phase 6 will build. The real title, blurb and
+/// icon come from the `LearningModule` catalogue, so the list stays honest;
+/// only the body is a clean "coming soon".
 struct IOSModulePlaceholder: View {
     let module: LearningModule
 
@@ -14,9 +14,10 @@ struct IOSModulePlaceholder: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Label("Not in this prototype", systemImage: "hammer")
+            Label("Coming soon", systemImage: "hourglass")
                 .font(.callout)
                 .foregroundStyle(.tertiary)
+                .accessibilityLabel("Coming soon")
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
