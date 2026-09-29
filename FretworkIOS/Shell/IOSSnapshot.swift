@@ -42,9 +42,17 @@ enum IOSSnapshot {
         #endif
     }
 
-    static var showsChordsDrawer: Bool {
+    static var showsModuleDrawer: Bool {
         #if DEBUG
-        IOSSnapshotHarness.showsChordsDrawer
+        IOSSnapshotHarness.showsModuleDrawer
+        #else
+        false
+        #endif
+    }
+
+    static var guidedRunActive: Bool {
+        #if DEBUG
+        IOSSnapshotHarness.guidedRunActive
         #else
         false
         #endif

@@ -4,11 +4,12 @@ import SwiftUI
 ///
 /// Portrait reuses the existing Mac `ChordsModuleScreen` verbatim as the
 /// fallback (D-18) — the model, shapes and playback are all real, wired by
-/// `AppState`. Landscape is the M2 arrangement (D-20/D-22): a centred neck
-/// with fret numbers on its top edge, translucent ‹ › arrows in the band just
-/// below the low E at the neck's bottom corners, a drawer handle between
-/// them, and a slide-up drawer holding the root/family/chord pickers,
-/// Strum/Stop and the explanation.
+/// `AppState`. Landscape is the M2 arrangement (D-20/D-22), rendered by the
+/// shared `IOSModuleLandscapeScaffold`: a centred neck with fret numbers on
+/// its top edge, translucent ‹ › arrows in the band just below the low E at
+/// the neck's bottom corners, a drawer handle between them, and a slide-up
+/// drawer holding the root/family/chord pickers, Strum/Stop and the
+/// explanation.
 struct IOSChordsScreen: View {
     @Bindable var state: AppState
 
@@ -42,11 +43,13 @@ struct IOSChordsScreen: View {
 private struct IOSChordsLandscape: View {
     let state: AppState
     let model: ChordsModuleModel
-    @State private var showsDrawer = IOSSnapshot.showsChordsDrawer
 
-    private var positionLabel: String {
-        guard let index = model.positionIndex else { return model.positionLabel }
-        return "\(model.positionLabel) · \(index + 1) of \(model.voicings.count)"
+    private var subtitle: String {
+        IOSModuleLandscapeFormat.chordsPositionSubtitle(
+            positionLabel: model.positionLabel,
+            positionIndex: model.positionIndex,
+            voicingCount: model.voicings.count
+        )
     }
 
     private var isPrevDisabled: Bool {
@@ -60,77 +63,41 @@ private struct IOSChordsLandscape: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            topRow
-            neck
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            bottomBand
-        }
-        .padding(.top, 12)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
-        .sheet(isPresented: $showsDrawer) {
-            IOSChordsDrawer(state: state, model: model)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .onDisappear { model.stop() }
-    }
-
-    private var topRow: some View {
-        HStack(spacing: 12) {
-            Text(positionLabel)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Spacer()
-            IOSCompactStandardTuningNotice(tuning: state.tuning)
-            IOSModuleLiveNoteLeaf(state: state, enabled: state.showsLiveNoteOnModules)
-        }
-    }
-
-    private var neck: some View {
-        FretboardBoardView(
-            dots: model.dots,
-            frets: model.highestFret,
-            tuning: Tunings.standard,
-            flipped: state.isFretboardFlipped,
-            pulses: model.pulses
-        )
-    }
-
-    private var bottomBand: some View {
-        HStack {
-            positionButton(systemImage: "chevron.left", disabled: isPrevDisabled) {
+        IOSModuleLandscapeScaffold(
+            title: IOSModuleScreenTitle.title(for: .chords),
+            subtitle: subtitle,
+            tuning: state.tuning,
+            isFixedShapeModule: true,
+            state: state,
+            neck: {
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: model.highestFret,
+                    tuning: Tunings.standard,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses
+                )
+            },
+            previousLabel: "Previous position",
+            previousDisabled: isPrevDisabled,
+            onPrevious: {
                 withAnimation(FretworkMotion.gravity) { model.movePosition(by: -1) }
-            }
-            Spacer()
-            drawerHandle
-            Spacer()
-            positionButton(systemImage: "chevron.right", disabled: isNextDisabled) {
+            },
+            nextLabel: "Next position",
+            nextDisabled: isNextDisabled,
+            onNext: {
                 withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) }
-            }
-        }
-        .padding(.horizontal, 4)
-        .frame(height: 48)
-    }
-
-    private func positionButton(systemImage: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .disabled(disabled)
-    }
-
-    private var drawerHandle: some View {
-        Button {
-            showsDrawer = true
-        } label: {
-            Label("Chord & key", systemImage: "slider.horizontal.3")
-        }
-        .buttonStyle(.glass)
+            },
+            drawerTitle: "Chord & key",
+            drawerSystemImage: "slider.horizontal.3",
+            drawer: {
+                IOSChordsDrawer(state: state, model: model)
+            },
+            bandMode: .normal,
+            guidedRunStepText: "",
+            onStopGuidedRun: {}
+        )
+        .onDisappear { model.stop() }
     }
 }
 
@@ -143,23 +110,6 @@ private struct IOSChordsDrawer: View {
     private var positionOfCount: String {
         guard let index = model.positionIndex else { return "—" }
         return "\(index + 1) of \(model.voicings.count)"
-    }
-
-    /// The "silently mute" guard (CLAUDE.md): strumming is a no-op until the
-    /// sample library is decoded and a player is attached, so say so instead of
-    /// letting the Strum button fail silently.
-    @ViewBuilder
-    private var playbackNotice: some View {
-        if let error = state.samplePlaybackError {
-            Label("The note library could not be loaded. \(error)", systemImage: "exclamationmark.triangle.fill")
-                .font(.callout)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if !state.isSamplePlaybackReady {
-            Label("Notes will not sound until audio is ready.", systemImage: "speaker.slash.fill")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
     }
 
     var body: some View {
@@ -190,7 +140,7 @@ private struct IOSChordsDrawer: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                playbackNotice
+                IOSModulePlaybackNotice(state: state)
 
                 HStack(spacing: 12) {
                     Button {
@@ -249,59 +199,5 @@ private struct IOSChordsDrawer: View {
             }
         }
         .pickerStyle(.menu)
-    }
-}
-
-// MARK: - Leaves
-
-/// The 008 live-note capsule, rebuilt here as a leaf because the Mac's
-/// `ModuleLiveNoteReadout` is private to `ModuleLayout`. Reads `display` only
-/// while the feature is on, and owns that read so the rest of the top bar
-/// never sees audio-rate invalidations.
-private struct IOSModuleLiveNoteLeaf: View {
-    let state: AppState
-    let enabled: Bool
-
-    var body: some View {
-        if enabled {
-            let display = state.display
-            let noteColor = display.note.map { NotePalette.color(for: $0.name) }
-            HStack(spacing: 6) {
-                Text("LISTENING")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1)
-                    .foregroundStyle(.secondary)
-                Text(display.note.map { "\($0.name)\($0.octave)" } ?? "—")
-                    .font(.caption.weight(.bold))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background {
-                        Capsule().fill(noteColor?.opacity(0.28) ?? .white.opacity(0.08))
-                    }
-                    .overlay {
-                        Capsule().strokeBorder(noteColor?.opacity(0.52) ?? .white.opacity(0.10), lineWidth: 1)
-                    }
-            }
-            .animation(.easeInOut(duration: 0.2), value: display.note?.midiNote)
-        }
-    }
-}
-
-/// The compact pill version of `StandardTuningNotice` for the landscape top
-/// bar.
-private struct IOSCompactStandardTuningNotice: View {
-    let tuning: Tuning
-
-    var body: some View {
-        if tuning.id != .standard {
-            Label("Standard tuning shapes", systemImage: "info.circle")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.orange.opacity(0.12), in: Capsule())
-        }
     }
 }

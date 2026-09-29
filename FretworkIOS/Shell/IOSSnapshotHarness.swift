@@ -16,6 +16,13 @@ enum IOSSnapshotHarness {
         case list = "-IOSSnapshotList"
         case chordsLandscape = "-IOSSnapshotChordsLandscape"
         case chordsDrawer = "-IOSSnapshotChordsDrawer"
+        case intervalsLandscape = "-IOSSnapshotIntervalsLandscape"
+        case intervalsDrawer = "-IOSSnapshotIntervalsDrawer"
+        case pentatonicLandscape = "-IOSSnapshotPentatonicLandscape"
+        case pentatonicDrawer = "-IOSSnapshotPentatonicDrawer"
+        case pentatonicGuided = "-IOSSnapshotPentatonicGuided"
+        case circleLandscape = "-IOSSnapshotCircleLandscape"
+        case circleDrawer = "-IOSSnapshotCircleDrawer"
         case settings = "-IOSSnapshotSettings"
         case permissionDenied = "-IOSSnapshotPermissionDenied"
     }
@@ -40,10 +47,27 @@ enum IOSSnapshotHarness {
         }
     }
 
+    /// The module a scenario opens in landscape, if any.
+    static var moduleScenario: LearningModule? {
+        switch scenario {
+        case .chordsLandscape, .chordsDrawer: return .chords
+        case .intervalsLandscape, .intervalsDrawer: return .intervals
+        case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided: return .pentatonic
+        case .circleLandscape, .circleDrawer: return .circle
+        default: return nil
+        }
+    }
+
     static var forcesLandscape: Bool {
         switch scenario {
-        case .listenLandscape, .popBack, .list, .chordsLandscape, .chordsDrawer: return true
-        default: return false
+        case .listenLandscape, .popBack, .list,
+             .chordsLandscape, .chordsDrawer,
+             .intervalsLandscape, .intervalsDrawer,
+             .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided,
+             .circleLandscape, .circleDrawer:
+            return true
+        default:
+            return false
         }
     }
 
@@ -54,15 +78,27 @@ enum IOSSnapshotHarness {
 
     /// The navigation stack's initial path.
     static var initialPath: [AppScreen] {
+        if let module = moduleScenario {
+            return [.module(module)]
+        }
         switch scenario {
-        case .chordsLandscape, .chordsDrawer: return [.module(.chords)]
         case .list: return []
         default: return [.listen]
         }
     }
 
     static var showsSettingsSheet: Bool { scenario == .settings }
-    static var showsChordsDrawer: Bool { scenario == .chordsDrawer }
+    static var showsModuleDrawer: Bool {
+        switch scenario {
+        case .chordsDrawer, .intervalsDrawer, .pentatonicDrawer, .circleDrawer: return true
+        default: return false
+        }
+    }
+
+    /// Forces the Pentatonic landscape band into its guided-run form (D-27)
+    /// without running a real session: the Stop button and the "Next:" step
+    /// text render against a fixed, real note from the model's own box.
+    static var guidedRunActive: Bool { scenario == .pentatonicGuided }
 
     static func effectiveStatus(_ actual: IOSAudioStatus?) -> IOSAudioStatus? {
         guard isActive else { return actual }
