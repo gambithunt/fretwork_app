@@ -83,6 +83,14 @@ final class IOSModuleLandscapeTests: XCTestCase {
         XCTAssertEqual(IOSModuleLandscapeFormat.circleSubtitle(PitchClass(10)), "A♯ major")
     }
 
+    // MARK: - Notes
+
+    func testNotesPlacedSubtitleCountsCorrectly() {
+        XCTAssertEqual(IOSModuleLandscapeFormat.notesPlacedSubtitle(count: 0), "No notes placed")
+        XCTAssertEqual(IOSModuleLandscapeFormat.notesPlacedSubtitle(count: 1), "1 note placed")
+        XCTAssertEqual(IOSModuleLandscapeFormat.notesPlacedSubtitle(count: 4), "4 notes placed")
+    }
+
     // MARK: - Guided-run step text (D-27)
 
     func testGuidedRunStepTextNamesNoteStringAndFret() {

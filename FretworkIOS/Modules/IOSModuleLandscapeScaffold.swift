@@ -43,6 +43,15 @@ enum IOSModuleLandscapeFormat {
         return "\(root.name()) \(qualityName) pentatonic · Box \(box + 1) of 5"
     }
 
+    /// "4 notes placed" — the Notes board's running count.
+    static func notesPlacedSubtitle(count: Int) -> String {
+        switch count {
+        case 0: "No notes placed"
+        case 1: "1 note placed"
+        default: "\(count) notes placed"
+        }
+    }
+
     /// "G major" — the selected key.
     static func circleSubtitle(_ key: PitchClass) -> String {
         "\(key.name()) major"
@@ -74,6 +83,12 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
     let isFixedShapeModule: Bool
     let state: AppState
     @ViewBuilder var neck: Neck
+
+    /// The corner buttons default to neck-navigation arrows (‹ ›); modules
+    /// whose corner action is not a step along the neck (Notes' Clear and
+    /// Play all, Triads Paths' play and stop) override the glyph.
+    var previousSystemImage = "chevron.left"
+    var nextSystemImage = "chevron.right"
 
     let previousLabel: String
     let previousDisabled: Bool
@@ -153,11 +168,11 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
         HStack(spacing: 12) {
             switch bandMode {
             case .normal:
-                cornerButton(systemImage: "chevron.left", label: previousLabel, disabled: previousDisabled, action: onPrevious)
+                cornerButton(systemImage: previousSystemImage, label: previousLabel, disabled: previousDisabled, action: onPrevious)
                 Spacer(minLength: 0)
                 drawerHandle
                 Spacer(minLength: 0)
-                cornerButton(systemImage: "chevron.right", label: nextLabel, disabled: nextDisabled, action: onNext)
+                cornerButton(systemImage: nextSystemImage, label: nextLabel, disabled: nextDisabled, action: onNext)
             case .guidedRun:
                 Button(action: onStopGuidedRun) {
                     Label("Stop", systemImage: "stop.fill")
