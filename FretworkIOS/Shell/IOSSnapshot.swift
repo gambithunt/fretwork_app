@@ -58,6 +58,16 @@ enum IOSSnapshot {
         #endif
     }
 
+    /// The Triads snapshot opens on its Paths face, which is otherwise only
+    /// reachable by a tap in the drawer.
+    static var forcesTriadsPathMode: Bool {
+        #if DEBUG
+        IOSSnapshotHarness.forcesTriadsPathMode
+        #else
+        false
+        #endif
+    }
+
     static var schedulesPopBack: Bool {
         #if DEBUG
         IOSSnapshotHarness.schedulesPopBack

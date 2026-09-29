@@ -59,6 +59,31 @@ enum IOSModuleLandscapeFormat {
         return "Position \(index + 1) of \(count)"
     }
 
+    /// "C major · 1st inversion" — the Triads Shapes subtitle. Double stops
+    /// have no inversion, so `inversion` is nil and only the pair is named.
+    static func triadsShapeSubtitle(root: PitchClass, name: String, inversion: String?) -> String {
+        let chord = "\(root.name()) \(name.lowercased())"
+        guard let inversion, !inversion.isEmpty else { return chord }
+        return "\(chord) · \(inversion)"
+    }
+
+    /// "C major · I · 3 of 7" — the Triads Paths subtitle: which diatonic
+    /// chord is voiced and how far along the path it sits.
+    static func triadsPathSubtitle(chord: String, roman: String, index: Int?, count: Int) -> String {
+        let named = "\(chord) · \(roman)"
+        guard let index, count > 0 else { return named }
+        return "\(named) · \(index + 1) of \(count)"
+    }
+
+    /// "Next: C · A string fret 3" (D-27) — the lowest tone of the next path
+    /// voicing, so the run's step reads like the guided-scale one does.
+    static func triadsPathStepText(next: TriadPathStep?, tuning: Tuning = Tunings.standard) -> String {
+        guard let next,
+              let tone = next.voicing.tones.min(by: { $0.position.midiNote < $1.position.midiNote })
+        else { return "" }
+        return "Next: \(next.chord.name) · \(tuning.stringNames[tone.position.string]) string fret \(tone.position.fret)"
+    }
+
     /// "G major" — the selected key.
     static func circleSubtitle(_ key: PitchClass) -> String {
         "\(key.name()) major"

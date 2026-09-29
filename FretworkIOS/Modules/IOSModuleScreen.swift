@@ -25,10 +25,11 @@ enum IOSModuleScreenTitle {
 
 /// Dispatches a pushed `LearningModule` to its iOS screen.
 ///
-/// Modules with a landscape scaffold (Chords, Intervals, Pentatonic, Circle)
-/// use the Listen-style empty/transparent nav bar in landscape so the pop back
-/// to the list never toggles bar visibility. The rest still show the
-/// "coming soon" placeholder with a normal nav bar in both orientations.
+/// Modules with a landscape scaffold (Notes, Intervals, Octaves, Triads,
+/// Chords, Pentatonic, Circle) use the Listen-style empty/transparent nav bar
+/// in landscape so the pop back to the list never toggles bar visibility. The
+/// rest still show the "coming soon" placeholder with a normal nav bar in
+/// both orientations.
 struct IOSModuleScreen: View {
     let module: LearningModule
     @Bindable var state: AppState
@@ -40,7 +41,7 @@ struct IOSModuleScreen: View {
 
     private var hasScaffold: Bool {
         switch module {
-        case .notes, .octaves, .chords, .intervals, .pentatonic, .circle: true
+        case .notes, .intervals, .octaves, .triads, .chords, .pentatonic, .circle: true
         default: false
         }
     }
@@ -59,9 +60,10 @@ struct IOSModuleScreen: View {
     private var content: some View {
         switch module {
         case .notes: IOSNotesScreen(state: state)
-        case .octaves: IOSOctavesScreen(state: state)
-        case .chords: IOSChordsScreen(state: state)
         case .intervals: IOSIntervalsScreen(state: state)
+        case .octaves: IOSOctavesScreen(state: state)
+        case .triads: IOSTriadsScreen(state: state)
+        case .chords: IOSChordsScreen(state: state)
         case .pentatonic: IOSPentatonicScreen(state: state)
         case .circle: IOSCircleScreen(state: state)
         default: IOSModulePlaceholder(module: module)
