@@ -73,7 +73,6 @@ private struct IOSChordsLandscape: View {
             IOSChordsDrawer(model: model)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(NotePalette.backdrop)
         }
         .onDisappear { model.stop() }
     }
@@ -118,12 +117,10 @@ private struct IOSChordsLandscape: View {
     private func positionButton(systemImage: String, disabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(disabled ? Color.white.opacity(0.3) : NotePalette.accent)
-                .frame(width: 44, height: 44)
-                .background(.white.opacity(0.08), in: Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
         }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
         .disabled(disabled)
     }
 
@@ -131,17 +128,9 @@ private struct IOSChordsLandscape: View {
         Button {
             showsDrawer = true
         } label: {
-            VStack(spacing: 4) {
-                Capsule()
-                    .fill(Color.white.opacity(0.35))
-                    .frame(width: 36, height: 5)
-                Text("Chord & key")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 120, height: 44)
+            Label("Chord & key", systemImage: "slider.horizontal.3")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
     }
 }
 
@@ -157,39 +146,24 @@ private struct IOSChordsDrawer: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 24) {
                 PitchClassPicker(
-                    title: "ROOT",
+                    title: "Root",
                     selection: model.rootPitchClass,
                     onSelect: model.selectRoot
                 )
 
-                HStack(spacing: 12) {
-                    Picker("Family", selection: Binding(
-                        get: { model.family },
-                        set: { model.selectFamily($0) }
-                    )) {
-                        ForEach(ChordsModuleModel.families, id: \.self) { family in
-                            Text(ChordsModuleModel.label(for: family)).tag(family)
-                        }
-                    }
-
-                    Picker("Chord", selection: Binding(
-                        get: { model.formula.id },
-                        set: { id in
-                            if let formula = ChordFormulas.formula(id: id) {
-                                model.selectFormula(formula)
-                            }
-                        }
-                    )) {
-                        ForEach(model.formulasInFamily, id: \.id) { formula in
-                            Text(formula.label.isEmpty ? "Major" : formula.label).tag(formula.id)
-                        }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Chord")
+                        .font(.headline)
+                    HStack(spacing: 12) {
+                        familyPicker
+                        formulaPicker
                     }
                 }
 
                 Text("\(model.symbol) · \(model.currentVoicing?.shape ?? "—") · \(positionOfCount)")
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 HStack(spacing: 12) {
@@ -199,15 +173,17 @@ private struct IOSChordsDrawer: View {
                         Label("Strum", systemImage: "play.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .tint(NotePalette.accent)
                     .disabled(model.currentVoicing == nil)
 
                     Button("Stop") { model.stop() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("About")
+                        .font(.headline)
                     Text(model.formula.description)
                     Text("The dots are labelled by degree — \(model.formula.degrees.joined(separator: ", ")) — rather than by note name, so the same shape reads the same wherever you move it.")
                 }
@@ -217,9 +193,36 @@ private struct IOSChordsDrawer: View {
             }
             .padding(20)
         }
-        .background(NotePalette.backdrop)
         .preferredColorScheme(.dark)
         .tint(NotePalette.accent)
+    }
+
+    private var familyPicker: some View {
+        Picker("Family", selection: Binding(
+            get: { model.family },
+            set: { model.selectFamily($0) }
+        )) {
+            ForEach(ChordsModuleModel.families, id: \.self) { family in
+                Text(ChordsModuleModel.label(for: family)).tag(family)
+            }
+        }
+        .pickerStyle(.menu)
+    }
+
+    private var formulaPicker: some View {
+        Picker("Chord", selection: Binding(
+            get: { model.formula.id },
+            set: { id in
+                if let formula = ChordFormulas.formula(id: id) {
+                    model.selectFormula(formula)
+                }
+            }
+        )) {
+            ForEach(model.formulasInFamily, id: \.id) { formula in
+                Text(formula.label.isEmpty ? "Major" : formula.label).tag(formula.id)
+            }
+        }
+        .pickerStyle(.menu)
     }
 }
 
