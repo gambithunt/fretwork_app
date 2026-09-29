@@ -64,7 +64,7 @@ private struct IOSPentatonicLandscape: View {
         IOSModuleLandscapeScaffold(
             title: IOSModuleScreenTitle.title(for: .pentatonic),
             subtitle: subtitle,
-            tuning: Tunings.standard,
+            tuning: state.tuning,
             isFixedShapeModule: true,
             state: state,
             neck: {

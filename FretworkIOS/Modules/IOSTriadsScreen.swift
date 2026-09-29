@@ -150,9 +150,9 @@ private struct IOSTriadsLandscape: View {
             },
             bandMode: bandMode,
             guidedRunStepText: guidedStepText,
-            onStopGuidedRun: { model.stopEverything() }
+            onStopGuidedRun: { model.stopEverything() },
+            onTuningChange: { model.retune(to: $0) }
         )
-        .onChange(of: state.tuning) { _, tuning in model.retune(to: tuning) }
         .onDisappear { model.stopEverything() }
     }
 }

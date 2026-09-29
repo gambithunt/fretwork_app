@@ -90,7 +90,8 @@ private struct IOSScalesLandscape: View {
             },
             bandMode: bandMode,
             guidedRunStepText: guidedStepText,
-            onStopGuidedRun: { model.stopGuided() }
+            onStopGuidedRun: { model.stopGuided() },
+            onTuningChange: { model.retune(to: $0) }
         )
         .onDisappear { model.stopGuided() }
     }

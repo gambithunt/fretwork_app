@@ -81,7 +81,8 @@ private struct IOSNoteAssociationLandscape: View {
             },
             bandMode: .normal,
             guidedRunStepText: "",
-            onStopGuidedRun: {}
+            onStopGuidedRun: {},
+            onTuningChange: { model.retune(to: $0) }
         )
         .onDisappear { model.stopEverything() }
     }

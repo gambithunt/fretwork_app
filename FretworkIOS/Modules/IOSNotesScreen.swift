@@ -92,18 +92,18 @@ private struct IOSNotesLandscape: View {
             },
             bandMode: .normal,
             guidedRunStepText: "",
-            onStopGuidedRun: {}
+            onStopGuidedRun: {},
+            onTuningChange: { tuning in
+                // A tuning change re-pitches every dot, so anything still
+                // sounding belongs to the old tuning.
+                model.stop()
+                model.tuning = tuning
+            }
         )
         .onChange(of: showsFullNeck) { _, expanded in
             // A tap past fret 12 has to resolve to a real cell, so widening
             // the drawn board widens the model's floor too.
             model.highestFret = expanded ? 22 : LearningModule.notes.highestFret
-        }
-        .onChange(of: state.tuning) { _, tuning in
-            // A tuning change re-pitches every dot, so anything still sounding
-            // belongs to the old tuning.
-            model.stop()
-            model.tuning = tuning
         }
         .onDisappear { model.stop() }
     }

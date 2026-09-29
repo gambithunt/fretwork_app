@@ -29,6 +29,16 @@ final class IOSModuleLandscapeTests: XCTestCase {
         )
     }
 
+    func testDrawerDismissesWhenTheBandBecomesGuidedRun() {
+        // D-27: the drawer is out of reach mid-exercise, so the scaffold closes
+        // it the moment the band switches to the Stop + step form.
+        XCTAssertTrue(IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: .guidedRun))
+    }
+
+    func testDrawerStaysOpenWhenTheBandIsNormal() {
+        XCTAssertFalse(IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: .normal))
+    }
+
     // MARK: - Subtitles
 
     func testIntervalSubtitleNamesTheIntervalAndItsDistance() {
@@ -126,16 +136,24 @@ final class IOSModuleLandscapeTests: XCTestCase {
     }
 
     func testTriadsPathStepTextNamesNextChordOnItsLowestString() {
-        let tone = VoicingTone(
+        // Two tones, the lowest deliberately *second* so the assertion proves
+        // the formatter picks by pitch, not by array order. midiNote and
+        // pitchClass stay consistent: 52 = E4, 48 = C3.
+        let higher = VoicingTone(
+            interval: 4,
+            degree: "3",
+            position: VoicingPosition(string: 0, fret: 12, midiNote: 52, pitchClass: PitchClass(4))
+        )
+        let lower = VoicingTone(
             interval: 0,
             degree: "1",
-            position: VoicingPosition(string: 1, fret: 3, midiNote: 51, pitchClass: PitchClass(2))
+            position: VoicingPosition(string: 1, fret: 3, midiNote: 48, pitchClass: PitchClass(0))
         )
         let voicing = CompactVoicing(
             id: "test",
-            tones: [tone],
+            tones: [higher, lower],
             minFret: 3,
-            maxFret: 3,
+            maxFret: 12,
             stringSet: "E–A–D",
             inversion: "Root position"
         )

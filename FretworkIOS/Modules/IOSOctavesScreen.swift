@@ -107,9 +107,9 @@ private struct IOSOctavesLandscape: View {
             },
             bandMode: .normal,
             guidedRunStepText: "",
-            onStopGuidedRun: {}
+            onStopGuidedRun: {},
+            onTuningChange: { model.retune(to: $0) }
         )
-        .onChange(of: state.tuning) { _, tuning in model.retune(to: tuning) }
         .onDisappear {
             model.stopRecall()
             model.stop()

@@ -51,6 +51,12 @@ enum IOSModuleBandDecision {
     static func mode<Step: Sendable>(guidedStatus: GuidedSession<Step>.Status) -> IOSModuleBandMode {
         guidedStatus == .idle ? .normal : .guidedRun
     }
+
+    /// D-27: a guided run takes the stage and the drawer cannot be reached
+    /// mid-exercise, so the drawer closes the moment the band switches to it.
+    static func shouldDismissDrawer(transitioningTo mode: IOSModuleBandMode) -> Bool {
+        mode == .guidedRun
+    }
 }
 
 // MARK: - Subtitle / step formatting
@@ -178,6 +184,12 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
     let guidedRunStepText: String
     let onStopGuidedRun: () -> Void
 
+    /// Called when the global tuning changes, so a module can re-anchor its
+    /// shapes (or, for Notes, stop and re-pitch what is placed). Fixed-shape
+    /// modules (Chords/Pentatonic/Harmonizing) leave it nil — their frets
+    /// detune rather than transpose, which the notice pill explains.
+    var onTuningChange: ((Tuning) -> Void)? = nil
+
     @Environment(\.dismiss) private var dismiss
     @State private var showsDrawer = IOSSnapshot.showsModuleDrawer
 
@@ -197,6 +209,14 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
                 .presentationDragIndicator(.visible)
                 .preferredColorScheme(.dark)
                 .tint(NotePalette.accent)
+        }
+        .onChange(of: state.tuning) { _, tuning in
+            onTuningChange?(tuning)
+        }
+        .onChange(of: bandMode) { _, mode in
+            if IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: mode) {
+                showsDrawer = false
+            }
         }
     }
 
