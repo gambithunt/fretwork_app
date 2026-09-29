@@ -25,9 +25,9 @@ enum IOSModuleScreenTitle {
 
 /// Dispatches a pushed `LearningModule` to its iOS screen.
 ///
-/// Modules with a landscape scaffold (Chords, Intervals, Pentatonic, Circle)
-/// use the Listen-style empty/transparent nav bar in landscape so the pop back
-/// to the list never toggles bar visibility. The rest still show the
+/// Modules with a landscape scaffold (Chords, Intervals, Pentatonic, Circle,
+/// Scales) use the Listen-style empty/transparent nav bar in landscape so the
+/// pop back to the list never toggles bar visibility. The rest still show the
 /// "coming soon" placeholder with a normal nav bar in both orientations.
 struct IOSModuleScreen: View {
     let module: LearningModule
@@ -40,7 +40,8 @@ struct IOSModuleScreen: View {
 
     private var hasScaffold: Bool {
         switch module {
-        case .chords, .intervals, .pentatonic, .circle: true
+        case .chords, .intervals, .pentatonic, .circle,
+             .scales: true
         default: false
         }
     }
@@ -62,6 +63,7 @@ struct IOSModuleScreen: View {
         case .intervals: IOSIntervalsScreen(state: state)
         case .pentatonic: IOSPentatonicScreen(state: state)
         case .circle: IOSCircleScreen(state: state)
+        case .scales: IOSScalesScreen(state: state)
         default: IOSModulePlaceholder(module: module)
         }
     }

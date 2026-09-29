@@ -10,6 +10,16 @@ enum IOSModuleBandMode: Equatable, Sendable {
     case guidedRun
 }
 
+/// A labelled primary action in the bottom band, in place of a ‹ › step
+/// control. Scales has no positions to move along the neck (D-26), so its
+/// normal band is a single ▶ Practise button instead of arrows.
+struct IOSModuleBandAction {
+    let title: String
+    let systemImage: String
+    let disabled: Bool
+    let action: () -> Void
+}
+
 enum IOSModuleBandDecision {
     /// Any non-idle guided-session state — count-in included — counts as a
     /// run: the player has already committed to it. Generic over the step type
@@ -46,6 +56,23 @@ enum IOSModuleLandscapeFormat {
     /// "G major" — the selected key.
     static func circleSubtitle(_ key: PitchClass) -> String {
         "\(key.name()) major"
+    }
+
+    /// "C major · Ascending" — the scale and the direction a Practise run
+    /// walks it (D-26 has no positions for Scales, so direction is the only
+    /// thing that moves).
+    static func scalesSubtitle(scaleName: String, direction: ScalesModuleModel.Direction) -> String {
+        "\(scaleName) · \(direction == .ascending ? "Ascending" : "Up and down")"
+    }
+
+    /// "ii · D minor" — the chord of the key in focus, roman degree then name.
+    static func harmonizingSubtitle(roman: String, chordName: String) -> String {
+        "\(roman) · \(chordName)"
+    }
+
+    /// "Over V · G" — the chord underneath the layered neck.
+    static func noteAssociationSubtitle(roman: String, chordName: String) -> String {
+        "Over \(roman) · \(chordName)"
     }
 
     /// "Next: D · B string fret 3" (D-27) — the note the hand is moving to.
@@ -89,6 +116,14 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
     let bandMode: IOSModuleBandMode
     let guidedRunStepText: String
     let onStopGuidedRun: () -> Void
+
+    /// When set, replaces the leading ‹ arrow in the normal band with a
+    /// labelled action (Scales' ▶ Practise). A module with positions to step
+    /// through leaves it `nil` and keeps the arrows.
+    var primaryAction: IOSModuleBandAction? = nil
+    /// Whether the normal band draws the ‹ › step arrows at all. A module with
+    /// no positions along the neck (Scales) passes `false`.
+    var showsStepControls = true
 
     @Environment(\.dismiss) private var dismiss
     @State private var showsDrawer = IOSSnapshot.showsModuleDrawer
@@ -153,11 +188,17 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
         HStack(spacing: 12) {
             switch bandMode {
             case .normal:
-                cornerButton(systemImage: "chevron.left", label: previousLabel, disabled: previousDisabled, action: onPrevious)
+                if let primaryAction {
+                    actionButton(primaryAction)
+                } else if showsStepControls {
+                    cornerButton(systemImage: "chevron.left", label: previousLabel, disabled: previousDisabled, action: onPrevious)
+                }
                 Spacer(minLength: 0)
                 drawerHandle
                 Spacer(minLength: 0)
-                cornerButton(systemImage: "chevron.right", label: nextLabel, disabled: nextDisabled, action: onNext)
+                if showsStepControls {
+                    cornerButton(systemImage: "chevron.right", label: nextLabel, disabled: nextDisabled, action: onNext)
+                }
             case .guidedRun:
                 Button(action: onStopGuidedRun) {
                     Label("Stop", systemImage: "stop.fill")
@@ -175,6 +216,15 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
         }
         .padding(.horizontal, 4)
         .frame(height: 48)
+    }
+
+    private func actionButton(_ action: IOSModuleBandAction) -> some View {
+        Button(action: action.action) {
+            Label(action.title, systemImage: action.systemImage)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(NotePalette.accent)
+        .disabled(action.disabled)
     }
 
     private func cornerButton(systemImage: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {

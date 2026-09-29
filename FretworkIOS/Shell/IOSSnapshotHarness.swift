@@ -21,6 +21,13 @@ enum IOSSnapshotHarness {
         case pentatonicLandscape = "-IOSSnapshotPentatonicLandscape"
         case pentatonicDrawer = "-IOSSnapshotPentatonicDrawer"
         case pentatonicGuided = "-IOSSnapshotPentatonicGuided"
+        case scalesLandscape = "-IOSSnapshotScalesLandscape"
+        case scalesDrawer = "-IOSSnapshotScalesDrawer"
+        case scalesGuided = "-IOSSnapshotScalesGuided"
+        case harmonizingLandscape = "-IOSSnapshotHarmonizingLandscape"
+        case harmonizingDrawer = "-IOSSnapshotHarmonizingDrawer"
+        case noteAssociationLandscape = "-IOSSnapshotNoteAssociationLandscape"
+        case noteAssociationDrawer = "-IOSSnapshotNoteAssociationDrawer"
         case circleLandscape = "-IOSSnapshotCircleLandscape"
         case circleDrawer = "-IOSSnapshotCircleDrawer"
         case settings = "-IOSSnapshotSettings"
@@ -53,6 +60,9 @@ enum IOSSnapshotHarness {
         case .chordsLandscape, .chordsDrawer: return .chords
         case .intervalsLandscape, .intervalsDrawer: return .intervals
         case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided: return .pentatonic
+        case .scalesLandscape, .scalesDrawer, .scalesGuided: return .scales
+        case .harmonizingLandscape, .harmonizingDrawer: return .harmonizing
+        case .noteAssociationLandscape, .noteAssociationDrawer: return .noteAssociation
         case .circleLandscape, .circleDrawer: return .circle
         default: return nil
         }
@@ -64,6 +74,9 @@ enum IOSSnapshotHarness {
              .chordsLandscape, .chordsDrawer,
              .intervalsLandscape, .intervalsDrawer,
              .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided,
+             .scalesLandscape, .scalesDrawer, .scalesGuided,
+             .harmonizingLandscape, .harmonizingDrawer,
+             .noteAssociationLandscape, .noteAssociationDrawer,
              .circleLandscape, .circleDrawer:
             return true
         default:
@@ -90,15 +103,18 @@ enum IOSSnapshotHarness {
     static var showsSettingsSheet: Bool { scenario == .settings }
     static var showsModuleDrawer: Bool {
         switch scenario {
-        case .chordsDrawer, .intervalsDrawer, .pentatonicDrawer, .circleDrawer: return true
+        case .chordsDrawer, .intervalsDrawer, .pentatonicDrawer,
+             .scalesDrawer, .harmonizingDrawer, .noteAssociationDrawer, .circleDrawer: return true
         default: return false
         }
     }
 
-    /// Forces the Pentatonic landscape band into its guided-run form (D-27)
-    /// without running a real session: the Stop button and the "Next:" step
-    /// text render against a fixed, real note from the model's own box.
-    static var guidedRunActive: Bool { scenario == .pentatonicGuided }
+    /// Forces a landscape band into its guided-run form (D-27) without running
+    /// a real session: the Stop button and the "Next:" step text render
+    /// against a fixed, real note from the model's own run.
+    static var guidedRunActive: Bool {
+        scenario == .pentatonicGuided || scenario == .scalesGuided
+    }
 
     static func effectiveStatus(_ actual: IOSAudioStatus?) -> IOSAudioStatus? {
         guard isActive else { return actual }
