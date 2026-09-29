@@ -91,6 +91,17 @@ final class IOSModuleLandscapeTests: XCTestCase {
         XCTAssertEqual(IOSModuleLandscapeFormat.notesPlacedSubtitle(count: 4), "4 notes placed")
     }
 
+    // MARK: - Octaves
+
+    func testOctavesPositionSubtitleNamesPlaceInTheList() {
+        XCTAssertEqual(IOSModuleLandscapeFormat.octavesPositionSubtitle(index: 0, count: 5), "Position 1 of 5")
+        XCTAssertEqual(IOSModuleLandscapeFormat.octavesPositionSubtitle(index: 4, count: 5), "Position 5 of 5")
+    }
+
+    func testOctavesPositionSubtitleFallsBackWhenNoAnchor() {
+        XCTAssertEqual(IOSModuleLandscapeFormat.octavesPositionSubtitle(index: nil, count: 5), "Position —")
+    }
+
     // MARK: - Guided-run step text (D-27)
 
     func testGuidedRunStepTextNamesNoteStringAndFret() {

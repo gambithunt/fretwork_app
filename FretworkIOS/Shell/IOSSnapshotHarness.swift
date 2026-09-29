@@ -20,6 +20,8 @@ enum IOSSnapshotHarness {
         case notesDrawer = "-IOSSnapshotNotesDrawer"
         case intervalsLandscape = "-IOSSnapshotIntervalsLandscape"
         case intervalsDrawer = "-IOSSnapshotIntervalsDrawer"
+        case octavesLandscape = "-IOSSnapshotOctavesLandscape"
+        case octavesDrawer = "-IOSSnapshotOctavesDrawer"
         case pentatonicLandscape = "-IOSSnapshotPentatonicLandscape"
         case pentatonicDrawer = "-IOSSnapshotPentatonicDrawer"
         case pentatonicGuided = "-IOSSnapshotPentatonicGuided"
@@ -55,6 +57,7 @@ enum IOSSnapshotHarness {
         case .chordsLandscape, .chordsDrawer: return .chords
         case .notesLandscape, .notesDrawer: return .notes
         case .intervalsLandscape, .intervalsDrawer: return .intervals
+        case .octavesLandscape, .octavesDrawer: return .octaves
         case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided: return .pentatonic
         case .circleLandscape, .circleDrawer: return .circle
         default: return nil
@@ -67,6 +70,7 @@ enum IOSSnapshotHarness {
              .chordsLandscape, .chordsDrawer,
              .notesLandscape, .notesDrawer,
              .intervalsLandscape, .intervalsDrawer,
+             .octavesLandscape, .octavesDrawer,
              .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided,
              .circleLandscape, .circleDrawer:
             return true
@@ -94,7 +98,7 @@ enum IOSSnapshotHarness {
     static var showsSettingsSheet: Bool { scenario == .settings }
     static var showsModuleDrawer: Bool {
         switch scenario {
-        case .chordsDrawer, .intervalsDrawer, .notesDrawer, .pentatonicDrawer, .circleDrawer: return true
+        case .chordsDrawer, .intervalsDrawer, .notesDrawer, .octavesDrawer, .pentatonicDrawer, .circleDrawer: return true
         default: return false
         }
     }

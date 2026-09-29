@@ -52,6 +52,13 @@ enum IOSModuleLandscapeFormat {
         }
     }
 
+    /// "Position 2 of 5" — where the octave shape sits in its list down the
+    /// neck. "Position —" if the shape has no resolvable anchor.
+    static func octavesPositionSubtitle(index: Int?, count: Int) -> String {
+        guard let index, count > 0 else { return "Position —" }
+        return "Position \(index + 1) of \(count)"
+    }
+
     /// "G major" — the selected key.
     static func circleSubtitle(_ key: PitchClass) -> String {
         "\(key.name()) major"

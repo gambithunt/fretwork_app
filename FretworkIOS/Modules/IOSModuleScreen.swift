@@ -40,7 +40,7 @@ struct IOSModuleScreen: View {
 
     private var hasScaffold: Bool {
         switch module {
-        case .notes, .chords, .intervals, .pentatonic, .circle: true
+        case .notes, .octaves, .chords, .intervals, .pentatonic, .circle: true
         default: false
         }
     }
@@ -59,6 +59,7 @@ struct IOSModuleScreen: View {
     private var content: some View {
         switch module {
         case .notes: IOSNotesScreen(state: state)
+        case .octaves: IOSOctavesScreen(state: state)
         case .chords: IOSChordsScreen(state: state)
         case .intervals: IOSIntervalsScreen(state: state)
         case .pentatonic: IOSPentatonicScreen(state: state)
