@@ -47,14 +47,15 @@ enum IOSStatusAppearanceMapper {
 /// starts (that is the first-run system prompt); `.denied` never starts from
 /// here — the explicit Open Settings surface owns recovery until the user
 /// grants. Status must be `.idle`/`nil` so a live run is never restarted.
+/// Listening while a module is pushed is by design, so visibility is not an
+/// input.
 enum IOSStartDecision {
     static func shouldStart(
         status: IOSAudioStatus?,
         permission: IOSAudioRecordPermission?,
-        isListenVisible: Bool,
         sceneActive: Bool
     ) -> Bool {
-        guard isListenVisible, sceneActive else { return false }
+        guard sceneActive else { return false }
         guard status == .idle || status == nil else { return false }
         switch permission {
         case .granted, .undetermined: return true

@@ -252,7 +252,6 @@ struct IOSListenScreen: View {
         if IOSStartDecision.shouldStart(
             status: state.iosAudio?.status,
             permission: state.iosAudio?.recordPermission,
-            isListenVisible: true,
             sceneActive: scenePhase == .active
         ) {
             state.start()

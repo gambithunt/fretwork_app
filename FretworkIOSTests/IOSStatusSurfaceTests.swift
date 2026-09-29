@@ -36,24 +36,22 @@ final class IOSStatusSurfaceTests: XCTestCase {
     }
 
     func testStartDecision() {
-        // idle + granted/undetermined + visible + active -> start (recovery / first-run).
+        // idle + granted/undetermined + active -> start (recovery / first-run).
         XCTAssertTrue(IOSStartDecision.shouldStart(
-            status: .idle, permission: .granted, isListenVisible: true, sceneActive: true))
+            status: .idle, permission: .granted, sceneActive: true))
         XCTAssertTrue(IOSStartDecision.shouldStart(
-            status: .idle, permission: .undetermined, isListenVisible: true, sceneActive: true))
+            status: .idle, permission: .undetermined, sceneActive: true))
         // denied -> the Open Settings surface owns recovery, never auto-start.
         XCTAssertFalse(IOSStartDecision.shouldStart(
-            status: .idle, permission: .denied, isListenVisible: true, sceneActive: true))
-        // hidden or backgrounded -> no.
+            status: .idle, permission: .denied, sceneActive: true))
+        // backgrounded -> no.
         XCTAssertFalse(IOSStartDecision.shouldStart(
-            status: .idle, permission: .granted, isListenVisible: false, sceneActive: true))
-        XCTAssertFalse(IOSStartDecision.shouldStart(
-            status: .idle, permission: .granted, isListenVisible: true, sceneActive: false))
+            status: .idle, permission: .granted, sceneActive: false))
         // a live run must never be restarted.
         XCTAssertFalse(IOSStartDecision.shouldStart(
-            status: .listening, permission: .granted, isListenVisible: true, sceneActive: true))
+            status: .listening, permission: .granted, sceneActive: true))
         XCTAssertFalse(IOSStartDecision.shouldStart(
-            status: .interrupted, permission: .granted, isListenVisible: true, sceneActive: true))
+            status: .interrupted, permission: .granted, sceneActive: true))
     }
 
     func testAppearanceCarriesTextTitleForEveryState() {
