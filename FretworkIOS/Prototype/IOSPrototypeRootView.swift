@@ -1,50 +1,43 @@
 import SwiftUI
+import UIKit
 
-/// Direction C shell: a `NavigationSplitView` whose sidebar mirrors the Mac's
-/// list — Listen plus the ten learning modules — with Settings as a sheet from
-/// the toolbar.
+/// Direction C shell, split by device idiom rather than size class.
 ///
-/// The visible selection is local list state; `AppState.selectedScreen` is
-/// kept in step with it so the detection gate and lazy sample-playback
-/// preparation stay wired exactly as on the Mac (`selectedScreen.didSet` calls
-/// both). The initial selection of `.listen` makes Listen the screen the app
-/// opens on (D-21), with the list one "back" away.
+/// - **iPhone** (D-21): a `NavigationStack` whose root is the list and whose
+///   path starts on `[.listen]`, so the app opens straight into Listen with the
+///   list one "back" away — in *both* orientations. A landscape iPhone is
+///   regular-width, so the split view would otherwise sit the sidebar beside
+///   the detail and eat ~40% of the neck.
+/// - **iPad**: a `NavigationSplitView` with the same list as a sidebar.
 ///
-/// **The list is static chrome and must stay that way (D-08).** It reads
-/// `selection` and nothing else — no detection state, no level, no chord — so
-/// an audio-rate read can never invalidate the whole sidebar.
+/// The visible screen is kept in step with `AppState.selectedScreen` so the
+/// detection gate and lazy sample-playback preparation stay wired exactly as
+/// on the Mac (`selectedScreen.didSet` calls both).
+///
+/// **The list is static chrome and must stay that way (D-08).** It reads the
+/// navigation state and nothing else — no detection state, no level, no chord —
+/// so an audio-rate read can never invalidate the whole sidebar.
 struct IOSPrototypeRootView: View {
     @State private var appState = AppState()
+    @State private var path: [AppScreen] = [.listen]
     @State private var selection: AppScreen? = .listen
     @State private var isShowingSettings = false
 
+    private var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                Section {
-                    row(for: .listen)
-                }
-                Section("Learn") {
-                    ForEach(LearningModule.allCases) { module in
-                        row(for: .module(module))
-                    }
-                }
+        Group {
+            if isPhone {
+                phoneShell
+            } else {
+                padShell
             }
-            .navigationTitle("Fretwork")
-            .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
-        } detail: {
-            detail
-                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
         }
         .sheet(isPresented: $isShowingSettings) {
             IOSSettingsSheet(state: appState)
         }
         .tint(NotePalette.accent)
         .preferredColorScheme(.dark)
-        .onChange(of: selection) { _, newSelection in
-            guard let newSelection else { return }
-            appState.selectedScreen = newSelection
-        }
         // The readout resets to neutral whenever the controller is actually
         // stopped (foreground/background, an interruption) rather than holding
         // the last note forever (D-15). Audio-rate neutral: fires once per
@@ -57,25 +50,91 @@ struct IOSPrototypeRootView: View {
         }
     }
 
+    // MARK: - iPhone (push)
+
+    private var phoneShell: some View {
+        NavigationStack(path: $path) {
+            phoneList
+                .navigationTitle("Fretwork")
+                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
+                .navigationDestination(for: AppScreen.self) { screen in
+                    detail(for: screen)
+                }
+        }
+        .onChange(of: path) { _, newPath in
+            appState.selectedScreen = newPath.last ?? .listen
+        }
+    }
+
+    private var phoneList: some View {
+        List {
+            Section {
+                NavigationLink(value: AppScreen.listen) {
+                    rowLabel(for: .listen)
+                }
+            }
+            Section("Learn") {
+                ForEach(LearningModule.allCases) { module in
+                    NavigationLink(value: AppScreen.module(module)) {
+                        rowLabel(for: .module(module))
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - iPad (split)
+
+    private var padShell: some View {
+        NavigationSplitView {
+            padList
+                .navigationTitle("Fretwork")
+        } detail: {
+            detail(for: selection ?? .listen)
+        }
+        .onChange(of: selection) { _, newSelection in
+            guard let newSelection else { return }
+            appState.selectedScreen = newSelection
+        }
+    }
+
+    private var padList: some View {
+        List(selection: $selection) {
+            Section {
+                rowLabel(for: .listen).tag(AppScreen.listen)
+            }
+            Section("Learn") {
+                ForEach(LearningModule.allCases) { module in
+                    rowLabel(for: .module(module)).tag(AppScreen.module(module))
+                }
+            }
+        }
+    }
+
+    // MARK: - Shared
+
     @ViewBuilder
-    private var detail: some View {
-        switch selection ?? .listen {
+    private func detail(for screen: AppScreen) -> some View {
+        switch screen {
         case .listen:
             IOSListenScreen(state: appState)
                 .navigationTitle("Listen")
                 .navigationBarTitleDisplayMode(.inline)
+                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
         case .module(.chords):
             IOSChordsScreen(state: appState)
                 .navigationTitle("Chords")
                 .navigationBarTitleDisplayMode(.inline)
+                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
         case .module(let module):
             IOSModulePlaceholder(module: module)
                 .navigationTitle(module.title)
                 .navigationBarTitleDisplayMode(.inline)
+                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
         }
     }
 
-    private func row(for screen: AppScreen) -> some View {
+    private func rowLabel(for screen: AppScreen) -> some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
                 Text(screen.title)
@@ -89,13 +148,11 @@ struct IOSPrototypeRootView: View {
         } icon: {
             Image(systemName: screen.symbol)
         }
-        .tag(screen)
     }
 }
 
 private extension View {
-    /// The gear button both the sidebar and the detail carry, opening the
-    /// Settings sheet.
+    /// The one gear button a screen carries, opening the Settings sheet.
     func fretworkSettingsToolbar(isShowingSettings: Binding<Bool>) -> some View {
         toolbar {
             ToolbarItem(placement: .topBarTrailing) {

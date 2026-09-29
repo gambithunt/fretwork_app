@@ -45,17 +45,27 @@ struct IOSListenScreen: View {
     // MARK: - Portrait
 
     private var portrait: some View {
-        VStack(spacing: 12) {
+        // Optical-centre placement (D-16 polish): a fixed 24pt gap under the
+        // status row, then the note group, then the remaining flexible space
+        // split 1 part above : 2 parts below the note group — three equal
+        // spacers put one share above and two below, so the note sits slightly
+        // higher than the geometric centre instead of sinking.
+        VStack(spacing: 0) {
             headerRow
             statusBanner
+            Color.clear.frame(height: 24)
             Spacer(minLength: 0)
             readout
             Spacer(minLength: 0)
+            Spacer(minLength: 0)
             inputLevel
+            Color.clear.frame(height: 12)
             history
+            Color.clear.frame(height: 12)
             rotateHint
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
     }
 
     // MARK: - Landscape
@@ -415,6 +425,7 @@ private struct IOSLandscapeTunerStrip: View {
 /// `InputLevelPanel` card is portrait-only).
 private struct IOSCompactLevelMeter: View {
     let level: Float
+    var barHeight: CGFloat = 4
 
     var body: some View {
         let normalized = InputLevelPanel.normalized(level)
@@ -431,27 +442,47 @@ private struct IOSCompactLevelMeter: View {
                 }
             }
         }
-        .frame(height: 4)
+        .frame(height: barHeight)
     }
 }
 
 /// Owns the level read, which lives in `display` in Notes mode and
 /// `chordDisplay` in Chords mode.
+/// Compact single-row level card (≈44pt): INPUT caption, one row of segments,
+/// and the dB figure. Replaces the Mac's 4-row dot-matrix `InputLevelPanel` on
+/// the portrait Listen screen. Still a leaf — it owns the level read.
 private struct IOSInputLevelLeaf: View {
     let state: AppState
     let mode: DetectionMode
 
     var body: some View {
-        switch mode {
-        case .notes:
-            InputLevelPanel(level: state.display.level)
-        case .chords:
-            InputLevelPanel(level: state.chordDisplay.level)
+        let level = mode == .notes ? state.display.level : state.chordDisplay.level
+        HStack(spacing: 12) {
+            Text("INPUT")
+                .font(.caption2.weight(.semibold))
+                .tracking(1.4)
+                .foregroundStyle(.secondary)
+            IOSCompactLevelMeter(level: level, barHeight: 20)
+            Text(String(format: "%.0f", InputLevelPanel.decibels(level)))
+                .font(.system(size: 15, weight: .bold, design: .monospaced))
+                .monospacedDigit()
+            Text("dB")
+                .font(.caption2.weight(.semibold))
+                .tracking(1.2)
+                .foregroundStyle(.secondary)
         }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+        .frame(maxWidth: .infinity)
+        .glassCard(cornerRadius: 14, fill: 0.035)
     }
 }
 
 /// Owns the history read (notes or chords).
+/// The RECENT strip as a native horizontally scrolling row. The clear button
+/// sits *outside* the scroll view at the trailing edge, so it stays reachable
+/// no matter how many chips accumulate, and the chips never clip. Owns the
+/// history read.
 private struct IOSHistoryLeaf: View {
     let state: AppState
     let mode: DetectionMode
@@ -459,26 +490,66 @@ private struct IOSHistoryLeaf: View {
     var body: some View {
         switch mode {
         case .notes:
-            HistoryStrip(
-                history: state.noteHistory,
+            historyRow(
+                entries: state.noteHistory,
                 pinnedID: state.pinnedNoteHistoryID,
                 label: { "\($0.note.name)\($0.note.octave)" },
                 tint: { NotePalette.color(for: $0.note.name) },
-                noun: "note",
                 onSelect: { state.pinnedNoteHistoryID = $0 },
                 onClear: { state.clearNoteHistory() }
             )
         case .chords:
-            HistoryStrip(
-                history: state.chordHistory,
+            historyRow(
+                entries: state.chordHistory,
                 pinnedID: state.pinnedChordHistoryID,
                 label: { $0.match.name },
                 tint: { NotePalette.color(for: $0.match.root) },
-                noun: "chord",
                 onSelect: { state.pinnedChordHistoryID = $0 },
                 onClear: { state.clearChordHistory() }
             )
         }
+    }
+
+    private func historyRow<Entry>(
+        entries: [Entry],
+        pinnedID: UUID?,
+        label: @escaping (Entry) -> String,
+        tint: @escaping (Entry) -> Color,
+        onSelect: @escaping (UUID?) -> Void,
+        onClear: @escaping () -> Void
+    ) -> some View where Entry: Identifiable, Entry.ID == UUID {
+        HStack(spacing: 12) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(entries) { entry in
+                        let isPinned = entry.id == pinnedID
+                        Button {
+                            onSelect(isPinned ? nil : entry.id)
+                        } label: {
+                            Text(label(entry))
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 14)
+                                .frame(height: 32)
+                                .background(tint(entry), in: Capsule())
+                                .overlay(Capsule().strokeBorder(.white.opacity(isPinned ? 0.9 : 0), lineWidth: 2))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            if !entries.isEmpty {
+                Button(action: onClear) {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.small)
+                .accessibilityLabel("Clear history")
+            }
+        }
+        .frame(height: 44)
     }
 }
 
