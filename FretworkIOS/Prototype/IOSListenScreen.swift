@@ -48,10 +48,11 @@ struct IOSListenScreen: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 12) {
-                        detectionModePicker
-                        gearButton
-                    }
+                    detectionModePicker
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                ToolbarItem(placement: .topBarTrailing) {
+                    gearButton
                 }
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -240,15 +241,20 @@ private struct IOSLandscapeStatusPill: View {
         let normalized = InputLevelPanel.normalized(state.display.level)
         let scale = reduceMotion ? 1.0 : 1.0 + normalized * 0.4
 
-        HStack(spacing: 8) {
+        // A `Label` with `.titleAndIcon` rather than a bare HStack: iOS 26
+        // collapses toolbar items to icon-only unless the label style
+        // explicitly keeps the title.
+        Label {
+            Text(text)
+        } icon: {
             Circle()
                 .fill(tint)
                 .frame(width: 6, height: 6)
                 .scaleEffect(scale)
                 .shadow(color: tint.opacity(0.9), radius: 4)
-            Text(text)
-                .font(.caption.weight(.semibold))
         }
+        .labelStyle(.titleAndIcon)
+        .font(.caption.weight(.semibold))
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.white.opacity(0.06), in: Capsule())
@@ -362,6 +368,7 @@ private struct IOSNotesTunerReadout: View {
 
             TunerGauge(displayCents: note?.cents ?? 0, isActive: note != nil)
                 .frame(height: 54)
+                .padding(.top, 8)
 
             HStack(spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
