@@ -35,9 +35,42 @@ final class IOSStatusSurfaceTests: XCTestCase {
         XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: nil).title, "Stopped")
     }
 
+    func testStartDecision() {
+        // idle + granted/undetermined + visible + active -> start (recovery / first-run).
+        XCTAssertTrue(IOSStartDecision.shouldStart(
+            status: .idle, permission: .granted, isListenVisible: true, sceneActive: true))
+        XCTAssertTrue(IOSStartDecision.shouldStart(
+            status: .idle, permission: .undetermined, isListenVisible: true, sceneActive: true))
+        // denied -> the Open Settings surface owns recovery, never auto-start.
+        XCTAssertFalse(IOSStartDecision.shouldStart(
+            status: .idle, permission: .denied, isListenVisible: true, sceneActive: true))
+        // hidden or backgrounded -> no.
+        XCTAssertFalse(IOSStartDecision.shouldStart(
+            status: .idle, permission: .granted, isListenVisible: false, sceneActive: true))
+        XCTAssertFalse(IOSStartDecision.shouldStart(
+            status: .idle, permission: .granted, isListenVisible: true, sceneActive: false))
+        // a live run must never be restarted.
+        XCTAssertFalse(IOSStartDecision.shouldStart(
+            status: .listening, permission: .granted, isListenVisible: true, sceneActive: true))
+        XCTAssertFalse(IOSStartDecision.shouldStart(
+            status: .interrupted, permission: .granted, isListenVisible: true, sceneActive: true))
+    }
+
+    func testAppearanceCarriesTextTitleForEveryState() {
+        // Colour is never the only cue: every appearance carries a non-empty
+        // text title alongside its tint (D-09).
+        let statuses: [IOSAudioStatus?] = [
+            .listening, .starting, .interrupted, .permissionDenied, .failed("x"), .idle, nil
+        ]
+        for status in statuses {
+            XCTAssertFalse(
+                IOSStatusAppearanceMapper.appearance(for: status).title.isEmpty,
+                "appearance for \(String(describing: status)) must carry a text title"
+            )
+        }
+    }
+
     func testAppearanceTintsUseColourAsAReinforcementOnly() {
-        // Colour is never the only cue: every appearance carries a text title,
-        // and the tints below only reinforce it (D-09).
         XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .listening).tint, .green)
         XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .interrupted).tint, .orange)
         XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .permissionDenied).tint, .red)

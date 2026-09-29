@@ -19,6 +19,7 @@ struct IOSListenScreen: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
@@ -44,19 +45,13 @@ struct IOSListenScreen: View {
             }
         }
         .task {
-            // Snapshot captures skip the real audio session (the simulator's
-            // mic permission prompt would cover the chrome).
-            if IOSSnapshot.shouldSkipAudioSession { return }
-            // Start listening once, on first appear. A later re-appear (after
-            // browsing a module) must not restart the engine — that would
-            // re-prompt for the mic and re-negotiate the route. The controller
-            // status tells us whether it is already running.
-            switch state.iosAudio?.status {
-            case .idle, nil:
-                state.start()
-            default:
-                break
-            }
+            attemptStartIfIdle()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Recovery (D-10): after granting in Settings, or an interruption
+            // that ends without shouldResume, the controller sits .idle; the
+            // returning .active re-arms it.
+            if newPhase == .active { attemptStartIfIdle() }
         }
     }
 
@@ -71,6 +66,7 @@ struct IOSListenScreen: View {
         VStack(spacing: 0) {
             headerRow
             statusBanner
+            startListeningControl
             Color.clear.frame(height: 24)
             Spacer(minLength: 0)
             readout
@@ -92,6 +88,7 @@ struct IOSListenScreen: View {
         VStack(spacing: 0) {
             landscapeTopBar
             statusBanner
+            startListeningControl
             IOSBoardLeaf(state: state)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -244,6 +241,44 @@ struct IOSListenScreen: View {
     private func openSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
+        }
+    }
+
+    /// Start once on first appear, and re-arm after a background/foreground
+    /// cycle that left the controller idle (permission grant, an interruption
+    /// without shouldResume). Snapshot captures never touch the real session.
+    private func attemptStartIfIdle() {
+        guard !IOSSnapshot.shouldSkipAudioSession else { return }
+        if IOSStartDecision.shouldStart(
+            status: state.iosAudio?.status,
+            permission: state.iosAudio?.recordPermission,
+            isListenVisible: true,
+            sceneActive: scenePhase == .active
+        ) {
+            state.start()
+        }
+    }
+
+    /// An explicit recovery path in the `.idle` state, so a stopped listener
+    /// never depends on scene re-activation alone.
+    @ViewBuilder
+    private var startListeningControl: some View {
+        if IOSSnapshot.effectiveStatus(state.iosAudio?.status) == .idle {
+            HStack(spacing: 12) {
+                Text("Listening is stopped.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Start listening") {
+                    state.start()
+                }
+                .buttonStyle(.glassProminent)
+                .tint(NotePalette.accent)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+            .accessibilityElement(children: .combine)
         }
     }
 }

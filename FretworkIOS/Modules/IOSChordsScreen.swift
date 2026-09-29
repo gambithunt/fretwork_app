@@ -70,7 +70,7 @@ private struct IOSChordsLandscape: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
         .sheet(isPresented: $showsDrawer) {
-            IOSChordsDrawer(model: model)
+            IOSChordsDrawer(state: state, model: model)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
@@ -137,11 +137,29 @@ private struct IOSChordsLandscape: View {
 // MARK: - Drawer
 
 private struct IOSChordsDrawer: View {
+    let state: AppState
     let model: ChordsModuleModel
 
     private var positionOfCount: String {
         guard let index = model.positionIndex else { return "—" }
         return "\(index + 1) of \(model.voicings.count)"
+    }
+
+    /// The "silently mute" guard (CLAUDE.md): strumming is a no-op until the
+    /// sample library is decoded and a player is attached, so say so instead of
+    /// letting the Strum button fail silently.
+    @ViewBuilder
+    private var playbackNotice: some View {
+        if let error = state.samplePlaybackError {
+            Label("The note library could not be loaded. \(error)", systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if !state.isSamplePlaybackReady {
+            Label("Notes will not sound until audio is ready.", systemImage: "speaker.slash.fill")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
     }
 
     var body: some View {
@@ -172,6 +190,8 @@ private struct IOSChordsDrawer: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
+                playbackNotice
+
                 HStack(spacing: 12) {
                     Button {
                         model.strum()
@@ -181,7 +201,7 @@ private struct IOSChordsDrawer: View {
                     }
                     .buttonStyle(.glassProminent)
                     .tint(NotePalette.accent)
-                    .disabled(model.currentVoicing == nil)
+                    .disabled(model.currentVoicing == nil || !state.isSamplePlaybackReady)
 
                     Button("Stop") { model.stop() }
                         .buttonStyle(.glass)

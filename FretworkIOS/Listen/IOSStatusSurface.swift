@@ -40,3 +40,25 @@ enum IOSStatusAppearanceMapper {
         }
     }
 }
+
+/// Whether the Listen screen should issue a start right now.
+///
+/// Pure decision, testable without a controller or view. `.undetermined` still
+/// starts (that is the first-run system prompt); `.denied` never starts from
+/// here — the explicit Open Settings surface owns recovery until the user
+/// grants. Status must be `.idle`/`nil` so a live run is never restarted.
+enum IOSStartDecision {
+    static func shouldStart(
+        status: IOSAudioStatus?,
+        permission: IOSAudioRecordPermission?,
+        isListenVisible: Bool,
+        sceneActive: Bool
+    ) -> Bool {
+        guard isListenVisible, sceneActive else { return false }
+        guard status == .idle || status == nil else { return false }
+        switch permission {
+        case .granted, .undetermined: return true
+        case .denied, nil: return false
+        }
+    }
+}

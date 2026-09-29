@@ -38,6 +38,10 @@ final class IOSAudioController: AudioControlling {
     // MARK: - iOS-only observable surface
 
     private(set) var status: IOSAudioStatus = .idle
+    /// The current microphone permission, read from the session seam. Exposed
+    /// so the Listen screen's start-decision logic can tell `.idle`-after-grant
+    /// apart from `.idle`-after-denial without reaching into the session.
+    var recordPermission: IOSAudioRecordPermission { session.recordPermission }
     /// True once the bundled 138-note library has been decoded.
     var isSampleLibraryLoaded: Bool { sampleLibrary != nil }
     var isSamplePlaybackReady: Bool { run?.player != nil && (run?.graph.isRunning ?? false) }

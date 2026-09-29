@@ -11,6 +11,7 @@ enum IOSSnapshotHarness {
     enum Scenario: String, CaseIterable {
         case listenPortrait = "-IOSSnapshotListenPortrait"
         case listenLandscape = "-IOSSnapshotListenLandscape"
+        case listenIdle = "-IOSSnapshotListenIdle"
         case chordsLandscape = "-IOSSnapshotChordsLandscape"
         case chordsDrawer = "-IOSSnapshotChordsDrawer"
         case settings = "-IOSSnapshotSettings"
@@ -31,6 +32,7 @@ enum IOSSnapshotHarness {
     static var forcedStatus: IOSAudioStatus? {
         switch scenario {
         case .permissionDenied: return .permissionDenied
+        case .listenIdle: return .idle
         case .none: return nil
         default: return .listening
         }
