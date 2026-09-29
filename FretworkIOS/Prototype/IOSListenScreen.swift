@@ -5,8 +5,8 @@ import SwiftUI
 ///
 /// Portrait is a pure tuner (D-16): no fretboard — just the note/chord
 /// readout, cents·Hz, input level, history and a quiet rotate hint. Landscape
-/// reveals the full 22-fret neck with a compact tuner strip above it (D-17,
-/// D-22).
+/// is a single native chrome row (back, Listening pill, live-note pill,
+/// segmented, gear) over the full 22-fret neck (D-17, D-22).
 ///
 /// **Audio-rate reads live only in the small leaf views below.** The parent
 /// body reads `detectionMode` (changes on tap), orientation and the
@@ -14,8 +14,10 @@ import SwiftUI
 /// history arrays (D-08).
 struct IOSListenScreen: View {
     @Bindable var state: AppState
+    @Binding var isShowingSettings: Bool
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
@@ -28,6 +30,35 @@ struct IOSListenScreen: View {
             }
         }
         .background(NotePalette.backdrop)
+        .navigationBarTitleDisplayMode(.inline)
+        // Landscape hides the "Listen" title: the centred live-note pill
+        // replaces it, and the status pill / segmented control join the native
+        // back button and gear in one row.
+        .navigationTitle(isLandscape ? "" : "Listen")
+        .toolbar {
+            if isLandscape {
+                ToolbarItem(placement: .topBarLeading) {
+                    IOSLandscapeStatusPill(state: state)
+                }
+                ToolbarItem(placement: .principal) {
+                    if state.detectionMode == .notes {
+                        IOSLandscapeNotePill(state: state)
+                    } else {
+                        IOSLandscapeChordPill(state: state)
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 12) {
+                        detectionModePicker
+                        gearButton
+                    }
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    gearButton
+                }
+            }
+        }
         .task {
             // Start listening once, on first appear. A later re-appear (after
             // browsing a module) must not restart the engine — that would
@@ -71,10 +102,8 @@ struct IOSListenScreen: View {
     // MARK: - Landscape
 
     private var landscape: some View {
-        VStack(spacing: 10) {
-            headerRow
+        VStack(spacing: 0) {
             statusBanner
-            IOSLandscapeTunerStrip(state: state, mode: state.detectionMode)
             IOSBoardLeaf(state: state)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -87,15 +116,28 @@ struct IOSListenScreen: View {
         HStack {
             IOSStatusPill(state: state)
             Spacer()
-            Picker("Detection mode", selection: $state.detectionMode) {
-                ForEach(DetectionMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 150)
+            detectionModePicker
         }
+    }
+
+    private var detectionModePicker: some View {
+        Picker("Detection mode", selection: $state.detectionMode) {
+            ForEach(DetectionMode.allCases, id: \.self) { mode in
+                Text(mode.rawValue).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 150)
+    }
+
+    private var gearButton: some View {
+        Button {
+            isShowingSettings = true
+        } label: {
+            Image(systemName: "gearshape")
+        }
+        .accessibilityLabel("Settings")
     }
 
     @ViewBuilder
@@ -154,11 +196,23 @@ struct IOSListenScreen: View {
 
 /// The event-driven listening status, as a small pill. Reads the iOS
 /// controller's status — not the audio-rate `display`.
+/// Maps the iOS controller status to the pill's text and tint.
+private func iosStatusAppearance(_ status: IOSAudioStatus?) -> (String, Color) {
+    switch status {
+    case .listening: ("Listening", .green)
+    case .starting: ("Starting…", .orange)
+    case .interrupted: ("Paused", .orange)
+    case .permissionDenied: ("Mic off", .red)
+    case .failed: ("Audio error", .red)
+    case .idle, nil: ("Stopped", .secondary)
+    }
+}
+
 private struct IOSStatusPill: View {
     let state: AppState
 
     var body: some View {
-        let (text, tint) = Self.status(for: state.iosAudio?.status)
+        let (text, tint) = iosStatusAppearance(state.iosAudio?.status)
         HStack(spacing: 8) {
             Circle()
                 .fill(tint)
@@ -173,16 +227,102 @@ private struct IOSStatusPill: View {
         .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
         .animation(.easeInOut(duration: 0.2), value: text)
     }
+}
 
-    private static func status(for status: IOSAudioStatus?) -> (String, Color) {
-        switch status {
-        case .listening: ("Listening", .green)
-        case .starting: ("Starting…", .orange)
-        case .interrupted: ("Paused", .orange)
-        case .permissionDenied: ("Mic off", .red)
-        case .failed: ("Audio error", .red)
-        case .idle, nil: ("Stopped", .secondary)
+/// Landscape status pill: the Listening dot pulses subtly with the live input
+/// level (leaf view). Under Reduce Motion the dot stays static.
+private struct IOSLandscapeStatusPill: View {
+    let state: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let (text, tint) = iosStatusAppearance(state.iosAudio?.status)
+        let normalized = InputLevelPanel.normalized(state.display.level)
+        let scale = reduceMotion ? 1.0 : 1.0 + normalized * 0.4
+
+        HStack(spacing: 8) {
+            Circle()
+                .fill(tint)
+                .frame(width: 6, height: 6)
+                .scaleEffect(scale)
+                .shadow(color: tint.opacity(0.9), radius: 4)
+            Text(text)
+                .font(.caption.weight(.semibold))
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.white.opacity(0.06), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: normalized)
+        .animation(.easeInOut(duration: 0.2), value: text)
+    }
+}
+
+/// Centred live-note pill for the landscape nav bar (Notes mode): note name +
+/// octave in a pitch-class-tinted capsule with cents inline — green when
+/// |cents| ≤ 5, neutral otherwise, an em-dash when silent. Owns the `display`
+/// read.
+private struct IOSLandscapeNotePill: View {
+    let state: AppState
+
+    var body: some View {
+        let display = state.display
+        let note = display.note
+        let tint = note.map { NotePalette.color(for: $0.name) } ?? Color.white.opacity(0.14)
+        let cents = note?.cents ?? 0
+        let centsColor: Color = abs(cents) <= 5 ? .green : .secondary
+
+        HStack(spacing: 6) {
+            if let note {
+                Text("\(note.name)\(note.octave)")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(String(format: "%+.0f¢", cents))
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(centsColor)
+            } else {
+                Text("—")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(tint.opacity(0.28)))
+        .overlay(Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 1))
+        .contentTransition(.numericText())
+        .animation(.easeInOut(duration: 0.2), value: note?.midiNote)
+    }
+}
+
+/// Centred live-note pill for the landscape nav bar (Chords mode): the chord
+/// name in a root-tinted capsule, an em-dash when silent. Owns the
+/// `chordDisplay` read.
+private struct IOSLandscapeChordPill: View {
+    let state: AppState
+
+    var body: some View {
+        let chord = state.chordDisplay.chord
+        let tint = chord.map { NotePalette.color(for: $0.root) } ?? Color.white.opacity(0.14)
+
+        HStack(spacing: 6) {
+            if let chord {
+                Text(chord.name)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            } else {
+                Text("—")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(tint.opacity(0.28)))
+        .overlay(Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 1))
+        .animation(.easeInOut(duration: 0.2), value: chord?.name)
     }
 }
 
@@ -300,129 +440,9 @@ private struct IOSChordsTunerReadout: View {
     }
 }
 
-/// The compact horizontal tuner used in landscape. Still one leaf: it owns the
-/// `display` / `chordDisplay` reads it draws.
-private struct IOSLandscapeTunerStrip: View {
-    let state: AppState
-    let mode: DetectionMode
-
-    var body: some View {
-        Group {
-            switch mode {
-            case .notes: notesStrip
-            case .chords: chordsStrip
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .frame(height: 64)
-        .frame(maxWidth: .infinity)
-        .glassCard(cornerRadius: 16)
-    }
-
-    @ViewBuilder
-    private var notesStrip: some View {
-        let display = state.display
-        let note = display.note
-        let color = note.map { NotePalette.color(for: $0.name) } ?? Color.white.opacity(0.14)
-
-        HStack(spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(note?.name ?? "—")
-                    .font(.system(size: 40, weight: .black))
-                    .tracking(-2)
-                if let note {
-                    Text("\(note.octave)")
-                        .font(.system(size: 18, weight: .bold))
-                }
-            }
-            .foregroundStyle(color)
-            .padding(.horizontal, 16)
-            .frame(height: 44)
-            .background(Capsule().fill(color.opacity(0.25)))
-            .overlay(Capsule().strokeBorder(color.opacity(0.4), lineWidth: 1))
-            .animation(.easeInOut(duration: 0.2), value: note?.midiNote)
-
-            TunerGauge(displayCents: note?.cents ?? 0, isActive: note != nil)
-                .frame(height: 44)
-                .frame(maxWidth: .infinity)
-
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 8) {
-                    Text(note.map { String(format: "%+.0f", $0.cents) } ?? "—")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    Text("CENTS")
-                        .font(.caption2.weight(.semibold))
-                        .tracking(1.2)
-                        .foregroundStyle(.secondary)
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Text(display.frequency.map { String(format: "%.1f", $0) } ?? "—")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    Text("HZ")
-                        .font(.caption2.weight(.semibold))
-                        .tracking(1.2)
-                        .foregroundStyle(.secondary)
-                }
-                IOSCompactLevelMeter(level: display.level)
-            }
-            .frame(width: 210)
-        }
-    }
-
-    @ViewBuilder
-    private var chordsStrip: some View {
-        let chord = state.chordDisplay.chord
-        let color = chord.map { NotePalette.color(for: $0.root) } ?? Color.white.opacity(0.14)
-
-        HStack(spacing: 14) {
-            Text(chord?.name ?? "—")
-                .font(.system(size: 36, weight: .black))
-                .tracking(-2)
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
-                .foregroundStyle(color)
-                .padding(.horizontal, 16)
-                .frame(height: 44)
-                .background(Capsule().fill(color.opacity(0.25)))
-                .overlay(Capsule().strokeBorder(color.opacity(0.4), lineWidth: 1))
-                .animation(.easeInOut(duration: 0.2), value: chord?.name)
-
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Text("CONFIDENCE")
-                        .font(.caption2.weight(.semibold))
-                        .tracking(1.2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(chord.map { "\(Int(($0.confidence * 100).rounded()))%" } ?? "—")
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
-                }
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.1))
-                        Capsule().fill(color)
-                            .frame(width: proxy.size.width * CGFloat(chord?.confidence ?? 0))
-                    }
-                }
-                .frame(height: 4)
-            }
-            .frame(maxWidth: .infinity)
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text("INPUT")
-                    .font(.caption2.weight(.semibold))
-                    .tracking(1.2)
-                    .foregroundStyle(.secondary)
-                IOSCompactLevelMeter(level: state.chordDisplay.level)
-            }
-            .frame(width: 160)
-        }
-    }
-}
-
-/// A tiny segmented level bar for the landscape strip (the full
-/// `InputLevelPanel` card is portrait-only).
+/// A tiny segmented level bar shared by the compact meters.
+/// (`InputLevelPanel` is the Mac's 4-row dot matrix; this is the single-row
+/// bar both the portrait level card and any compact readout draw.)
 private struct IOSCompactLevelMeter: View {
     let level: Float
     var barHeight: CGFloat = 4

@@ -117,10 +117,7 @@ struct IOSPrototypeRootView: View {
     private func detail(for screen: AppScreen) -> some View {
         switch screen {
         case .listen:
-            IOSListenScreen(state: appState)
-                .navigationTitle("Listen")
-                .navigationBarTitleDisplayMode(.inline)
-                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
+            IOSListenScreen(state: appState, isShowingSettings: $isShowingSettings)
         case .module(.chords):
             IOSChordsScreen(state: appState)
                 .navigationTitle("Chords")
