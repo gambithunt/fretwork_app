@@ -156,9 +156,15 @@ private struct IOSChordsDrawer: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Chord")
                         .font(.headline)
-                    HStack(spacing: 12) {
-                        familyPicker
-                        formulaPicker
+                    VStack(spacing: 12) {
+                        LabeledContent("Family") {
+                            familyPicker
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        LabeledContent("Chord") {
+                            formulaPicker
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
                     }
                 }
 
