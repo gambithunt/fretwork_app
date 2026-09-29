@@ -34,14 +34,19 @@ struct IOSListenScreen: View {
         .background(NotePalette.backdrop)
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(isLandscape ? "" : "Listen")
-        // Landscape hides the system nav bar entirely and draws the single
-        // chrome row itself as content (native Liquid Glass pills), so the
-        // toolbar's icon-collapse / glass-group merging cannot touch it.
-        // Portrait keeps the normal nav bar with the gear in its toolbar.
-        .toolbar(isLandscape ? .hidden : .automatic, for: .navigationBar)
+        // Landscape keeps the nav bar PRESENT (so popping back to the list
+        // never toggles bar visibility and re-shoves the list) but renders it
+        // empty and transparent: no back button, no title, no system items,
+        // no background. The custom glass row is drawn as content inside that
+        // same band via `.ignoresSafeArea(.container, edges: .top)` below, so
+        // the board's position does not change.
+        .navigationBarBackButtonHidden(isLandscape)
+        .toolbarBackgroundVisibility(isLandscape ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                gearButton
+            if !isLandscape {
+                ToolbarItem(placement: .topBarTrailing) {
+                    gearButton
+                }
             }
         }
         .task {
@@ -92,6 +97,7 @@ struct IOSListenScreen: View {
             IOSBoardLeaf(state: state)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .ignoresSafeArea(.container, edges: .top)
         .padding(.top, 12)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)

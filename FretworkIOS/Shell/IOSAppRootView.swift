@@ -21,9 +21,17 @@ struct IOSAppRootView: View {
     @State private var selection: AppScreen? = .listen
     @State private var isShowingSettings = IOSSnapshot.showsSettingsSheet
 
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
     private var navigationKind: IOSNavigationKind {
         IOSNavigation.kind(for: UIDevice.current.userInterfaceIdiom)
     }
+
+    /// Landscape on iPhone (compact height) — where the pushed Listen screen
+    /// renders its chrome in the (transparent) inline bar. The list's own bar
+    /// must be the same inline height there, or the pop transition toggles
+    /// between two bar heights and shoves the list down.
+    private var isPhoneLandscape: Bool { verticalSizeClass == .compact }
 
     var body: some View {
         Group {
@@ -39,6 +47,13 @@ struct IOSAppRootView: View {
         .preferredColorScheme(.dark)
         .task {
             IOSSnapshot.requestLandscapeIfNeeded()
+            if IOSSnapshot.schedulesPopBack {
+                try? await Task.sleep(for: .seconds(2))
+                NotificationCenter.default.post(name: IOSSnapshot.popBackNotificationName, object: nil)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: IOSSnapshot.popBackNotificationName)) { _ in
+            path = []
         }
         // The readout resets to neutral whenever the controller is actually
         // stopped (foreground/background, an interruption) rather than holding
@@ -57,8 +72,9 @@ struct IOSAppRootView: View {
     private var phoneShell: some View {
         NavigationStack(path: $path) {
             phoneList
-                .navigationTitle("Fretwork")
-                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings)
+                .navigationTitle(isPhoneLandscape ? "" : "Fretwork")
+                .navigationBarTitleDisplayMode(isPhoneLandscape ? .inline : .automatic)
+                .fretworkSettingsToolbar(isShowingSettings: $isShowingSettings, shows: !isPhoneLandscape)
                 .navigationDestination(for: AppScreen.self) { screen in
                     detail(for: screen)
                 }
@@ -70,6 +86,28 @@ struct IOSAppRootView: View {
 
     private var phoneList: some View {
         List {
+            if isPhoneLandscape {
+                // In landscape the nav bar is empty (it must match Listen's
+                // empty transparent bar so the pop never re-adds a title or
+                // trailing item and shifts the list), so the heading and
+                // Settings live here in the list content.
+                Section {
+                    HStack(spacing: 12) {
+                        Text("Fretwork")
+                            .font(.title.weight(.bold))
+                        Spacer()
+                        Button {
+                            isShowingSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .accessibilityLabel("Settings")
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
             Section {
                 NavigationLink(value: AppScreen.listen) {
                     rowLabel(for: .listen)
@@ -152,15 +190,17 @@ struct IOSAppRootView: View {
 
 private extension View {
     /// The one gear button a screen carries, opening the Settings sheet.
-    func fretworkSettingsToolbar(isShowingSettings: Binding<Bool>) -> some View {
+    func fretworkSettingsToolbar(isShowingSettings: Binding<Bool>, shows: Bool = true) -> some View {
         toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    isShowingSettings.wrappedValue = true
-                } label: {
-                    Image(systemName: "gearshape")
+            if shows {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingSettings.wrappedValue = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
                 }
-                .accessibilityLabel("Settings")
             }
         }
     }

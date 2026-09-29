@@ -49,4 +49,14 @@ enum IOSSnapshot {
         false
         #endif
     }
+
+    static var schedulesPopBack: Bool {
+        #if DEBUG
+        IOSSnapshotHarness.schedulesPopBack
+        #else
+        false
+        #endif
+    }
+
+    static let popBackNotificationName = Notification.Name("FretworkIOSSnapshotPopBack")
 }

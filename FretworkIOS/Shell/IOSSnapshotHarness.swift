@@ -12,6 +12,8 @@ enum IOSSnapshotHarness {
         case listenPortrait = "-IOSSnapshotListenPortrait"
         case listenLandscape = "-IOSSnapshotListenLandscape"
         case listenIdle = "-IOSSnapshotListenIdle"
+        case popBack = "-IOSSnapshotPopBack"
+        case list = "-IOSSnapshotList"
         case chordsLandscape = "-IOSSnapshotChordsLandscape"
         case chordsDrawer = "-IOSSnapshotChordsDrawer"
         case settings = "-IOSSnapshotSettings"
@@ -40,15 +42,21 @@ enum IOSSnapshotHarness {
 
     static var forcesLandscape: Bool {
         switch scenario {
-        case .listenLandscape, .chordsLandscape, .chordsDrawer: return true
+        case .listenLandscape, .popBack, .list, .chordsLandscape, .chordsDrawer: return true
         default: return false
         }
     }
+
+    /// Whether the harness should pop the navigation stack back to the list
+    /// ~2s after launch, so a run can capture the pop transition and the
+    /// settled list at fixed offsets.
+    static var schedulesPopBack: Bool { scenario == .popBack }
 
     /// The navigation stack's initial path.
     static var initialPath: [AppScreen] {
         switch scenario {
         case .chordsLandscape, .chordsDrawer: return [.module(.chords)]
+        case .list: return []
         default: return [.listen]
         }
     }
