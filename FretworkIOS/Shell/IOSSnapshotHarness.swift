@@ -30,6 +30,13 @@ enum IOSSnapshotHarness {
         case pentatonicLandscape = "-IOSSnapshotPentatonicLandscape"
         case pentatonicDrawer = "-IOSSnapshotPentatonicDrawer"
         case pentatonicGuided = "-IOSSnapshotPentatonicGuided"
+        case scalesLandscape = "-IOSSnapshotScalesLandscape"
+        case scalesDrawer = "-IOSSnapshotScalesDrawer"
+        case scalesGuided = "-IOSSnapshotScalesGuided"
+        case harmonizingLandscape = "-IOSSnapshotHarmonizingLandscape"
+        case harmonizingDrawer = "-IOSSnapshotHarmonizingDrawer"
+        case noteAssociationLandscape = "-IOSSnapshotNoteAssociationLandscape"
+        case noteAssociationDrawer = "-IOSSnapshotNoteAssociationDrawer"
         case circleLandscape = "-IOSSnapshotCircleLandscape"
         case circleDrawer = "-IOSSnapshotCircleDrawer"
         case settings = "-IOSSnapshotSettings"
@@ -66,6 +73,9 @@ enum IOSSnapshotHarness {
         case .triadsShapesLandscape, .triadsShapesDrawer,
              .triadsPathsLandscape, .triadsPathsDrawer, .triadsPathsGuided: return .triads
         case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided: return .pentatonic
+        case .scalesLandscape, .scalesDrawer, .scalesGuided: return .scales
+        case .harmonizingLandscape, .harmonizingDrawer: return .harmonizing
+        case .noteAssociationLandscape, .noteAssociationDrawer: return .noteAssociation
         case .circleLandscape, .circleDrawer: return .circle
         default: return nil
         }
@@ -81,6 +91,9 @@ enum IOSSnapshotHarness {
              .triadsShapesLandscape, .triadsShapesDrawer,
              .triadsPathsLandscape, .triadsPathsDrawer, .triadsPathsGuided,
              .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided,
+             .scalesLandscape, .scalesDrawer, .scalesGuided,
+             .harmonizingLandscape, .harmonizingDrawer,
+             .noteAssociationLandscape, .noteAssociationDrawer,
              .circleLandscape, .circleDrawer:
             return true
         default:
@@ -108,7 +121,8 @@ enum IOSSnapshotHarness {
     static var showsModuleDrawer: Bool {
         switch scenario {
         case .chordsDrawer, .intervalsDrawer, .notesDrawer, .octavesDrawer,
-             .triadsShapesDrawer, .triadsPathsDrawer, .pentatonicDrawer, .circleDrawer:
+             .triadsShapesDrawer, .triadsPathsDrawer, .pentatonicDrawer,
+             .scalesDrawer, .harmonizingDrawer, .noteAssociationDrawer, .circleDrawer:
             return true
         default: return false
         }
@@ -123,11 +137,11 @@ enum IOSSnapshotHarness {
         }
     }
 
-    /// Forces the Pentatonic landscape band into its guided-run form (D-27)
-    /// without running a real session: the Stop button and the "Next:" step
-    /// text render against a fixed, real note from the model's own box.
+    /// Forces a landscape band into its guided-run form (D-27) without running
+    /// a real session: the Stop button and the "Next:" step text render
+    /// against a fixed, real note from the model's own run.
     static var guidedRunActive: Bool {
-        scenario == .pentatonicGuided || scenario == .triadsPathsGuided
+        scenario == .pentatonicGuided || scenario == .triadsPathsGuided || scenario == .scalesGuided
     }
 
     static func effectiveStatus(_ actual: IOSAudioStatus?) -> IOSAudioStatus? {

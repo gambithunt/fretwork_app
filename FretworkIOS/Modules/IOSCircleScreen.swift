@@ -66,16 +66,18 @@ private struct IOSCircleLandscape: View {
             isFixedShapeModule: false,
             state: state,
             neck: { stage },
-            previousLabel: "Anticlockwise",
-            previousDisabled: false,
-            onPrevious: {
-                withAnimation(FretworkMotion.gravity) { model.step(by: -1) }
-            },
-            nextLabel: "Clockwise",
-            nextDisabled: false,
-            onNext: {
-                withAnimation(FretworkMotion.gravity) { model.step(by: 1) }
-            },
+            leadingAction: .step(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Anticlockwise",
+                disabled: false,
+                action: { withAnimation(FretworkMotion.gravity) { model.step(by: -1) } }
+            ),
+            trailingAction: .step(
+                systemImage: "chevron.right",
+                accessibilityLabel: "Clockwise",
+                disabled: false,
+                action: { withAnimation(FretworkMotion.gravity) { model.step(by: 1) } }
+            ),
             drawerTitle: "Key & labels",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {

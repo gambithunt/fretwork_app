@@ -78,16 +78,18 @@ private struct IOSChordsLandscape: View {
                     pulses: model.pulses
                 )
             },
-            previousLabel: "Previous position",
-            previousDisabled: isPrevDisabled,
-            onPrevious: {
-                withAnimation(FretworkMotion.gravity) { model.movePosition(by: -1) }
-            },
-            nextLabel: "Next position",
-            nextDisabled: isNextDisabled,
-            onNext: {
-                withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) }
-            },
+            leadingAction: .step(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Previous position",
+                disabled: isPrevDisabled,
+                action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: -1) } }
+            ),
+            trailingAction: .step(
+                systemImage: "chevron.right",
+                accessibilityLabel: "Next position",
+                disabled: isNextDisabled,
+                action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) } }
+            ),
             drawerTitle: "Chord & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {

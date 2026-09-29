@@ -156,6 +156,36 @@ final class IOSModuleLandscapeTests: XCTestCase {
         )
     }
 
+    // MARK: - Scales
+
+    func testScalesSubtitleNamesTheScaleAndDirection() {
+        // Scales has no positions; the subtitle says what the shape is and
+        // which way a Practise run walks it (D-26).
+        XCTAssertEqual(
+            IOSModuleLandscapeFormat.scalesSubtitle(scaleName: "C major", direction: .ascending),
+            "C major · Ascending"
+        )
+        XCTAssertEqual(
+            IOSModuleLandscapeFormat.scalesSubtitle(scaleName: "A natural minor", direction: .upDown),
+            "A natural minor · Up and down"
+        )
+    }
+
+    func testHarmonizingSubtitleNamesTheChordOfTheKey() {
+        // The example D-26 uses: the ii chord of C major.
+        XCTAssertEqual(
+            IOSModuleLandscapeFormat.harmonizingSubtitle(roman: "ii", chordName: "D minor"),
+            "ii · D minor"
+        )
+    }
+
+    func testNoteAssociationSubtitleNamesTheChordUnderneath() {
+        XCTAssertEqual(
+            IOSModuleLandscapeFormat.noteAssociationSubtitle(roman: "V", chordName: "G"),
+            "Over V · G"
+        )
+    }
+
     // MARK: - Guided-run step text (D-27)
 
     func testGuidedRunStepTextNamesNoteStringAndFret() {

@@ -10,6 +10,39 @@ enum IOSModuleBandMode: Equatable, Sendable {
     case guidedRun
 }
 
+/// One corner control of the normal bottom band.
+///
+/// A `nil` `title` renders the icon-only glass circle the ‹ › step arrows and
+/// the icon actions use (Notes' Clear/Play all, Triads Paths' play/stop); a
+/// non-nil `title` renders a labelled prominent button (Scales' ▶ Practise).
+/// `nil` corner slots are simply not drawn (Scales has no trailing control).
+struct IOSModuleBandAction {
+    let title: String?
+    let systemImage: String
+    let accessibilityLabel: String
+    let disabled: Bool
+    let action: () -> Void
+}
+
+extension IOSModuleBandAction {
+    /// The icon-only corner: the ‹ › step arrows and Notes'/Triads' icon
+    /// actions (D-26/D-22 translucent round buttons).
+    static func step(
+        systemImage: String,
+        accessibilityLabel: String,
+        disabled: Bool,
+        action: @escaping () -> Void
+    ) -> IOSModuleBandAction {
+        IOSModuleBandAction(
+            title: nil,
+            systemImage: systemImage,
+            accessibilityLabel: accessibilityLabel,
+            disabled: disabled,
+            action: action
+        )
+    }
+}
+
 enum IOSModuleBandDecision {
     /// Any non-idle guided-session state — count-in included — counts as a
     /// run: the player has already committed to it. Generic over the step type
@@ -89,6 +122,23 @@ enum IOSModuleLandscapeFormat {
         "\(key.name()) major"
     }
 
+    /// "C major · Ascending" — the scale and the direction a Practise run
+    /// walks it (D-26 has no positions for Scales, so direction is the only
+    /// thing that moves).
+    static func scalesSubtitle(scaleName: String, direction: ScalesModuleModel.Direction) -> String {
+        "\(scaleName) · \(direction == .ascending ? "Ascending" : "Up and down")"
+    }
+
+    /// "ii · D minor" — the chord of the key in focus, roman degree then name.
+    static func harmonizingSubtitle(roman: String, chordName: String) -> String {
+        "\(roman) · \(chordName)"
+    }
+
+    /// "Over V · G" — the chord underneath the layered neck.
+    static func noteAssociationSubtitle(roman: String, chordName: String) -> String {
+        "Over \(roman) · \(chordName)"
+    }
+
     /// "Next: D · B string fret 3" (D-27) — the note the hand is moving to.
     static func guidedRunStepText(next: GuidedScaleStep, tuning: Tuning = Tunings.standard) -> String {
         "Next: \(next.pitchClass.name()) · \(tuning.stringNames[next.string]) string fret \(next.fret)"
@@ -103,9 +153,10 @@ enum IOSModuleLandscapeFormat {
 /// controls plus a drawer button — or, during a guided run, Stop + the current
 /// step (D-27).
 ///
-/// Modules supply their own `neck` (almost always `FretboardBoardView`) and
-/// `drawer` (the sheet content); the chrome, spacing (D-22: 12pt top, 16pt
-/// side, 12pt bottom) and band behaviour live here once.
+/// Modules supply their own `neck` (almost always `FretboardBoardView`),
+/// `drawer` (the sheet content) and two optional `leadingAction`/`trailingAction`
+/// corners; the chrome, spacing (D-22: 12pt top, 16pt side, 12pt bottom) and
+/// band behaviour live here once.
 struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
     let title: String
     let subtitle: String
@@ -116,18 +167,8 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
     let state: AppState
     @ViewBuilder var neck: Neck
 
-    /// The corner buttons default to neck-navigation arrows (‹ ›); modules
-    /// whose corner action is not a step along the neck (Notes' Clear and
-    /// Play all, Triads Paths' play and stop) override the glyph.
-    var previousSystemImage = "chevron.left"
-    var nextSystemImage = "chevron.right"
-
-    let previousLabel: String
-    let previousDisabled: Bool
-    let onPrevious: () -> Void
-    let nextLabel: String
-    let nextDisabled: Bool
-    let onNext: () -> Void
+    let leadingAction: IOSModuleBandAction?
+    let trailingAction: IOSModuleBandAction?
 
     let drawerTitle: String
     let drawerSystemImage: String
@@ -200,11 +241,15 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
         HStack(spacing: 12) {
             switch bandMode {
             case .normal:
-                cornerButton(systemImage: previousSystemImage, label: previousLabel, disabled: previousDisabled, action: onPrevious)
+                if let leadingAction {
+                    bandActionButton(leadingAction)
+                }
                 Spacer(minLength: 0)
                 drawerHandle
                 Spacer(minLength: 0)
-                cornerButton(systemImage: nextSystemImage, label: nextLabel, disabled: nextDisabled, action: onNext)
+                if let trailingAction {
+                    bandActionButton(trailingAction)
+                }
             case .guidedRun:
                 Button(action: onStopGuidedRun) {
                     Label("Stop", systemImage: "stop.fill")
@@ -224,15 +269,26 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
         .frame(height: 48)
     }
 
-    private func cornerButton(systemImage: String, label: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
+    @ViewBuilder
+    private func bandActionButton(_ action: IOSModuleBandAction) -> some View {
+        if let title = action.title {
+            Button(action: action.action) {
+                Label(title, systemImage: action.systemImage)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(NotePalette.accent)
+            .disabled(action.disabled)
+            .accessibilityLabel(action.accessibilityLabel)
+        } else {
+            Button(action: action.action) {
+                Image(systemName: action.systemImage)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .disabled(action.disabled)
+            .accessibilityLabel(action.accessibilityLabel)
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .disabled(disabled)
-        .accessibilityLabel(label)
     }
 
     private var drawerHandle: some View {

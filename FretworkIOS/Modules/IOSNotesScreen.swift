@@ -73,14 +73,18 @@ private struct IOSNotesLandscape: View {
                     }
                 )
             },
-            previousSystemImage: "trash",
-            nextSystemImage: "play.fill",
-            previousLabel: "Clear all notes",
-            previousDisabled: model.placed.isEmpty,
-            onPrevious: { model.clearAll() },
-            nextLabel: "Play all notes",
-            nextDisabled: !canPlay,
-            onNext: { model.playAll() },
+            leadingAction: .step(
+                systemImage: "trash",
+                accessibilityLabel: "Clear all notes",
+                disabled: model.placed.isEmpty,
+                action: { model.clearAll() }
+            ),
+            trailingAction: .step(
+                systemImage: "play.fill",
+                accessibilityLabel: "Play all notes",
+                disabled: !canPlay,
+                action: { model.playAll() }
+            ),
             drawerTitle: "Notes & neck",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {

@@ -131,14 +131,18 @@ private struct IOSTriadsLandscape: View {
                     pulses: model.pulses
                 )
             },
-            previousSystemImage: previousSystemImage,
-            nextSystemImage: nextSystemImage,
-            previousLabel: previousLabel,
-            previousDisabled: previousDisabled,
-            onPrevious: previousAction,
-            nextLabel: nextLabel,
-            nextDisabled: nextDisabled,
-            onNext: nextAction,
+            leadingAction: .step(
+                systemImage: previousSystemImage,
+                accessibilityLabel: previousLabel,
+                disabled: previousDisabled,
+                action: previousAction
+            ),
+            trailingAction: .step(
+                systemImage: nextSystemImage,
+                accessibilityLabel: nextLabel,
+                disabled: nextDisabled,
+                action: nextAction
+            ),
             drawerTitle: "Triad & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {

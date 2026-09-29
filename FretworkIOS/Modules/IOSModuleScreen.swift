@@ -25,11 +25,10 @@ enum IOSModuleScreenTitle {
 
 /// Dispatches a pushed `LearningModule` to its iOS screen.
 ///
-/// Modules with a landscape scaffold (Notes, Intervals, Octaves, Triads,
-/// Chords, Pentatonic, Circle) use the Listen-style empty/transparent nav bar
-/// in landscape so the pop back to the list never toggles bar visibility. The
-/// rest still show the "coming soon" placeholder with a normal nav bar in
-/// both orientations.
+/// Every learning module now has a landscape scaffold, so the Listen-style
+/// empty/transparent nav bar applies in landscape for all ten — the pop back
+/// to the list never toggles bar visibility. Portrait keeps the normal bar
+/// (title + gear + back).
 struct IOSModuleScreen: View {
     let module: LearningModule
     @Bindable var state: AppState
@@ -39,10 +38,11 @@ struct IOSModuleScreen: View {
 
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
+    /// True for every module now that all ten have a scaffold screen.
     private var hasScaffold: Bool {
         switch module {
-        case .notes, .intervals, .octaves, .triads, .chords, .pentatonic, .circle: true
-        default: false
+        case .notes, .intervals, .octaves, .triads, .chords,
+             .pentatonic, .scales, .harmonizing, .noteAssociation, .circle: true
         }
     }
 
@@ -66,7 +66,9 @@ struct IOSModuleScreen: View {
         case .chords: IOSChordsScreen(state: state)
         case .pentatonic: IOSPentatonicScreen(state: state)
         case .circle: IOSCircleScreen(state: state)
-        default: IOSModulePlaceholder(module: module)
+        case .scales: IOSScalesScreen(state: state)
+        case .harmonizing: IOSHarmonizingScreen(state: state)
+        case .noteAssociation: IOSNoteAssociationScreen(state: state)
         }
     }
 }

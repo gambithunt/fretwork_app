@@ -51,16 +51,45 @@ The landscape view wraps the shared `IOSModuleLandscapeScaffold`
   leaf.
 - **neck** — `@ViewBuilder`; usually `FretboardBoardView`. Circle passes its
   ring + small triad board instead.
-- **bottom band** — leading/trailing ‹ › corner controls, centre drawer button,
-  or (during a guided run) ■ Stop + the current step (`bandMode`,
+- **bottom band** — two optional corner controls (`leadingAction`/
+  `trailingAction`, each an `IOSModuleBandAction`) around the centre drawer
+  button, or (during a guided run) ■ Stop + the current step (`bandMode`,
   `guidedRunStepText`, `onStopGuidedRun`).
+
+  The corner slots are one API, not two:
+
+  ```swift
+  // Position-stepping modules: the ‹ › arrows.
+  leadingAction: .step(systemImage: "chevron.left",
+                       accessibilityLabel: "Previous position",
+                       disabled: isPrevDisabled,
+                       action: { model.move(by: -1) }),
+  trailingAction: .step(systemImage: "chevron.right",
+                        accessibilityLabel: "Next position",
+                        disabled: isNextDisabled,
+                        action: { model.move(by: 1) }),
+
+  // Icon actions (Notes' Clear / Play all, Triads Paths' play / stop):
+  //   .step(systemImage: "trash", accessibilityLabel: "Clear all notes", ...)
+
+  // A labelled primary action with no trailing control (Scales' ▶ Practise):
+  leadingAction: IOSModuleBandAction(title: "Practise",
+                                     systemImage: "play.fill",
+                                     accessibilityLabel: "Practise",
+                                     disabled: ...,
+                                     action: { model.startGuided() }),
+  trailingAction: nil,
+  ```
+
+  A `nil` corner is simply not drawn; a non-nil `title` renders the labelled
+  prominent button, a `nil` title renders the icon-only glass circle.
 - **drawer** — a native Liquid Glass sheet (medium/large detents, system
   grabber). Content is your `@ViewBuilder`; the scaffold adds the dark scheme
   and accent tint.
 
-Then register the screen in `IOSModuleScreen.swift` (the dispatch switch and the
-`hasScaffold` list) — that is what turns the list's "coming soon" placeholder
-into the real module.
+Then register the screen in `IOSModuleScreen.swift` — add the `content` switch
+case (and, if it ever stops being exhaustive, the `hasScaffold` case). All ten
+modules now have a screen; the "coming soon" placeholder is unused.
 
 ## Rules that must not be re-litigated
 

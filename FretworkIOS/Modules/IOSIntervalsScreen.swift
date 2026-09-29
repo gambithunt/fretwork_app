@@ -82,16 +82,18 @@ private struct IOSIntervalsLandscape: View {
                     }
                 )
             },
-            previousLabel: "Previous interval",
-            previousDisabled: isPrevDisabled,
-            onPrevious: {
-                withAnimation(FretworkMotion.gravity) { model.selectInterval(Self.shiftedInterval(from: model.interval, by: -1)) }
-            },
-            nextLabel: "Next interval",
-            nextDisabled: isNextDisabled,
-            onNext: {
-                withAnimation(FretworkMotion.gravity) { model.selectInterval(Self.shiftedInterval(from: model.interval, by: 1)) }
-            },
+            leadingAction: .step(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Previous interval",
+                disabled: isPrevDisabled,
+                action: { withAnimation(FretworkMotion.gravity) { model.selectInterval(Self.shiftedInterval(from: model.interval, by: -1)) } }
+            ),
+            trailingAction: .step(
+                systemImage: "chevron.right",
+                accessibilityLabel: "Next interval",
+                disabled: isNextDisabled,
+                action: { withAnimation(FretworkMotion.gravity) { model.selectInterval(Self.shiftedInterval(from: model.interval, by: 1)) } }
+            ),
             drawerTitle: "Interval & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {

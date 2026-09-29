@@ -76,16 +76,18 @@ private struct IOSPentatonicLandscape: View {
                     pulses: model.pulses
                 )
             },
-            previousLabel: "Previous box",
-            previousDisabled: model.position == 0,
-            onPrevious: {
-                withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position - 1) }
-            },
-            nextLabel: "Next box",
-            nextDisabled: model.position == 4,
-            onNext: {
-                withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position + 1) }
-            },
+            leadingAction: .step(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Previous box",
+                disabled: model.position == 0,
+                action: { withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position - 1) } }
+            ),
+            trailingAction: .step(
+                systemImage: "chevron.right",
+                accessibilityLabel: "Next box",
+                disabled: model.position == 4,
+                action: { withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position + 1) } }
+            ),
             drawerTitle: "Scale & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {

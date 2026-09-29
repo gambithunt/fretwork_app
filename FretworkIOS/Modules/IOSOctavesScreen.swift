@@ -88,16 +88,18 @@ private struct IOSOctavesLandscape: View {
                     }
                 )
             },
-            previousLabel: "Previous position",
-            previousDisabled: isNavDisabled,
-            onPrevious: {
-                withAnimation(FretworkMotion.gravity) { model.moveAnchor(by: -1) }
-            },
-            nextLabel: "Next position",
-            nextDisabled: isNavDisabled,
-            onNext: {
-                withAnimation(FretworkMotion.gravity) { model.moveAnchor(by: 1) }
-            },
+            leadingAction: .step(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Previous position",
+                disabled: isNavDisabled,
+                action: { withAnimation(FretworkMotion.gravity) { model.moveAnchor(by: -1) } }
+            ),
+            trailingAction: .step(
+                systemImage: "chevron.right",
+                accessibilityLabel: "Next position",
+                disabled: isNavDisabled,
+                action: { withAnimation(FretworkMotion.gravity) { model.moveAnchor(by: 1) } }
+            ),
             drawerTitle: "Root & recall",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
