@@ -18,6 +18,7 @@ struct IOSListenScreen: View {
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
 
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
@@ -31,36 +32,22 @@ struct IOSListenScreen: View {
         }
         .background(NotePalette.backdrop)
         .navigationBarTitleDisplayMode(.inline)
-        // Landscape hides the "Listen" title: the centred live-note pill
-        // replaces it, and the status pill / segmented control join the native
-        // back button and gear in one row.
         .navigationTitle(isLandscape ? "" : "Listen")
+        // Landscape hides the system nav bar entirely and draws the single
+        // chrome row itself as content (native Liquid Glass pills), so the
+        // toolbar's icon-collapse / glass-group merging cannot touch it.
+        // Portrait keeps the normal nav bar with the gear in its toolbar.
+        .toolbar(isLandscape ? .hidden : .automatic, for: .navigationBar)
         .toolbar {
-            if isLandscape {
-                ToolbarItem(placement: .topBarLeading) {
-                    IOSLandscapeStatusPill(state: state)
-                }
-                ToolbarItem(placement: .principal) {
-                    if state.detectionMode == .notes {
-                        IOSLandscapeNotePill(state: state)
-                    } else {
-                        IOSLandscapeChordPill(state: state)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    detectionModePicker
-                }
-                ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                ToolbarItem(placement: .topBarTrailing) {
-                    gearButton
-                }
-            } else {
-                ToolbarItem(placement: .topBarTrailing) {
-                    gearButton
-                }
+            ToolbarItem(placement: .topBarTrailing) {
+                gearButton
             }
         }
         .task {
+            // Screenshot mode skips the real audio session (the simulator's mic
+            // permission prompt would cover the chrome); the status pill is
+            // overridden to "Listening" below for the layout capture.
+            if protoScreenshotMode() { return }
             // Start listening once, on first appear. A later re-appear (after
             // browsing a module) must not restart the engine — that would
             // re-prompt for the mic and re-negotiate the route. The controller
@@ -104,6 +91,7 @@ struct IOSListenScreen: View {
 
     private var landscape: some View {
         VStack(spacing: 0) {
+            landscapeTopBar
             statusBanner
             IOSBoardLeaf(state: state)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -111,6 +99,56 @@ struct IOSListenScreen: View {
         .padding(.top, 12)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
+    }
+
+    /// The single landscape chrome row, drawn as content (not toolbar items).
+    /// The glass container groups the pills; an HStack inside keeps them on one
+    /// horizontal line with explicit gaps so no pill shares another's glass.
+    private var landscapeTopBar: some View {
+        GlassEffectContainer(spacing: 12) {
+            HStack(spacing: 12) {
+                landscapeBackButton
+                IOSLandscapeListeningPill(state: state)
+                Spacer(minLength: 0)
+                liveNotePill
+                Spacer(minLength: 0)
+                detectionModePicker
+                landscapeGearButton
+            }
+        }
+    }
+
+    private var landscapeBackButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel("Back")
+    }
+
+    private var landscapeGearButton: some View {
+        Button {
+            isShowingSettings = true
+        } label: {
+            Image(systemName: "gearshape")
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .accessibilityLabel("Settings")
+    }
+
+    @ViewBuilder
+    private var liveNotePill: some View {
+        if state.detectionMode == .notes {
+            IOSLandscapeNotePill(state: state)
+        } else {
+            IOSLandscapeChordPill(state: state)
+        }
     }
 
     private var headerRow: some View {
@@ -197,15 +235,27 @@ struct IOSListenScreen: View {
 
 /// The event-driven listening status, as a small pill. Reads the iOS
 /// controller's status — not the audio-rate `display`.
+/// Whether a debug launch argument is driving a deterministic screenshot
+/// capture of the prototype chrome.
+private func protoScreenshotMode() -> Bool {
+    #if DEBUG
+    return CommandLine.arguments.contains("-ProtoLandscapeListen")
+        || CommandLine.arguments.contains("-ProtoPortraitListen")
+    #else
+    return false
+    #endif
+}
+
 /// Maps the iOS controller status to the pill's text and tint.
 private func iosStatusAppearance(_ status: IOSAudioStatus?) -> (String, Color) {
+    if protoScreenshotMode() { return ("Listening", .green) }
     switch status {
-    case .listening: ("Listening", .green)
-    case .starting: ("Starting…", .orange)
-    case .interrupted: ("Paused", .orange)
-    case .permissionDenied: ("Mic off", .red)
-    case .failed: ("Audio error", .red)
-    case .idle, nil: ("Stopped", .secondary)
+    case .listening: return ("Listening", .green)
+    case .starting: return ("Starting…", .orange)
+    case .interrupted: return ("Paused", .orange)
+    case .permissionDenied: return ("Mic off", .red)
+    case .failed: return ("Audio error", .red)
+    case .idle, nil: return ("Stopped", .secondary)
     }
 }
 
@@ -230,9 +280,11 @@ private struct IOSStatusPill: View {
     }
 }
 
-/// Landscape status pill: the Listening dot pulses subtly with the live input
-/// level (leaf view). Under Reduce Motion the dot stays static.
-private struct IOSLandscapeStatusPill: View {
+/// Landscape "● Listening" pill, drawn as content (not a toolbar item, whose
+/// icon-collapse dropped the title on device). An HStack of the pulsing dot
+/// and the text inside a native glass capsule. The dot pulses with level
+/// (static under Reduce Motion).
+private struct IOSLandscapeListeningPill: View {
     let state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -241,24 +293,18 @@ private struct IOSLandscapeStatusPill: View {
         let normalized = InputLevelPanel.normalized(state.display.level)
         let scale = reduceMotion ? 1.0 : 1.0 + normalized * 0.4
 
-        // A `Label` with `.titleAndIcon` rather than a bare HStack: iOS 26
-        // collapses toolbar items to icon-only unless the label style
-        // explicitly keeps the title.
-        Label {
-            Text(text)
-        } icon: {
+        HStack(spacing: 6) {
             Circle()
                 .fill(tint)
                 .frame(width: 6, height: 6)
                 .scaleEffect(scale)
                 .shadow(color: tint.opacity(0.9), radius: 4)
+            Text(text)
+                .font(.caption.weight(.semibold))
         }
-        .labelStyle(.titleAndIcon)
-        .font(.caption.weight(.semibold))
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.white.opacity(0.06), in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+        .padding(.vertical, 7)
+        .glassEffect(in: .capsule)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: normalized)
         .animation(.easeInOut(duration: 0.2), value: text)
     }

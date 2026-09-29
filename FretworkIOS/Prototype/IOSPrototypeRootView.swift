@@ -38,6 +38,18 @@ struct IOSPrototypeRootView: View {
         }
         .tint(NotePalette.accent)
         .preferredColorScheme(.dark)
+        .task {
+            #if DEBUG
+            // -ProtoLandscapeListen: open on Listen and force landscape so a
+            // screenshot run can capture the landscape chrome deterministically.
+            if CommandLine.arguments.contains("-ProtoLandscapeListen"),
+               let scene = UIApplication.shared.connectedScenes
+                   .compactMap({ $0 as? UIWindowScene })
+                   .first {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            }
+            #endif
+        }
         // The readout resets to neutral whenever the controller is actually
         // stopped (foreground/background, an interruption) rather than holding
         // the last note forever (D-15). Audio-rate neutral: fires once per
