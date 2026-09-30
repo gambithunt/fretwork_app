@@ -1,44 +1,33 @@
 import SwiftUI
 
-/// Octaves on iOS.
-///
-/// Portrait reuses the Mac `OctavesModuleScreen` verbatim (D-18). Landscape is
-/// the M2 arrangement (D-20/D-22): ‹ › walk the octave shape along the neck
-/// and the subtitle reports which position it is in, while the drawer holds
-/// the root, the label mode, "Hear octave", the recall round and the
-/// explanation. The fret offset is tuning-honest — three frets across the G–B
-/// pair rather than two — because that is the lesson.
+/// Octaves on iOS, built on the shared `IOSModuleScaffold` (D-11/D-18): ‹ ›
+/// walk the octave shape along the neck and the subtitle reports which
+/// position it is in, while the drawer holds the root, the label mode, "Hear
+/// octave", the recall round and the explanation.
 struct IOSOctavesScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: OctavesModuleModel?
+    @State private var model: OctavesModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSOctavesLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeOctavesModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSOctavesStage(state: state, model: model)
             } else {
-                OctavesModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeOctavesModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSOctavesLandscape: View {
+private struct IOSOctavesStage: View {
     let state: AppState
     let model: OctavesModuleModel
     @State private var labelMode: FretboardLabelMode = .notes
@@ -63,10 +52,11 @@ private struct IOSOctavesLandscape: View {
     private var isNavDisabled: Bool { model.challenge.isRunning || model.anchoredIndex == nil }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .octaves),
             subtitle: subtitle,
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {
@@ -105,10 +95,11 @@ private struct IOSOctavesLandscape: View {
             drawer: {
                 IOSOctavesDrawer(state: state, model: model, labelMode: $labelMode)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)
         )
         .onDisappear {
             model.stopRecall()

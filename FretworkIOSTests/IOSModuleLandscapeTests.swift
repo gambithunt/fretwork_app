@@ -2,41 +2,47 @@ import XCTest
 @testable import Fretwork
 
 /// Covers the pure logic extracted into the iOS module landscape scaffold:
-/// the band-mode decision (D-27) and the subtitle/step wording.
+/// the run-subtitle decision (D-27, revised) and the subtitle/step wording.
 final class IOSModuleLandscapeTests: XCTestCase {
-    // MARK: - Band mode (D-27)
+    // MARK: - Run subtitle (D-27, revised)
 
-    func testBandModeIsNormalWhenGuidedSessionIsIdle() {
+    func testSubtitleIsUnchangedWhenNotRunning() {
         XCTAssertEqual(
-            IOSModuleBandDecision.mode(guidedStatus: GuidedSession<GuidedScaleStep>.Status.idle),
-            .normal
+            IOSModuleRunDecision.subtitle(normal: "A minor pentatonic · Box 1 of 5", stepText: "Next: A · Low E string fret 5", isRunActive: false),
+            "A minor pentatonic · Box 1 of 5"
         )
     }
 
-    func testBandModeIsGuidedRunDuringCountIn() {
-        // The player has committed once the count-in starts; the drawer must
-        // already be out of reach.
+    func testSubtitleShowsTheNextStepWhileRunning() {
         XCTAssertEqual(
-            IOSModuleBandDecision.mode(guidedStatus: GuidedSession<GuidedScaleStep>.Status.countIn),
-            .guidedRun
+            IOSModuleRunDecision.subtitle(normal: "A minor pentatonic · Box 1 of 5", stepText: "Next: A · Low E string fret 5", isRunActive: true),
+            "Next: A · Low E string fret 5"
         )
     }
 
-    func testBandModeIsGuidedRunWhilePlaying() {
+    func testSubtitleFallsBackWhenRunningHasNoStepYet() {
+        // The count-in's first beat has no step text, so the subtitle slot
+        // keeps its normal text rather than going blank.
         XCTAssertEqual(
-            IOSModuleBandDecision.mode(guidedStatus: GuidedSession<GuidedScaleStep>.Status.playing),
-            .guidedRun
+            IOSModuleRunDecision.subtitle(normal: "C major · Ascending", stepText: "", isRunActive: true),
+            "C major · Ascending"
         )
     }
 
-    func testDrawerDismissesWhenTheBandBecomesGuidedRun() {
-        // D-27: the drawer is out of reach mid-exercise, so the scaffold closes
-        // it the moment the band switches to the Stop + step form.
-        XCTAssertTrue(IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: .guidedRun))
-    }
+    func testRunToggleFlipsTheStartButtonToStopInPlace() {
+        let idle = IOSModuleBandAction.runToggle(
+            title: "Practise", accessibilityLabel: "Practise", isRunActive: false,
+            disabled: false, start: {}, stop: {}
+        )
+        XCTAssertEqual(idle.title, "Practise")
+        XCTAssertEqual(idle.systemImage, "play.fill")
 
-    func testDrawerStaysOpenWhenTheBandIsNormal() {
-        XCTAssertFalse(IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: .normal))
+        let running = IOSModuleBandAction.runToggle(
+            title: "Practise", accessibilityLabel: "Practise", isRunActive: true,
+            disabled: false, start: {}, stop: {}
+        )
+        XCTAssertEqual(running.title, "Stop")
+        XCTAssertEqual(running.systemImage, "stop.fill")
     }
 
     // MARK: - Subtitles
@@ -232,5 +238,42 @@ final class IOSModuleLandscapeTests: XCTestCase {
             IOSModuleLandscapeFormat.guidedRunStepText(next: lowE),
             "Next: E · Low E string fret 0"
         )
+    }
+
+    // MARK: - Portrait strip (D-06/D-18)
+
+    func testFocusFretPicksTheLowestOutlinedDot() {
+        let dots = [
+            FretboardDot(id: "a", position: FretPosition(string: 0, fret: 7), label: "1", color: .white, outline: true),
+            FretboardDot(id: "b", position: FretPosition(string: 1, fret: 5), label: "1", color: .white, outline: true),
+            FretboardDot(id: "c", position: FretPosition(string: 2, fret: 3), label: "1", color: .white)
+        ]
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: dots, highestFret: 15), 5)
+    }
+
+    func testFocusFretFallsBackToAllDotsWhenNothingIsOutlined() {
+        let dots = [
+            FretboardDot(id: "a", position: FretPosition(string: 0, fret: 9), label: "1", color: .white),
+            FretboardDot(id: "b", position: FretPosition(string: 1, fret: 4), label: "1", color: .white)
+        ]
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: dots, highestFret: 12), 4)
+    }
+
+    func testFocusFretIsZeroWithNoDotsAndClampsToTheBoard() {
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: [], highestFret: 12), 0)
+        let pastEnd = [FretboardDot(id: "a", position: FretPosition(string: 0, fret: 20), label: "1", color: .white, outline: true)]
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: pastEnd, highestFret: 12), 12)
+    }
+
+    func testStripGeometryAndScrollOffset() {
+        XCTAssertEqual(IOSModulePortraitStrip.width(for: 12), 62 + 44 * 13)
+        XCTAssertEqual(IOSModulePortraitStrip.leadingEdge(ofFret: 3, frets: 12), 62 + 44 * 3)
+        // A mid fret scrolls so the shape sits just right of the pinned gutter,
+        // with the board's own (scrolled-out) gutter and a little context gone.
+        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 2, frets: 12, viewportWidth: 390), 44 * 2 - 20)
+        // Near the end it clamps to the last page rather than overshooting.
+        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 12, frets: 12, viewportWidth: 390), 634 - 390)
+        // A viewport wider than the strip needs no scroll.
+        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 3, frets: 12, viewportWidth: 700), 0)
     }
 }

@@ -1,43 +1,42 @@
 import SwiftUI
 
-/// The Pentatonic module on iOS.
-///
-/// Portrait reuses the Mac `PentatonicModuleScreen` verbatim (D-18).
-/// Landscape is the M2 arrangement (D-20/D-22): ‹ › step through boxes 1–5,
-/// and the drawer holds root, quality, show and the practise button. During a
-/// guided run the bottom band switches to ■ Stop + the current step (D-27),
-/// so the drawer cannot be opened mid-exercise.
+/// The Pentatonic module on iOS, built entirely on the shared
+/// `IOSModuleScaffold` (D-11/D-18): ‹ › step through boxes 1–5 and the drawer
+/// holds root, quality, show and the practise button. During a guided run the
+/// bottom band switches to ■ Stop + the current step (D-27).
 struct IOSPentatonicScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: PentatonicModuleModel?
+    @State private var model: PentatonicModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSPentatonicLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makePentatonicModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSPentatonicStage(state: state, model: model)
             } else {
-                PentatonicModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makePentatonicModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                            #if DEBUG
+                            // Drive a real session for the guided-run
+                            // screenshot, so the board's current-step
+                            // emphasis and the next-step subtitle come from the
+                            // same run rather than a view-only flag.
+                            if IOSSnapshot.guidedRunActive {
+                                model?.startGuided()
+                            }
+                            #endif
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSPentatonicLandscape: View {
+private struct IOSPentatonicStage: View {
     let state: AppState
     let model: PentatonicModuleModel
 
@@ -49,22 +48,21 @@ private struct IOSPentatonicLandscape: View {
         )
     }
 
-    private var bandMode: IOSModuleBandMode {
-        IOSSnapshot.guidedRunActive || model.guidedSnapshot.status != .idle
-            ? .guidedRun
-            : .normal
+    private var isRunActive: Bool {
+        model.guidedSnapshot.status != .idle
     }
 
     private var guidedStepText: String {
-        guard let next = model.nextStep ?? model.box.first else { return "" }
+        guard isRunActive, let next = model.nextStep ?? model.box.first else { return "" }
         return IOSModuleLandscapeFormat.guidedRunStepText(next: next)
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .pentatonic),
             subtitle: subtitle,
             tuning: state.tuning,
+            boardTuning: Tunings.standard,
             isFixedShapeModule: true,
             state: state,
             neck: {
@@ -79,23 +77,24 @@ private struct IOSPentatonicLandscape: View {
             leadingAction: .step(
                 systemImage: "chevron.left",
                 accessibilityLabel: "Previous box",
-                disabled: model.position == 0,
+                disabled: isRunActive || model.position == 0,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position - 1) } }
             ),
             trailingAction: .step(
                 systemImage: "chevron.right",
                 accessibilityLabel: "Next box",
-                disabled: model.position == 4,
+                disabled: isRunActive || model.position == 4,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position + 1) } }
             ),
             drawerTitle: "Scale & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
-                IOSPentatonicDrawer(state: state, model: model)
+                IOSPentatonicDrawer(state: state, model: model, isRunActive: isRunActive)
             },
-            bandMode: bandMode,
+            isRunActive: isRunActive,
             guidedRunStepText: guidedStepText,
-            onStopGuidedRun: { model.stopGuided() }
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stop() }
     }
@@ -106,6 +105,7 @@ private struct IOSPentatonicLandscape: View {
 private struct IOSPentatonicDrawer: View {
     let state: AppState
     let model: PentatonicModuleModel
+    let isRunActive: Bool
 
     var body: some View {
         ScrollView {
@@ -115,6 +115,8 @@ private struct IOSPentatonicDrawer: View {
                     selection: model.rootPitchClass,
                     onSelect: model.selectRoot
                 )
+                .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Scale")
@@ -130,6 +132,7 @@ private struct IOSPentatonicDrawer: View {
                         }
                     }
                 }
+                .disabled(isRunActive)
 
                 practise
 
@@ -144,14 +147,14 @@ private struct IOSPentatonicDrawer: View {
             Text("Practise")
                 .font(.headline)
             Button {
-                model.startGuided()
+                if isRunActive { model.stopGuided() } else { model.startGuided() }
             } label: {
-                Label("Practise", systemImage: "play.fill")
+                Label(isRunActive ? "Stop" : "Practise", systemImage: isRunActive ? "stop.fill" : "play.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
-            .tint(NotePalette.accent)
-            .disabled(model.box.isEmpty || !state.isSamplePlaybackReady)
+            .tint(isRunActive ? .red : NotePalette.accent)
+            .disabled(!isRunActive && (model.box.isEmpty || !state.isSamplePlaybackReady))
             Text("A four-beat count-in, then one note per beat up the box. Tempo can be changed while practising.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

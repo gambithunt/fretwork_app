@@ -30,6 +30,7 @@ enum IOSSnapshotHarness {
         case pentatonicLandscape = "-IOSSnapshotPentatonicLandscape"
         case pentatonicDrawer = "-IOSSnapshotPentatonicDrawer"
         case pentatonicGuided = "-IOSSnapshotPentatonicGuided"
+        case pentatonicGuidedPortrait = "-IOSSnapshotPentatonicGuidedPortrait"
         case scalesLandscape = "-IOSSnapshotScalesLandscape"
         case scalesDrawer = "-IOSSnapshotScalesDrawer"
         case scalesGuided = "-IOSSnapshotScalesGuided"
@@ -39,6 +40,18 @@ enum IOSSnapshotHarness {
         case noteAssociationDrawer = "-IOSSnapshotNoteAssociationDrawer"
         case circleLandscape = "-IOSSnapshotCircleLandscape"
         case circleDrawer = "-IOSSnapshotCircleDrawer"
+        // Portrait module surfaces (D-18): open the module without forcing
+        // landscape, so the simulator's default portrait orientation wins.
+        case notesPortrait = "-IOSSnapshotNotesPortrait"
+        case intervalsPortrait = "-IOSSnapshotIntervalsPortrait"
+        case octavesPortrait = "-IOSSnapshotOctavesPortrait"
+        case triadsPortrait = "-IOSSnapshotTriadsPortrait"
+        case chordsPortrait = "-IOSSnapshotChordsPortrait"
+        case pentatonicPortrait = "-IOSSnapshotPentatonicPortrait"
+        case scalesPortrait = "-IOSSnapshotScalesPortrait"
+        case harmonizingPortrait = "-IOSSnapshotHarmonizingPortrait"
+        case noteAssociationPortrait = "-IOSSnapshotNoteAssociationPortrait"
+        case circlePortrait = "-IOSSnapshotCirclePortrait"
         case settings = "-IOSSnapshotSettings"
         case permissionDenied = "-IOSSnapshotPermissionDenied"
     }
@@ -72,11 +85,21 @@ enum IOSSnapshotHarness {
         case .octavesLandscape, .octavesDrawer: return .octaves
         case .triadsShapesLandscape, .triadsShapesDrawer,
              .triadsPathsLandscape, .triadsPathsDrawer, .triadsPathsGuided: return .triads
-        case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided: return .pentatonic
+        case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided, .pentatonicGuidedPortrait: return .pentatonic
         case .scalesLandscape, .scalesDrawer, .scalesGuided: return .scales
         case .harmonizingLandscape, .harmonizingDrawer: return .harmonizing
         case .noteAssociationLandscape, .noteAssociationDrawer: return .noteAssociation
         case .circleLandscape, .circleDrawer: return .circle
+        case .notesPortrait: return .notes
+        case .intervalsPortrait: return .intervals
+        case .octavesPortrait: return .octaves
+        case .triadsPortrait: return .triads
+        case .chordsPortrait: return .chords
+        case .pentatonicPortrait: return .pentatonic
+        case .scalesPortrait: return .scales
+        case .harmonizingPortrait: return .harmonizing
+        case .noteAssociationPortrait: return .noteAssociation
+        case .circlePortrait: return .circle
         default: return nil
         }
     }
@@ -137,11 +160,12 @@ enum IOSSnapshotHarness {
         }
     }
 
-    /// Forces a landscape band into its guided-run form (D-27) without running
-    /// a real session: the Stop button and the "Next:" step text render
-    /// against a fixed, real note from the model's own run.
+    /// Forces a module into its guided-run form (D-27, revised) without
+    /// running a real session: the start button renders as ■ Stop, the next-
+    /// step text lands in the subtitle, and the other controls dim.
     static var guidedRunActive: Bool {
-        scenario == .pentatonicGuided || scenario == .triadsPathsGuided || scenario == .scalesGuided
+        scenario == .pentatonicGuided || scenario == .pentatonicGuidedPortrait
+            || scenario == .triadsPathsGuided || scenario == .scalesGuided
     }
 
     static func effectiveStatus(_ actual: IOSAudioStatus?) -> IOSAudioStatus? {

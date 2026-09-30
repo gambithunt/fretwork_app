@@ -1,21 +1,29 @@
 import SwiftUI
 
-// MARK: - Band mode (D-27)
+// MARK: - Run state (D-27, revised)
 
-/// What the bottom band shows. While a guided run is active the corner arrows
-/// and the drawer handle are replaced by Stop + the current step (D-27), so
-/// the drawer cannot be opened mid-exercise.
-enum IOSModuleBandMode: Equatable, Sendable {
-    case normal
-    case guidedRun
+/// D-27 (revised): starting a run changes nothing structurally. The start
+/// button turns into ■ Stop in place, the next-step text lands in the always-
+/// present subtitle slot, and everything else stays visible but disabled.
+/// The scaffold's only job is to swap the subtitle and render the corners as
+/// the module hands them over.
+enum IOSModuleRunDecision {
+    /// The subtitle slot is always present, so a run swaps its text rather
+    /// than moving layout around. Falls back to the normal subtitle when
+    /// there is no step text yet (the count-in's first beat).
+    static func subtitle(normal: String, stepText: String, isRunActive: Bool) -> String {
+        isRunActive && !stepText.isEmpty ? stepText : normal
+    }
 }
 
-/// One corner control of the normal bottom band.
+/// One corner control of the bottom band.
 ///
 /// A `nil` `title` renders the icon-only glass circle the ‹ › step arrows and
 /// the icon actions use (Notes' Clear/Play all, Triads Paths' play/stop); a
 /// non-nil `title` renders a labelled prominent button (Scales' ▶ Practise).
 /// `nil` corner slots are simply not drawn (Scales has no trailing control).
+/// During a run the module disables the non-start corners and turns the start
+/// corner into ■ Stop — the scaffold renders whatever it is given, unchanged.
 struct IOSModuleBandAction {
     let title: String?
     let systemImage: String
@@ -41,28 +49,31 @@ extension IOSModuleBandAction {
             action: action
         )
     }
-}
 
-enum IOSModuleBandDecision {
-    /// Any non-idle guided-session state — count-in included — counts as a
-    /// run: the player has already committed to it. Generic over the step type
-    /// so the same decision serves Pentatonic/Scales (`GuidedScaleStep`) and
-    /// Triads' progression runs.
-    static func mode<Step: Sendable>(guidedStatus: GuidedSession<Step>.Status) -> IOSModuleBandMode {
-        guidedStatus == .idle ? .normal : .guidedRun
-    }
-
-    /// D-27: a guided run takes the stage and the drawer cannot be reached
-    /// mid-exercise, so the drawer closes the moment the band switches to it.
-    static func shouldDismissDrawer(transitioningTo mode: IOSModuleBandMode) -> Bool {
-        mode == .guidedRun
+    /// A labelled corner whose text/icon flip between a start action and the
+    /// ■ Stop that replaces it in place while a run is active (D-27 revised).
+    static func runToggle(
+        title: String,
+        accessibilityLabel: String,
+        isRunActive: Bool,
+        disabled: Bool,
+        start: @escaping () -> Void,
+        stop: @escaping () -> Void
+    ) -> IOSModuleBandAction {
+        IOSModuleBandAction(
+            title: isRunActive ? "Stop" : title,
+            systemImage: isRunActive ? "stop.fill" : "play.fill",
+            accessibilityLabel: isRunActive ? "Stop" : accessibilityLabel,
+            disabled: disabled,
+            action: isRunActive ? stop : start
+        )
     }
 }
 
 // MARK: - Subtitle / step formatting
 
-/// The one place the landscape subtitle and guided-run step strings are
-/// spelled, so the wording can be unit-tested without a view or audio.
+/// The one place the subtitle and guided-run step strings are spelled, so the
+/// wording can be unit-tested without a view or audio.
 enum IOSModuleLandscapeFormat {
     /// "Major 3rd · 4 frets" — the interval's name and its distance in frets.
     static func intervalSubtitle(_ interval: Interval) -> String {
@@ -145,59 +156,200 @@ enum IOSModuleLandscapeFormat {
         "Over \(roman) · \(chordName)"
     }
 
+    /// "Next: D minor" — the next chord in Note association's progression
+    /// (D-27 revised: the step text lands in the subtitle slot).
+    static func noteAssociationStepText(nextChord: DiatonicChord?) -> String {
+        guard let nextChord else { return "" }
+        return "Next: \(nextChord.name)"
+    }
+
     /// "Next: D · B string fret 3" (D-27) — the note the hand is moving to.
     static func guidedRunStepText(next: GuidedScaleStep, tuning: Tuning = Tunings.standard) -> String {
         "Next: \(next.pitchClass.name()) · \(tuning.stringNames[next.string]) string fret \(next.fret)"
     }
 }
 
+// MARK: - Portrait board strip
+
+/// Sizing and scroll-target math for the portrait board strip (D-06/D-18):
+/// the same board view, laid out at a legible per-fret width and scrolled
+/// horizontally so the current shape is in view rather than shrunk to fit.
+enum IOSModulePortraitStrip {
+    /// Column width reserved per fret, so dots stay the size they are on the
+    /// landscape neck instead of being uniformly shrunk (D-06).
+    static let fretWidth: CGFloat = 44
+    /// The fixed string-name gutter pinned left of the scroll, and the board's
+    /// internal leading margin it covers. Matches
+    /// `BoardGeometry.Margins.labelled.leading`.
+    static let gutterWidth: CGFloat = 62
+    /// The strip's fixed height: six strings plus the fret-number row.
+    static let height: CGFloat = 260
+    /// The board's top/bottom label rows, matching
+    /// `BoardGeometry.Margins.labelled`, so the pinned gutter's string names
+    /// line up with the board's string rows.
+    static let boardTopMargin: CGFloat = 34
+    static let boardBottomMargin: CGFloat = 4
+    /// Breathing room between the fixed gutter and the target fret.
+    static let fretInset: CGFloat = 20
+
+    static func width(for frets: Int) -> CGFloat {
+        gutterWidth + fretWidth * CGFloat(frets + 1)
+    }
+
+    /// The x of a fret's leading edge inside the (gutter-bearing) board.
+    static func leadingEdge(ofFret fret: Int, frets: Int) -> CGFloat {
+        gutterWidth + fretWidth * CGFloat(fret)
+    }
+
+    /// The scroll offset that puts `fret` just right of the pinned gutter,
+    /// clamped so the strip never scrolls past its end. Because the gutter is
+    /// fixed, the board's own gutter must be scrolled out of view first.
+    static func scrollOffset(for fret: Int, frets: Int, viewportWidth: CGFloat) -> CGFloat {
+        let leading = leadingEdge(ofFret: fret, frets: frets)
+        return max(0, min(leading - gutterWidth - fretInset, max(0, width(for: frets) - viewportWidth)))
+    }
+
+    /// Which fret the strip should open on: the lowest fret of the emphasised
+    /// (outlined) dots — the current shape — falling back to the lowest of all
+    /// dots when nothing is outlined (Notes before anything is placed).
+    static func focusFret(for dots: [FretboardDot], highestFret: Int) -> Int {
+        let emphasised = dots.filter(\.outline)
+        let pool = emphasised.isEmpty ? dots : emphasised
+        guard let lowest = pool.map(\.position.fret).min() else { return 0 }
+        return min(max(lowest, 0), max(highestFret, 0))
+    }
+}
+
 // MARK: - The primitive
 
-/// One shared landscape layout for every learning module (D-11): a top row of
-/// chrome (glass back, title + subtitle, the standard-tuning pill, the
-/// live-note leaf), a centred stage in the middle, and a bottom band of corner
-/// controls plus a drawer button — or, during a guided run, Stop + the current
-/// step (D-27).
+/// The one module layout for both orientations (D-11/D-18): a shared top row
+/// of chrome, a centred stage in landscape, and — in portrait — the board as a
+/// horizontal scroll strip with the same controls beneath it and the drawer's
+/// contents inline as a scrolling page.
 ///
 /// Modules supply their own `neck` (almost always `FretboardBoardView`),
-/// `drawer` (the sheet content) and two optional `leadingAction`/`trailingAction`
-/// corners; the chrome, spacing (D-22: 12pt top, 16pt side, 12pt bottom) and
-/// band behaviour live here once.
-struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
+/// `drawer` (the sheet/page content), two optional `leadingAction`/
+/// `trailingAction` corners and an optional `companion` (Circle's ring, drawn
+/// leading of the board in landscape and above the strip in portrait). The
+/// chrome, spacing and band behaviour live here once.
+struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     let title: String
     let subtitle: String
+    /// The global tuning, used only for the standard-tuning notice pill.
     let tuning: Tuning
+    /// The tuning the `neck` actually draws — `Tunings.standard` for the
+    /// fixed-shape modules, the model's tuning otherwise — so the pinned
+    /// portrait string-name gutter names the same strings as the board.
+    let boardTuning: Tuning
     /// Fixed-fret-shape modules (Chords, Pentatonic, Harmonizing) show the
     /// "standard tuning shapes" pill when the global tuning is not standard.
     let isFixedShapeModule: Bool
     let state: AppState
-    @ViewBuilder var neck: Neck
-
+    let neck: Neck
+    let companion: Companion
     let leadingAction: IOSModuleBandAction?
     let trailingAction: IOSModuleBandAction?
-
     let drawerTitle: String
     let drawerSystemImage: String
-    @ViewBuilder var drawer: Drawer
-
-    let bandMode: IOSModuleBandMode
+    let drawer: Drawer
+    /// Whether a guided run is in progress (count-in included). Only flips the
+    /// subtitle and what the module hands over for the corners; nothing else.
+    let isRunActive: Bool
+    /// The next-step text shown in the subtitle slot while `isRunActive`.
     let guidedRunStepText: String
-    let onStopGuidedRun: () -> Void
 
     /// Called when the global tuning changes, so a module can re-anchor its
     /// shapes (or, for Notes, stop and re-pitch what is placed). Fixed-shape
     /// modules (Chords/Pentatonic/Harmonizing) leave it nil — their frets
     /// detune rather than transpose, which the notice pill explains.
-    var onTuningChange: ((Tuning) -> Void)? = nil
+    let onTuningChange: ((Tuning) -> Void)?
+    /// The fret count the board draws; sizes the portrait strip so frets stay
+    /// legible rather than shrinking.
+    let frets: Int
+    /// The fret the portrait strip scrolls to, so the current shape is in view.
+    let focusFret: Int
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var showsDrawer = IOSSnapshot.showsModuleDrawer
+    @State private var stripPosition = ScrollPosition(x: 0)
+
+    private var isLandscape: Bool { verticalSizeClass == .compact }
+
+    init(
+        title: String,
+        subtitle: String,
+        tuning: Tuning,
+        boardTuning: Tuning,
+        isFixedShapeModule: Bool,
+        state: AppState,
+        @ViewBuilder neck: () -> Neck,
+        @ViewBuilder companion: () -> Companion = { EmptyView() },
+        leadingAction: IOSModuleBandAction?,
+        trailingAction: IOSModuleBandAction?,
+        drawerTitle: String,
+        drawerSystemImage: String,
+        @ViewBuilder drawer: () -> Drawer,
+        isRunActive: Bool,
+        guidedRunStepText: String,
+        onTuningChange: ((Tuning) -> Void)? = nil,
+        frets: Int,
+        focusFret: Int
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.tuning = tuning
+        self.boardTuning = boardTuning
+        self.isFixedShapeModule = isFixedShapeModule
+        self.state = state
+        self.neck = neck()
+        self.companion = companion()
+        self.leadingAction = leadingAction
+        self.trailingAction = trailingAction
+        self.drawerTitle = drawerTitle
+        self.drawerSystemImage = drawerSystemImage
+        self.drawer = drawer()
+        self.isRunActive = isRunActive
+        self.guidedRunStepText = guidedRunStepText
+        self.onTuningChange = onTuningChange
+        self.frets = frets
+        self.focusFret = focusFret
+    }
 
     var body: some View {
+        Group {
+            if isLandscape {
+                landscape
+            } else {
+                portrait
+            }
+        }
+        .onChange(of: state.tuning) { _, tuning in
+            onTuningChange?(tuning)
+        }
+    }
+
+    /// The subtitle slot is always present in both orientations; a run swaps
+    /// its text to the next step rather than moving anything around (D-27).
+    private var displaySubtitle: String {
+        IOSModuleRunDecision.subtitle(
+            normal: subtitle,
+            stepText: guidedRunStepText,
+            isRunActive: isRunActive
+        )
+    }
+
+    // MARK: Landscape
+
+    private var landscape: some View {
         VStack(spacing: 8) {
             topRow
-            neck
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(alignment: .center, spacing: 20) {
+                companion
+                neck
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             bottomBand
         }
         .padding(.top, 12)
@@ -210,17 +362,7 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
                 .preferredColorScheme(.dark)
                 .tint(NotePalette.accent)
         }
-        .onChange(of: state.tuning) { _, tuning in
-            onTuningChange?(tuning)
-        }
-        .onChange(of: bandMode) { _, mode in
-            if IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: mode) {
-                showsDrawer = false
-            }
-        }
     }
-
-    // MARK: Top row
 
     private var topRow: some View {
         HStack(spacing: 12) {
@@ -229,7 +371,7 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
                 Text(title)
                     .font(.headline)
                     .lineLimit(1)
-                Text(subtitle)
+                Text(displaySubtitle)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -255,34 +397,100 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
         .accessibilityLabel("Back")
     }
 
+    // MARK: Portrait
+
+    private var portrait: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            subtitleRow
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            if isFixedShapeModule {
+                IOSCompactStandardTuningNotice(tuning: tuning)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+            }
+            companion
+            boardStrip
+                .padding(.top, 8)
+            bottomBand
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+            drawer
+                .padding(.top, 8)
+        }
+        .background(NotePalette.backdrop)
+    }
+
+    /// Portrait has no drawer button — the drawer's contents are inline below
+    /// the band — so the subtitle takes the title's place under the nav bar
+    /// and the live-note leaf stays top-right.
+    private var subtitleRow: some View {
+        HStack(spacing: 12) {
+            Text(displaySubtitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Spacer(minLength: 8)
+            IOSModuleLiveNoteLeaf(state: state, enabled: state.showsLiveNoteOnModules)
+        }
+    }
+
+    private var boardStrip: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    neck
+                        .frame(
+                            width: IOSModulePortraitStrip.width(for: frets),
+                            height: IOSModulePortraitStrip.height
+                        )
+                }
+                .scrollPosition($stripPosition)
+                .onAppear { scrollStrip(viewport: proxy.size.width) }
+                .onChange(of: focusFret) { scrollStrip(viewport: proxy.size.width) }
+                .onChange(of: frets) { scrollStrip(viewport: proxy.size.width) }
+
+                // The string-name gutter is pinned here, over the board's own
+                // (scrolling) gutter, so only the frets move. The board still
+                // draws its own names — they scroll underneath and are covered
+                // by this opaque, matching gutter.
+                IOSModuleStringGutter(
+                    tuning: boardTuning,
+                    flipped: state.isFretboardFlipped
+                )
+            }
+        }
+        .frame(height: IOSModulePortraitStrip.height)
+    }
+
+    private func scrollStrip(viewport: CGFloat) {
+        stripPosition = ScrollPosition(
+            x: IOSModulePortraitStrip.scrollOffset(
+                for: focusFret,
+                frets: frets,
+                viewportWidth: viewport
+            )
+        )
+    }
+
     // MARK: Bottom band
 
+    /// The band never changes shape for a run (D-27 revised): the corners the
+    /// module supplied stay where they are — the start corner becomes ■ Stop
+    /// and the others are disabled, both decided by the module.
     private var bottomBand: some View {
         HStack(spacing: 12) {
-            switch bandMode {
-            case .normal:
-                if let leadingAction {
-                    bandActionButton(leadingAction)
-                }
-                Spacer(minLength: 0)
+            if let leadingAction {
+                bandActionButton(leadingAction)
+            }
+            Spacer(minLength: 0)
+            if isLandscape {
                 drawerHandle
-                Spacer(minLength: 0)
-                if let trailingAction {
-                    bandActionButton(trailingAction)
-                }
-            case .guidedRun:
-                Button(action: onStopGuidedRun) {
-                    Label("Stop", systemImage: "stop.fill")
-                }
-                .buttonStyle(.glassProminent)
-                .tint(.red)
-                .accessibilityLabel("Stop practice run")
-                Spacer(minLength: 0)
-                Text(guidedRunStepText)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            }
+            Spacer(minLength: 0)
+            if let trailingAction {
+                bandActionButton(trailingAction)
             }
         }
         .padding(.horizontal, 4)
@@ -358,6 +566,91 @@ struct IOSModuleLiveNoteLeaf: View {
     }
 }
 
+/// A wrapping row layout: places subviews left-to-right and moves a whole
+/// subview to the next row when it would not fit, so chips stay one line and
+/// equal height instead of compressing and wrapping their own text.
+struct IOSFlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth.isFinite ? maxWidth : x, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+/// The pinned string-name gutter for the portrait board strip: an opaque,
+/// matching cover over the board's own scrolling gutter, drawing the same
+/// string names at the same rows (respecting `flipped`) so only the frets
+/// scroll while the names stay put.
+private struct IOSModuleStringGutter: View {
+    let tuning: Tuning
+    let flipped: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            let strings = tuning.openMIDINotes.count
+            let names = tuning.stringNames
+            let boardHeight = size.height
+                - IOSModulePortraitStrip.boardTopMargin
+                - IOSModulePortraitStrip.boardBottomMargin
+            for string in 0..<strings where string < names.count {
+                let row = flipped ? string : strings - 1 - string
+                let y = IOSModulePortraitStrip.boardTopMargin
+                    + boardHeight * (CGFloat(row) + 0.5) / CGFloat(strings)
+                context.draw(
+                    Text(names[string].uppercased())
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.1)
+                        .foregroundColor(.white.opacity(0.55)),
+                    at: CGPoint(x: 30, y: y)
+                )
+            }
+        }
+        .frame(width: IOSModulePortraitStrip.gutterWidth, height: IOSModulePortraitStrip.height)
+        .background(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 14,
+                bottomLeadingRadius: 14,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0,
+                style: .continuous
+            )
+            .fill(Color(red: 0.085, green: 0.085, blue: 0.105))
+        )
+        .allowsHitTesting(false)
+    }
+}
+
 /// The compact pill version of `StandardTuningNotice` for the landscape top
 /// bar.
 struct IOSCompactStandardTuningNotice: View {
@@ -393,6 +686,16 @@ struct IOSModulePlaybackNotice: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+extension View {
+    /// iOS-side dimming for the shared chip components (ChipPicker, ToggleChip),
+    /// whose custom fills sit over the system's disabled dim so `.disabled`
+    /// alone does not read as unavailable. Native menu pickers dim on their
+    /// own and never take this; the Mac screens never apply it.
+    func iosRunDimmed(_ dimmed: Bool) -> some View {
+        opacity(dimmed ? 0.45 : 1)
     }
 }
 

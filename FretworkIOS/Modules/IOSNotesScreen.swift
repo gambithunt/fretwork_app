@@ -1,44 +1,33 @@
 import SwiftUI
 
-/// Notes on the fretboard on iOS.
-///
-/// Portrait reuses the Mac `NotesModuleScreen` verbatim (D-18). Landscape is
-/// the M2 arrangement (D-20/D-22): the board is the input *and* the output —
-/// tap an empty cell to drop a note, tap a dot to hear it again, long-press
-/// to remove one — while the bottom corners hold Clear and ▶ Play all (D-26).
-/// The drawer holds the twelve note toggles, the full-neck switch and the
-/// explanation.
+/// Notes on the fretboard on iOS, built on the shared `IOSModuleScaffold`
+/// (D-11/D-18): the board is the input *and* the output — tap an empty cell
+/// to drop a note, tap a dot to hear it again, long-press to remove one —
+/// while the bottom corners hold Clear and ▶ Play all (D-26).
 struct IOSNotesScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: NotesModuleModel?
+    @State private var model: NotesModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSNotesLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeNotesModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSNotesStage(state: state, model: model)
             } else {
-                NotesModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeNotesModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSNotesLandscape: View {
+private struct IOSNotesStage: View {
     let state: AppState
     let model: NotesModuleModel
     @State private var showsFullNeck = false
@@ -46,10 +35,11 @@ private struct IOSNotesLandscape: View {
     private var canPlay: Bool { !model.placed.isEmpty && state.isSamplePlaybackReady }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .notes),
             subtitle: IOSModuleLandscapeFormat.notesPlacedSubtitle(count: model.placed.count),
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {
@@ -90,15 +80,16 @@ private struct IOSNotesLandscape: View {
             drawer: {
                 IOSNotesDrawer(state: state, model: model, showsFullNeck: $showsFullNeck)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
             onTuningChange: { tuning in
                 // A tuning change re-pitches every dot, so anything still
                 // sounding belongs to the old tuning.
                 model.stop()
                 model.tuning = tuning
-            }
+            },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onChange(of: showsFullNeck) { _, expanded in
             // A tap past fret 12 has to resolve to a real cell, so widening

@@ -1,43 +1,34 @@
 import SwiftUI
 
-/// The Intervals module on iOS.
-///
-/// Portrait reuses the Mac `IntervalsModuleScreen` verbatim (D-18). Landscape
-/// is the M2 arrangement (D-20/D-22): ‹ › step through the intervals, tapping
-/// a root on the board re-anchors the shape under a different finger, and the
+/// The Intervals module on iOS, built entirely on the shared
+/// `IOSModuleScaffold` (D-11/D-18): ‹ › step through the intervals, tapping a
+/// root on the board re-anchors the shape under a different finger, and the
 /// drawer holds the root, label mode, Play, the interval's uses and the
 /// explanation.
 struct IOSIntervalsScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: IntervalsModuleModel?
+    @State private var model: IntervalsModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSIntervalsLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeIntervalsModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSIntervalsStage(state: state, model: model)
             } else {
-                IntervalsModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeIntervalsModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSIntervalsLandscape: View {
+private struct IOSIntervalsStage: View {
     let state: AppState
     let model: IntervalsModuleModel
     @State private var labelMode: FretboardLabelMode = .degrees
@@ -63,10 +54,11 @@ private struct IOSIntervalsLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .intervals),
             subtitle: IOSModuleLandscapeFormat.intervalSubtitle(model.interval),
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {
@@ -99,10 +91,11 @@ private struct IOSIntervalsLandscape: View {
             drawer: {
                 IOSIntervalsDrawer(state: state, model: model, labelMode: $labelMode)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stop() }
     }

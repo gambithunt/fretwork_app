@@ -1,68 +1,62 @@
 import SwiftUI
 
-/// The Scales module on iOS.
-///
-/// Portrait reuses the Mac `ScalesModuleScreen` verbatim (D-18). Landscape is
-/// the M2 arrangement (D-20/D-22): the neck with the guided-run emphasis, a
-/// single ▶ Practise button where the ‹ › step arrows would be (D-26 — Scales
-/// has no positions to move along the neck), and a drawer holding the root,
-/// quality, direction, labels, tempo and the explanation. During a guided run
-/// the band switches to ■ Stop + the next note (D-27).
+/// The Scales module on iOS, built on the shared `IOSModuleScaffold`
+/// (D-11/D-18): a single ▶ Practise button where the ‹ › step arrows would be
+/// (D-26 — Scales has no positions to move along the neck) and a drawer
+/// holding the root, quality, direction, labels, tempo and the explanation.
+/// During a guided run the band switches to ■ Stop + the next note (D-27).
 struct IOSScalesScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: ScalesModuleModel?
+    @State private var model: ScalesModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSScalesLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeScalesModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSScalesStage(state: state, model: model)
             } else {
-                ScalesModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeScalesModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                            #if DEBUG
+                            if IOSSnapshot.guidedRunActive {
+                                model?.startGuided()
+                            }
+                            #endif
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSScalesLandscape: View {
+private struct IOSScalesStage: View {
     let state: AppState
     let model: ScalesModuleModel
 
-    private var bandMode: IOSModuleBandMode {
-        IOSSnapshot.guidedRunActive || model.guidedSnapshot.status != .idle
-            ? .guidedRun
-            : .normal
+    private var isRunActive: Bool {
+        model.guidedSnapshot.status != .idle
     }
 
     private var guidedStepText: String {
         // During the count-in `currentIndex` is nil, so fall back to the first
         // note of the run — it genuinely is the next one.
-        guard let next = model.nextStep ?? model.sequence.first else { return "" }
+        guard isRunActive, let next = model.nextStep ?? model.sequence.first else { return "" }
         return IOSModuleLandscapeFormat.guidedRunStepText(next: next)
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .scales),
             subtitle: IOSModuleLandscapeFormat.scalesSubtitle(
                 scaleName: model.scaleName,
                 direction: model.direction
             ),
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {
@@ -74,24 +68,27 @@ private struct IOSScalesLandscape: View {
                 )
             },
             // No positions to step through (D-26): the leading corner is a
-            // single ▶ Practise action and there is no trailing control.
-            leadingAction: IOSModuleBandAction(
+            // single ▶ Practise action that turns into ■ Stop in place while
+            // a run is active, and there is no trailing control.
+            leadingAction: .runToggle(
                 title: "Practise",
-                systemImage: "play.fill",
                 accessibilityLabel: "Practise",
-                disabled: model.sequence.isEmpty || !state.isSamplePlaybackReady,
-                action: { model.startGuided() }
+                isRunActive: isRunActive,
+                disabled: !isRunActive && (model.sequence.isEmpty || !state.isSamplePlaybackReady),
+                start: { model.startGuided() },
+                stop: { model.stopGuided() }
             ),
             trailingAction: nil,
             drawerTitle: "Scale & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
-                IOSScalesDrawer(state: state, model: model)
+                IOSScalesDrawer(state: state, model: model, isRunActive: isRunActive)
             },
-            bandMode: bandMode,
+            isRunActive: isRunActive,
             guidedRunStepText: guidedStepText,
-            onStopGuidedRun: { model.stopGuided() },
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stopGuided() }
     }
@@ -102,6 +99,7 @@ private struct IOSScalesLandscape: View {
 private struct IOSScalesDrawer: View {
     let state: AppState
     let model: ScalesModuleModel
+    let isRunActive: Bool
 
     var body: some View {
         ScrollView {
@@ -111,6 +109,8 @@ private struct IOSScalesDrawer: View {
                     selection: model.rootPitchClass,
                     onSelect: model.selectRoot
                 )
+                .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Scale")
@@ -130,7 +130,9 @@ private struct IOSScalesDrawer: View {
                         }
                     }
                 }
+                .disabled(isRunActive)
 
+                // Tempo stays live mid-run — that is its whole purpose.
                 tempo
                 IOSModulePlaybackNotice(state: state)
                 explanation

@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// Triads on iOS.
-///
-/// Portrait reuses the Mac `TriadsModuleScreen` verbatim (D-18). Landscape is
-/// the M2 arrangement (D-20/D-22), and it has two faces:
+/// Triads on iOS, built on the shared `IOSModuleScaffold` (D-11/D-18), with
+/// two faces:
 ///
 /// - **Shapes** — ‹ › walk every compact voicing, the subtitle naming the
 ///   chord and its inversion.
@@ -16,41 +14,38 @@ import SwiftUI
 struct IOSTriadsScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: TriadsModuleModel?
+    @State private var model: TriadsModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSTriadsLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeTriadsModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                                #if DEBUG
-                                // The snapshot harness opens directly on the
-                                // Paths face; nothing else forces that mode.
-                                if IOSSnapshot.forcesTriadsPathMode {
-                                    landscapeModel?.setPathMode(true)
-                                }
-                                #endif
-                            }
-                        }
-                }
+            if let model {
+                IOSTriadsStage(state: state, model: model)
             } else {
-                TriadsModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeTriadsModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                            #if DEBUG
+                            // The snapshot harness opens directly on the
+                            // Paths face; nothing else forces that mode, and
+                            // the guided-run shot drives a real session.
+                            if IOSSnapshot.forcesTriadsPathMode {
+                                model?.setPathMode(true)
+                            }
+                            if IOSSnapshot.guidedRunActive {
+                                model?.startProgression(loop: false)
+                            }
+                            #endif
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSTriadsLandscape: View {
+private struct IOSTriadsStage: View {
     let state: AppState
     let model: TriadsModuleModel
 
@@ -72,54 +67,61 @@ private struct IOSTriadsLandscape: View {
         )
     }
 
-    private var bandMode: IOSModuleBandMode {
-        guard model.isPathMode else { return .normal }
-        if IOSSnapshot.guidedRunActive { return .guidedRun }
-        return IOSModuleBandDecision.mode(guidedStatus: model.progressionSnapshot.status)
+    private var isRunActive: Bool {
+        guard model.isPathMode else { return false }
+        return model.progressionSnapshot.status != .idle
     }
 
     private var guidedStepText: String {
-        IOSModuleLandscapeFormat.triadsPathStepText(next: model.currentPathStep)
+        guard isRunActive else { return "" }
+        return IOSModuleLandscapeFormat.triadsPathStepText(next: model.currentPathStep)
     }
 
-    // The corner controls change meaning with the exercise: arrows walk the
-    // shapes, play/stop drive the path.
-    private var previousSystemImage: String { model.isPathMode ? "play.fill" : "chevron.left" }
-    private var nextSystemImage: String { model.isPathMode ? "stop.fill" : "chevron.right" }
-    private var previousLabel: String { model.isPathMode ? "Play path" : "Previous position" }
-    private var nextLabel: String { model.isPathMode ? "Stop path" : "Next position" }
-
-    private var previousDisabled: Bool {
-        if model.isPathMode { return model.pathSteps.isEmpty || !state.isSamplePlaybackReady }
-        return model.voicings.isEmpty
-    }
-
-    private var nextDisabled: Bool {
-        if model.isPathMode { return model.progressionSnapshot.status == .idle }
-        return model.voicings.isEmpty
-    }
-
-    private func previousAction() {
+    // The corners change meaning with the exercise: arrows walk the shapes,
+    // while the path's start button turns into ■ Stop in place (D-27 revised)
+    // and its separate Stop stays as a second, always-available way out.
+    private var leadingAction: IOSModuleBandAction {
         if model.isPathMode {
-            model.startProgression(loop: false)
-        } else {
-            withAnimation(FretworkMotion.gravity) { model.movePosition(by: -1) }
+            return .runToggle(
+                title: "Play path",
+                accessibilityLabel: "Play path",
+                isRunActive: isRunActive,
+                disabled: !isRunActive && (model.pathSteps.isEmpty || !state.isSamplePlaybackReady),
+                start: { model.startProgression(loop: false) },
+                stop: { model.stopEverything() }
+            )
         }
+        return .step(
+            systemImage: "chevron.left",
+            accessibilityLabel: "Previous position",
+            disabled: model.voicings.isEmpty,
+            action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: -1) } }
+        )
     }
 
-    private func nextAction() {
+    private var trailingAction: IOSModuleBandAction {
         if model.isPathMode {
-            model.stopEverything()
-        } else {
-            withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) }
+            return .step(
+                systemImage: "stop.fill",
+                accessibilityLabel: "Stop path",
+                disabled: model.progressionSnapshot.status == .idle,
+                action: { model.stopEverything() }
+            )
         }
+        return .step(
+            systemImage: "chevron.right",
+            accessibilityLabel: "Next position",
+            disabled: model.voicings.isEmpty,
+            action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) } }
+        )
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .triads),
             subtitle: subtitle,
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {
@@ -131,27 +133,18 @@ private struct IOSTriadsLandscape: View {
                     pulses: model.pulses
                 )
             },
-            leadingAction: .step(
-                systemImage: previousSystemImage,
-                accessibilityLabel: previousLabel,
-                disabled: previousDisabled,
-                action: previousAction
-            ),
-            trailingAction: .step(
-                systemImage: nextSystemImage,
-                accessibilityLabel: nextLabel,
-                disabled: nextDisabled,
-                action: nextAction
-            ),
+            leadingAction: leadingAction,
+            trailingAction: trailingAction,
             drawerTitle: "Triad & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
-                IOSTriadsDrawer(state: state, model: model)
+                IOSTriadsDrawer(state: state, model: model, isRunActive: isRunActive)
             },
-            bandMode: bandMode,
+            isRunActive: isRunActive,
             guidedRunStepText: guidedStepText,
-            onStopGuidedRun: { model.stopEverything() },
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stopEverything() }
     }
@@ -162,6 +155,7 @@ private struct IOSTriadsLandscape: View {
 private struct IOSTriadsDrawer: View {
     let state: AppState
     let model: TriadsModuleModel
+    let isRunActive: Bool
 
     var body: some View {
         ScrollView {
@@ -171,6 +165,8 @@ private struct IOSTriadsDrawer: View {
                     selection: model.isPathMode ? model.pathKeyRoot : model.rootPitchClass,
                     onSelect: model.selectRoot
                 )
+                .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Exercise")
@@ -184,6 +180,7 @@ private struct IOSTriadsDrawer: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                .disabled(isRunActive)
 
                 if model.isPathMode {
                     pathControls
@@ -289,21 +286,23 @@ private struct IOSTriadsDrawer: View {
                 stringSetPicker
                     .fixedSize(horizontal: true, vertical: false)
             }
+            .disabled(isRunActive)
             LabeledContent("Mode") {
                 modePicker
                     .fixedSize(horizontal: true, vertical: false)
             }
+            .disabled(isRunActive)
 
             HStack(spacing: 12) {
                 Button {
-                    model.startProgression(loop: false)
+                    if isRunActive { model.stopEverything() } else { model.startProgression(loop: false) }
                 } label: {
-                    Label("Play path", systemImage: "play.fill")
+                    Label(isRunActive ? "Stop" : "Play path", systemImage: isRunActive ? "stop.fill" : "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.pathSteps.isEmpty || !state.isSamplePlaybackReady)
+                .tint(isRunActive ? .red : NotePalette.accent)
+                .disabled(!isRunActive && (model.pathSteps.isEmpty || !state.isSamplePlaybackReady))
 
                 Button {
                     model.startProgression(loop: true)
@@ -311,7 +310,7 @@ private struct IOSTriadsDrawer: View {
                     Label("Loop", systemImage: "repeat")
                 }
                 .buttonStyle(.glass)
-                .disabled(model.pathSteps.isEmpty || !state.isSamplePlaybackReady)
+                .disabled(isRunActive || model.pathSteps.isEmpty || !state.isSamplePlaybackReady)
 
                 Button("Stop") { model.stopEverything() }
                     .buttonStyle(.glass)
