@@ -507,6 +507,11 @@ final class IOSAudioController: AudioControlling {
 
     // MARK: - Test hooks
 
+    /// The decoded note library, so the DEBUG-only bleed probe can compute a
+    /// take's nominal duration and peak straight from the library the player
+    /// is about to read, instead of decoding a second 85 MB copy.
+    var sampleLibraryForTesting: NoteSampleLibrary? { sampleLibrary }
+
     var currentAnalysisWorkerForTesting: AudioAnalysisWorker? { run?.analysisWorker }
     var currentChordWorkerForTesting: ChordAnalysisWorker? { run?.chordWorker }
     var currentGraphForTesting: IOSAudioGraphHandling? { run?.graph }
