@@ -1,21 +1,29 @@
 import SwiftUI
 
-// MARK: - Band mode (D-27)
+// MARK: - Run state (D-27, revised)
 
-/// What the bottom band shows. While a guided run is active the corner arrows
-/// and the drawer handle are replaced by Stop + the current step (D-27), so
-/// the drawer cannot be opened mid-exercise.
-enum IOSModuleBandMode: Equatable, Sendable {
-    case normal
-    case guidedRun
+/// D-27 (revised): starting a run changes nothing structurally. The start
+/// button turns into ■ Stop in place, the next-step text lands in the always-
+/// present subtitle slot, and everything else stays visible but disabled.
+/// The scaffold's only job is to swap the subtitle and render the corners as
+/// the module hands them over.
+enum IOSModuleRunDecision {
+    /// The subtitle slot is always present, so a run swaps its text rather
+    /// than moving layout around. Falls back to the normal subtitle when
+    /// there is no step text yet (the count-in's first beat).
+    static func subtitle(normal: String, stepText: String, isRunActive: Bool) -> String {
+        isRunActive && !stepText.isEmpty ? stepText : normal
+    }
 }
 
-/// One corner control of the normal bottom band.
+/// One corner control of the bottom band.
 ///
 /// A `nil` `title` renders the icon-only glass circle the ‹ › step arrows and
 /// the icon actions use (Notes' Clear/Play all, Triads Paths' play/stop); a
 /// non-nil `title` renders a labelled prominent button (Scales' ▶ Practise).
 /// `nil` corner slots are simply not drawn (Scales has no trailing control).
+/// During a run the module disables the non-start corners and turns the start
+/// corner into ■ Stop — the scaffold renders whatever it is given, unchanged.
 struct IOSModuleBandAction {
     let title: String?
     let systemImage: String
@@ -41,27 +49,24 @@ extension IOSModuleBandAction {
             action: action
         )
     }
-}
 
-enum IOSModuleBandDecision {
-    /// Any non-idle guided-session state — count-in included — counts as a
-    /// run: the player has already committed to it. Generic over the step type
-    /// so the same decision serves Pentatonic/Scales (`GuidedScaleStep`) and
-    /// Triads' progression runs.
-    static func mode<Step: Sendable>(guidedStatus: GuidedSession<Step>.Status) -> IOSModuleBandMode {
-        guidedStatus == .idle ? .normal : .guidedRun
-    }
-
-    /// D-27: a guided run takes the stage and the drawer cannot be reached
-    /// mid-exercise, so the drawer closes the moment the band switches to it.
-    static func shouldDismissDrawer(transitioningTo mode: IOSModuleBandMode) -> Bool {
-        mode == .guidedRun
-    }
-
-    /// D-27 (portrait): the inline drawer stays put on screen, so it is hidden
-    /// for the duration of a run rather than left usable mid-exercise.
-    static func showsInlineDrawer(when mode: IOSModuleBandMode) -> Bool {
-        mode == .normal
+    /// A labelled corner whose text/icon flip between a start action and the
+    /// ■ Stop that replaces it in place while a run is active (D-27 revised).
+    static func runToggle(
+        title: String,
+        accessibilityLabel: String,
+        isRunActive: Bool,
+        disabled: Bool,
+        start: @escaping () -> Void,
+        stop: @escaping () -> Void
+    ) -> IOSModuleBandAction {
+        IOSModuleBandAction(
+            title: isRunActive ? "Stop" : title,
+            systemImage: isRunActive ? "stop.fill" : "play.fill",
+            accessibilityLabel: isRunActive ? "Stop" : accessibilityLabel,
+            disabled: disabled,
+            action: isRunActive ? stop : start
+        )
     }
 }
 
@@ -149,6 +154,13 @@ enum IOSModuleLandscapeFormat {
     /// "Over V · G" — the chord underneath the layered neck.
     static func noteAssociationSubtitle(roman: String, chordName: String) -> String {
         "Over \(roman) · \(chordName)"
+    }
+
+    /// "Next: D minor" — the next chord in Note association's progression
+    /// (D-27 revised: the step text lands in the subtitle slot).
+    static func noteAssociationStepText(nextChord: DiatonicChord?) -> String {
+        guard let nextChord else { return "" }
+        return "Next: \(nextChord.name)"
     }
 
     /// "Next: D · B string fret 3" (D-27) — the note the hand is moving to.
@@ -240,9 +252,11 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     let drawerTitle: String
     let drawerSystemImage: String
     let drawer: Drawer
-    let bandMode: IOSModuleBandMode
+    /// Whether a guided run is in progress (count-in included). Only flips the
+    /// subtitle and what the module hands over for the corners; nothing else.
+    let isRunActive: Bool
+    /// The next-step text shown in the subtitle slot while `isRunActive`.
     let guidedRunStepText: String
-    let onStopGuidedRun: () -> Void
 
     /// Called when the global tuning changes, so a module can re-anchor its
     /// shapes (or, for Notes, stop and re-pitch what is placed). Fixed-shape
@@ -276,9 +290,8 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
         drawerTitle: String,
         drawerSystemImage: String,
         @ViewBuilder drawer: () -> Drawer,
-        bandMode: IOSModuleBandMode,
+        isRunActive: Bool,
         guidedRunStepText: String,
-        onStopGuidedRun: @escaping () -> Void,
         onTuningChange: ((Tuning) -> Void)? = nil,
         frets: Int,
         focusFret: Int
@@ -296,9 +309,8 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
         self.drawerTitle = drawerTitle
         self.drawerSystemImage = drawerSystemImage
         self.drawer = drawer()
-        self.bandMode = bandMode
+        self.isRunActive = isRunActive
         self.guidedRunStepText = guidedRunStepText
-        self.onStopGuidedRun = onStopGuidedRun
         self.onTuningChange = onTuningChange
         self.frets = frets
         self.focusFret = focusFret
@@ -315,11 +327,16 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
         .onChange(of: state.tuning) { _, tuning in
             onTuningChange?(tuning)
         }
-        .onChange(of: bandMode) { _, mode in
-            if IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: mode) {
-                showsDrawer = false
-            }
-        }
+    }
+
+    /// The subtitle slot is always present in both orientations; a run swaps
+    /// its text to the next step rather than moving anything around (D-27).
+    private var displaySubtitle: String {
+        IOSModuleRunDecision.subtitle(
+            normal: subtitle,
+            stepText: guidedRunStepText,
+            isRunActive: isRunActive
+        )
     }
 
     // MARK: Landscape
@@ -354,7 +371,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
                 Text(title)
                     .font(.headline)
                     .lineLimit(1)
-                Text(subtitle)
+                Text(displaySubtitle)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -398,20 +415,8 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
             bottomBand
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
-            if IOSModuleBandDecision.showsInlineDrawer(when: bandMode) {
-                drawer
-                    .padding(.top, 8)
-            } else {
-                // D-27: mid-run the drawer's pickers/buttons would change the
-                // exercise under the player, so portrait shows a calm line
-                // instead (landscape hides it behind the Stop band).
-                Text("Practising — stop to change settings")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-            }
+            drawer
+                .padding(.top, 8)
         }
         .background(NotePalette.backdrop)
     }
@@ -421,7 +426,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     /// and the live-note leaf stays top-right.
     private var subtitleRow: some View {
         HStack(spacing: 12) {
-            Text(subtitle)
+            Text(displaySubtitle)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -471,34 +476,21 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
 
     // MARK: Bottom band
 
+    /// The band never changes shape for a run (D-27 revised): the corners the
+    /// module supplied stay where they are — the start corner becomes ■ Stop
+    /// and the others are disabled, both decided by the module.
     private var bottomBand: some View {
         HStack(spacing: 12) {
-            switch bandMode {
-            case .normal:
-                if let leadingAction {
-                    bandActionButton(leadingAction)
-                }
-                Spacer(minLength: 0)
-                if isLandscape {
-                    drawerHandle
-                }
-                Spacer(minLength: 0)
-                if let trailingAction {
-                    bandActionButton(trailingAction)
-                }
-            case .guidedRun:
-                Button(action: onStopGuidedRun) {
-                    Label("Stop", systemImage: "stop.fill")
-                }
-                .buttonStyle(.glassProminent)
-                .tint(.red)
-                .accessibilityLabel("Stop practice run")
-                Spacer(minLength: 0)
-                Text(guidedRunStepText)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            if let leadingAction {
+                bandActionButton(leadingAction)
+            }
+            Spacer(minLength: 0)
+            if isLandscape {
+                drawerHandle
+            }
+            Spacer(minLength: 0)
+            if let trailingAction {
+                bandActionButton(trailingAction)
             }
         }
         .padding(.horizontal, 4)

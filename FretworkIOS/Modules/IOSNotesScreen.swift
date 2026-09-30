@@ -80,9 +80,8 @@ private struct IOSNotesStage: View {
             drawer: {
                 IOSNotesDrawer(state: state, model: model, showsFullNeck: $showsFullNeck)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
             onTuningChange: { tuning in
                 // A tuning change re-pitches every dot, so anything still
                 // sounding belongs to the old tuning.

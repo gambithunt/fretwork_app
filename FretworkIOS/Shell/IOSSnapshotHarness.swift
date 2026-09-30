@@ -30,6 +30,7 @@ enum IOSSnapshotHarness {
         case pentatonicLandscape = "-IOSSnapshotPentatonicLandscape"
         case pentatonicDrawer = "-IOSSnapshotPentatonicDrawer"
         case pentatonicGuided = "-IOSSnapshotPentatonicGuided"
+        case pentatonicGuidedPortrait = "-IOSSnapshotPentatonicGuidedPortrait"
         case scalesLandscape = "-IOSSnapshotScalesLandscape"
         case scalesDrawer = "-IOSSnapshotScalesDrawer"
         case scalesGuided = "-IOSSnapshotScalesGuided"
@@ -84,7 +85,7 @@ enum IOSSnapshotHarness {
         case .octavesLandscape, .octavesDrawer: return .octaves
         case .triadsShapesLandscape, .triadsShapesDrawer,
              .triadsPathsLandscape, .triadsPathsDrawer, .triadsPathsGuided: return .triads
-        case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided: return .pentatonic
+        case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided, .pentatonicGuidedPortrait: return .pentatonic
         case .scalesLandscape, .scalesDrawer, .scalesGuided: return .scales
         case .harmonizingLandscape, .harmonizingDrawer: return .harmonizing
         case .noteAssociationLandscape, .noteAssociationDrawer: return .noteAssociation
@@ -159,11 +160,12 @@ enum IOSSnapshotHarness {
         }
     }
 
-    /// Forces a landscape band into its guided-run form (D-27) without running
-    /// a real session: the Stop button and the "Next:" step text render
-    /// against a fixed, real note from the model's own run.
+    /// Forces a module into its guided-run form (D-27, revised) without
+    /// running a real session: the start button renders as ■ Stop, the next-
+    /// step text lands in the subtitle, and the other controls dim.
     static var guidedRunActive: Bool {
-        scenario == .pentatonicGuided || scenario == .triadsPathsGuided || scenario == .scalesGuided
+        scenario == .pentatonicGuided || scenario == .pentatonicGuidedPortrait
+            || scenario == .triadsPathsGuided || scenario == .scalesGuided
     }
 
     static func effectiveStatus(_ actual: IOSAudioStatus?) -> IOSAudioStatus? {

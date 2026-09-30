@@ -39,14 +39,12 @@ private struct IOSPentatonicStage: View {
         )
     }
 
-    private var bandMode: IOSModuleBandMode {
+    private var isRunActive: Bool {
         IOSSnapshot.guidedRunActive || model.guidedSnapshot.status != .idle
-            ? .guidedRun
-            : .normal
     }
 
     private var guidedStepText: String {
-        guard let next = model.nextStep ?? model.box.first else { return "" }
+        guard isRunActive, let next = model.nextStep ?? model.box.first else { return "" }
         return IOSModuleLandscapeFormat.guidedRunStepText(next: next)
     }
 
@@ -70,23 +68,22 @@ private struct IOSPentatonicStage: View {
             leadingAction: .step(
                 systemImage: "chevron.left",
                 accessibilityLabel: "Previous box",
-                disabled: model.position == 0,
+                disabled: isRunActive || model.position == 0,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position - 1) } }
             ),
             trailingAction: .step(
                 systemImage: "chevron.right",
                 accessibilityLabel: "Next box",
-                disabled: model.position == 4,
+                disabled: isRunActive || model.position == 4,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position + 1) } }
             ),
             drawerTitle: "Scale & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
-                IOSPentatonicDrawer(state: state, model: model)
+                IOSPentatonicDrawer(state: state, model: model, isRunActive: isRunActive)
             },
-            bandMode: bandMode,
+            isRunActive: isRunActive,
             guidedRunStepText: guidedStepText,
-            onStopGuidedRun: { model.stopGuided() },
             frets: model.highestFret,
             focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
@@ -99,6 +96,7 @@ private struct IOSPentatonicStage: View {
 private struct IOSPentatonicDrawer: View {
     let state: AppState
     let model: PentatonicModuleModel
+    let isRunActive: Bool
 
     var body: some View {
         ScrollView {
@@ -108,6 +106,7 @@ private struct IOSPentatonicDrawer: View {
                     selection: model.rootPitchClass,
                     onSelect: model.selectRoot
                 )
+                .disabled(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Scale")
@@ -123,6 +122,7 @@ private struct IOSPentatonicDrawer: View {
                         }
                     }
                 }
+                .disabled(isRunActive)
 
                 practise
 
@@ -137,14 +137,14 @@ private struct IOSPentatonicDrawer: View {
             Text("Practise")
                 .font(.headline)
             Button {
-                model.startGuided()
+                if isRunActive { model.stopGuided() } else { model.startGuided() }
             } label: {
-                Label("Practise", systemImage: "play.fill")
+                Label(isRunActive ? "Stop" : "Practise", systemImage: isRunActive ? "stop.fill" : "play.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassProminent)
-            .tint(NotePalette.accent)
-            .disabled(model.box.isEmpty || !state.isSamplePlaybackReady)
+            .tint(isRunActive ? .red : NotePalette.accent)
+            .disabled(!isRunActive && (model.box.isEmpty || !state.isSamplePlaybackReady))
             Text("A four-beat count-in, then one note per beat up the box. Tempo can be changed while practising.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

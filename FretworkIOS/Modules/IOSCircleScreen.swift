@@ -93,9 +93,8 @@ private struct IOSCircleStage: View {
             drawer: {
                 IOSCircleDrawer(state: state, model: model, labelMode: $labelMode)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
             onTuningChange: { model.retune(to: $0) },
             frets: 12,
             focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: 12)

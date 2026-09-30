@@ -2,46 +2,47 @@ import XCTest
 @testable import Fretwork
 
 /// Covers the pure logic extracted into the iOS module landscape scaffold:
-/// the band-mode decision (D-27) and the subtitle/step wording.
+/// the run-subtitle decision (D-27, revised) and the subtitle/step wording.
 final class IOSModuleLandscapeTests: XCTestCase {
-    // MARK: - Band mode (D-27)
+    // MARK: - Run subtitle (D-27, revised)
 
-    func testBandModeIsNormalWhenGuidedSessionIsIdle() {
+    func testSubtitleIsUnchangedWhenNotRunning() {
         XCTAssertEqual(
-            IOSModuleBandDecision.mode(guidedStatus: GuidedSession<GuidedScaleStep>.Status.idle),
-            .normal
+            IOSModuleRunDecision.subtitle(normal: "A minor pentatonic · Box 1 of 5", stepText: "Next: A · Low E string fret 5", isRunActive: false),
+            "A minor pentatonic · Box 1 of 5"
         )
     }
 
-    func testBandModeIsGuidedRunDuringCountIn() {
-        // The player has committed once the count-in starts; the drawer must
-        // already be out of reach.
+    func testSubtitleShowsTheNextStepWhileRunning() {
         XCTAssertEqual(
-            IOSModuleBandDecision.mode(guidedStatus: GuidedSession<GuidedScaleStep>.Status.countIn),
-            .guidedRun
+            IOSModuleRunDecision.subtitle(normal: "A minor pentatonic · Box 1 of 5", stepText: "Next: A · Low E string fret 5", isRunActive: true),
+            "Next: A · Low E string fret 5"
         )
     }
 
-    func testBandModeIsGuidedRunWhilePlaying() {
+    func testSubtitleFallsBackWhenRunningHasNoStepYet() {
+        // The count-in's first beat has no step text, so the subtitle slot
+        // keeps its normal text rather than going blank.
         XCTAssertEqual(
-            IOSModuleBandDecision.mode(guidedStatus: GuidedSession<GuidedScaleStep>.Status.playing),
-            .guidedRun
+            IOSModuleRunDecision.subtitle(normal: "C major · Ascending", stepText: "", isRunActive: true),
+            "C major · Ascending"
         )
     }
 
-    func testDrawerDismissesWhenTheBandBecomesGuidedRun() {
-        // D-27: the drawer is out of reach mid-exercise, so the scaffold closes
-        // it the moment the band switches to the Stop + step form.
-        XCTAssertTrue(IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: .guidedRun))
-    }
+    func testRunToggleFlipsTheStartButtonToStopInPlace() {
+        let idle = IOSModuleBandAction.runToggle(
+            title: "Practise", accessibilityLabel: "Practise", isRunActive: false,
+            disabled: false, start: {}, stop: {}
+        )
+        XCTAssertEqual(idle.title, "Practise")
+        XCTAssertEqual(idle.systemImage, "play.fill")
 
-    func testDrawerStaysOpenWhenTheBandIsNormal() {
-        XCTAssertFalse(IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: .normal))
-    }
-
-    func testInlineDrawerShowsOnlyWhenTheBandIsNormal() {
-        XCTAssertTrue(IOSModuleBandDecision.showsInlineDrawer(when: .normal))
-        XCTAssertFalse(IOSModuleBandDecision.showsInlineDrawer(when: .guidedRun))
+        let running = IOSModuleBandAction.runToggle(
+            title: "Practise", accessibilityLabel: "Practise", isRunActive: true,
+            disabled: false, start: {}, stop: {}
+        )
+        XCTAssertEqual(running.title, "Stop")
+        XCTAssertEqual(running.systemImage, "stop.fill")
     }
 
     // MARK: - Subtitles

@@ -91,9 +91,8 @@ private struct IOSIntervalsStage: View {
             drawer: {
                 IOSIntervalsDrawer(state: state, model: model, labelMode: $labelMode)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
             onTuningChange: { model.retune(to: $0) },
             frets: model.highestFret,
             focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)

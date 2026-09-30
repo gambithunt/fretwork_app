@@ -32,9 +32,21 @@ private struct IOSNoteAssociationStage: View {
     let state: AppState
     let model: NoteAssociationModuleModel
 
+    private var isRunActive: Bool {
+        IOSSnapshot.guidedRunActive || model.progressionSnapshot.status != .idle
+    }
+
     private var subtitle: String {
         guard let chord = model.chord else { return model.keyName }
         return IOSModuleLandscapeFormat.noteAssociationSubtitle(roman: chord.roman, chordName: chord.name)
+    }
+
+    private var guidedStepText: String {
+        guard isRunActive else { return "" }
+        let next = (model.progressionSnapshot.currentIndex ?? -1) + 1
+        let chords = model.progressionChords
+        guard chords.indices.contains(next) else { return "" }
+        return IOSModuleLandscapeFormat.noteAssociationStepText(nextChord: chords[next])
     }
 
     var body: some View {
@@ -57,23 +69,22 @@ private struct IOSNoteAssociationStage: View {
             leadingAction: .step(
                 systemImage: "chevron.left",
                 accessibilityLabel: "Previous chord",
-                disabled: model.focusedDegree == 0,
+                disabled: isRunActive || model.focusedDegree == 0,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectDegree(model.focusedDegree - 1) } }
             ),
             trailingAction: .step(
                 systemImage: "chevron.right",
                 accessibilityLabel: "Next chord",
-                disabled: model.focusedDegree == 6,
+                disabled: isRunActive || model.focusedDegree == 6,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectDegree(model.focusedDegree + 1) } }
             ),
             drawerTitle: "Key & layers",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
-                IOSNoteAssociationDrawer(state: state, model: model)
+                IOSNoteAssociationDrawer(state: state, model: model, isRunActive: isRunActive)
             },
-            bandMode: .normal,
-            guidedRunStepText: "",
-            onStopGuidedRun: {},
+            isRunActive: isRunActive,
+            guidedRunStepText: guidedStepText,
             onTuningChange: { model.retune(to: $0) },
             frets: model.highestFret,
             focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
@@ -87,6 +98,7 @@ private struct IOSNoteAssociationStage: View {
 private struct IOSNoteAssociationDrawer: View {
     let state: AppState
     let model: NoteAssociationModuleModel
+    let isRunActive: Bool
 
     var body: some View {
         ScrollView {
@@ -96,6 +108,7 @@ private struct IOSNoteAssociationDrawer: View {
                     selection: model.keyRoot,
                     onSelect: model.selectKeyRoot
                 )
+                .disabled(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Mode & labels")
@@ -111,8 +124,10 @@ private struct IOSNoteAssociationDrawer: View {
                         }
                     }
                 }
+                .disabled(isRunActive)
 
                 layers
+                    .disabled(isRunActive)
                 progression
                 explanation
             }
@@ -190,7 +205,7 @@ private struct IOSNoteAssociationDrawer: View {
                 }
                 .pickerStyle(.menu)
                 .fixedSize(horizontal: true, vertical: false)
-                .disabled(model.progressions.isEmpty)
+                .disabled(isRunActive || model.progressions.isEmpty)
 
                 ToggleChip(
                     title: "Loop",
@@ -198,20 +213,21 @@ private struct IOSNoteAssociationDrawer: View {
                     tint: NotePalette.accent,
                     onTap: { model.setLoop(!model.loop) }
                 )
+                .disabled(isRunActive)
             }
 
             IOSModulePlaybackNotice(state: state)
 
             HStack(spacing: 12) {
                 Button {
-                    model.startProgression()
+                    if isRunActive { model.stopEverything() } else { model.startProgression() }
                 } label: {
-                    Label("Play progression", systemImage: "play.fill")
+                    Label(isRunActive ? "Stop" : "Play progression", systemImage: isRunActive ? "stop.fill" : "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.progressionChords.isEmpty || !state.isSamplePlaybackReady)
+                .tint(isRunActive ? .red : NotePalette.accent)
+                .disabled(!isRunActive && (model.progressionChords.isEmpty || !state.isSamplePlaybackReady))
 
                 Button {
                     model.strumChord()
@@ -219,7 +235,7 @@ private struct IOSNoteAssociationDrawer: View {
                     Label("Strum chord", systemImage: "guitars")
                 }
                 .buttonStyle(.glass)
-                .disabled(model.chord == nil || !state.isSamplePlaybackReady)
+                .disabled(isRunActive || model.chord == nil || !state.isSamplePlaybackReady)
 
                 Button("Stop") { model.stopEverything() }
                     .buttonStyle(.glass)

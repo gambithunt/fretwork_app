@@ -83,9 +83,8 @@ private struct IOSChordsStage: View {
             drawer: {
                 IOSChordsDrawer(state: state, model: model)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
             frets: model.highestFret,
             focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )

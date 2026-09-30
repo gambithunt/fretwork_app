@@ -78,9 +78,8 @@ private struct IOSHarmonizingStage: View {
             drawer: {
                 IOSHarmonizingDrawer(state: state, model: model, labelMode: $labelMode)
             },
-            bandMode: .normal,
+            isRunActive: false,
             guidedRunStepText: "",
-            onStopGuidedRun: {},
             frets: model.highestFret,
             focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)
         )
