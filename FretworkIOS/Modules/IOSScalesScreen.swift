@@ -20,6 +20,11 @@ struct IOSScalesScreen: View {
                         if model == nil {
                             model = state.makeScalesModuleModel()
                             state.refreshSamplePlaybackReadiness()
+                            #if DEBUG
+                            if IOSSnapshot.guidedRunActive {
+                                model?.startGuided()
+                            }
+                            #endif
                         }
                     }
             }
@@ -33,7 +38,7 @@ private struct IOSScalesStage: View {
     let model: ScalesModuleModel
 
     private var isRunActive: Bool {
-        IOSSnapshot.guidedRunActive || model.guidedSnapshot.status != .idle
+        model.guidedSnapshot.status != .idle
     }
 
     private var guidedStepText: String {
@@ -105,6 +110,7 @@ private struct IOSScalesDrawer: View {
                     onSelect: model.selectRoot
                 )
                 .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Scale")

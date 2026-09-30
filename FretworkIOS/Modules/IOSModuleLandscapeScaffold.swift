@@ -689,6 +689,16 @@ struct IOSModulePlaybackNotice: View {
     }
 }
 
+extension View {
+    /// iOS-side dimming for the shared chip components (ChipPicker, ToggleChip),
+    /// whose custom fills sit over the system's disabled dim so `.disabled`
+    /// alone does not read as unavailable. Native menu pickers dim on their
+    /// own and never take this; the Mac screens never apply it.
+    func iosRunDimmed(_ dimmed: Bool) -> some View {
+        opacity(dimmed ? 0.45 : 1)
+    }
+}
+
 // MARK: - Nav bar
 
 extension View {

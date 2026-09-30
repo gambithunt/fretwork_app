@@ -33,7 +33,7 @@ private struct IOSNoteAssociationStage: View {
     let model: NoteAssociationModuleModel
 
     private var isRunActive: Bool {
-        IOSSnapshot.guidedRunActive || model.progressionSnapshot.status != .idle
+        model.progressionSnapshot.status != .idle
     }
 
     private var subtitle: String {
@@ -109,6 +109,7 @@ private struct IOSNoteAssociationDrawer: View {
                     onSelect: model.selectKeyRoot
                 )
                 .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Mode & labels")
@@ -128,6 +129,7 @@ private struct IOSNoteAssociationDrawer: View {
 
                 layers
                     .disabled(isRunActive)
+                    .iosRunDimmed(isRunActive)
                 progression
                 explanation
             }
@@ -214,6 +216,7 @@ private struct IOSNoteAssociationDrawer: View {
                     onTap: { model.setLoop(!model.loop) }
                 )
                 .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
             }
 
             IOSModulePlaybackNotice(state: state)

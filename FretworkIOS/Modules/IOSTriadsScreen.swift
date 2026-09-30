@@ -28,9 +28,13 @@ struct IOSTriadsScreen: View {
                             state.refreshSamplePlaybackReadiness()
                             #if DEBUG
                             // The snapshot harness opens directly on the
-                            // Paths face; nothing else forces that mode.
+                            // Paths face; nothing else forces that mode, and
+                            // the guided-run shot drives a real session.
                             if IOSSnapshot.forcesTriadsPathMode {
                                 model?.setPathMode(true)
+                            }
+                            if IOSSnapshot.guidedRunActive {
+                                model?.startProgression(loop: false)
                             }
                             #endif
                         }
@@ -65,7 +69,7 @@ private struct IOSTriadsStage: View {
 
     private var isRunActive: Bool {
         guard model.isPathMode else { return false }
-        return IOSSnapshot.guidedRunActive || model.progressionSnapshot.status != .idle
+        return model.progressionSnapshot.status != .idle
     }
 
     private var guidedStepText: String {
@@ -162,6 +166,7 @@ private struct IOSTriadsDrawer: View {
                     onSelect: model.selectRoot
                 )
                 .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Exercise")

@@ -19,6 +19,15 @@ struct IOSPentatonicScreen: View {
                         if model == nil {
                             model = state.makePentatonicModuleModel()
                             state.refreshSamplePlaybackReadiness()
+                            #if DEBUG
+                            // Drive a real session for the guided-run
+                            // screenshot, so the board's current-step
+                            // emphasis and the next-step subtitle come from the
+                            // same run rather than a view-only flag.
+                            if IOSSnapshot.guidedRunActive {
+                                model?.startGuided()
+                            }
+                            #endif
                         }
                     }
             }
@@ -40,7 +49,7 @@ private struct IOSPentatonicStage: View {
     }
 
     private var isRunActive: Bool {
-        IOSSnapshot.guidedRunActive || model.guidedSnapshot.status != .idle
+        model.guidedSnapshot.status != .idle
     }
 
     private var guidedStepText: String {
@@ -107,6 +116,7 @@ private struct IOSPentatonicDrawer: View {
                     onSelect: model.selectRoot
                 )
                 .disabled(isRunActive)
+                .iosRunDimmed(isRunActive)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Scale")
