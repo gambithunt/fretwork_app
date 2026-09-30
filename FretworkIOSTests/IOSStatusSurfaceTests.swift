@@ -35,6 +35,14 @@ final class IOSStatusSurfaceTests: XCTestCase {
         XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: nil).title, "Stopped")
     }
 
+    func testPlayingOverridesListeningOnly() {
+        XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .listening, playing: true).title, "Playing")
+        XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .listening, playing: true).tint, .orange)
+        // Playing must never mask a non-listening state (idle/failure/etc.).
+        XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .idle, playing: true).title, "Stopped")
+        XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .failed("x"), playing: true).title, "Audio error")
+    }
+
     func testStartDecision() {
         // idle + granted/undetermined + active -> start (recovery / first-run).
         XCTAssertTrue(IOSStartDecision.shouldStart(

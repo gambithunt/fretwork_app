@@ -18,6 +18,10 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     private var lastDetection: ContinuousClock.Instant?
     private var lastPublish = ContinuousClock.now
     private var running: Int32 = 0
+    /// Set by `reset()`; the consume thread clears the smoothing/median state
+    /// on its next iteration, so a pre-gate reading cannot leak out after the
+    /// playback gate lifts.
+    private var resetRequested: Int32 = 0
     var onUpdate: (@Sendable (PitchDisplayState, UInt64) -> Void)?
 
     init(ring: RingBuffer, sensitivity: SensitivitySettings) {
@@ -31,8 +35,20 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     }
     func stop() { OSAtomicCompareAndSwap32Barrier(1, 0, &running) }
 
+    /// Requests a state reset on the consume thread. Safe from any thread:
+    /// the flag is atomic and the fields it clears are owned by that thread.
+    func reset() { OSAtomicCompareAndSwap32Barrier(0, 1, &resetRequested) }
+
     private func consume(sampleRate: Double, bufferSize: Int) {
         while OSAtomicAdd32Barrier(0, &running) == 1 {
+            if OSAtomicCompareAndSwap32Barrier(1, 0, &resetRequested) {
+                history.removeAll(keepingCapacity: true)
+                lastMIDI = nil
+                lastDetection = nil
+                smoothedCents = nil
+                smoothedCentsMIDI = nil
+                lastFrequency = 0
+            }
             // Read the newest chunk into scratch first — only once we know it's
             // available do we slide the window and splice the chunk into the tail.
             // (Writing straight into `window` and then shifting over it would

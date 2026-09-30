@@ -297,15 +297,22 @@ private struct IOSStatusPill: View {
 
     var body: some View {
         let appearance = IOSStatusAppearanceMapper.appearance(
-            for: IOSSnapshot.effectiveStatus(state.iosAudio?.status)
+            for: IOSSnapshot.effectiveStatus(state.iosAudio?.status),
+            playing: state.iosAudio?.isSuppressingForPlayback ?? false
         )
         HStack(spacing: 8) {
             Circle()
                 .fill(appearance.tint)
                 .frame(width: 6, height: 6)
                 .shadow(color: appearance.tint.opacity(0.9), radius: 4)
-            Text(appearance.title)
-                .font(.caption.weight(.semibold))
+            ZStack(alignment: .leading) {
+                Text(IOSStatusAppearanceMapper.widestTitle)
+                    .font(.caption.weight(.semibold))
+                    .hidden()
+                Text(appearance.title)
+                    .font(.caption.weight(.semibold))
+                    .contentTransition(.numericText())
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -327,7 +334,8 @@ private struct IOSLandscapeListeningPill: View {
 
     var body: some View {
         let appearance = IOSStatusAppearanceMapper.appearance(
-            for: IOSSnapshot.effectiveStatus(state.iosAudio?.status)
+            for: IOSSnapshot.effectiveStatus(state.iosAudio?.status),
+            playing: state.iosAudio?.isSuppressingForPlayback ?? false
         )
         let scale = IOSReadoutFormat.pulseScale(
             normalizedLevel: IOSReadoutFormat.normalizedLevel(state.display.level),
@@ -340,8 +348,14 @@ private struct IOSLandscapeListeningPill: View {
                 .frame(width: 6, height: 6)
                 .scaleEffect(scale)
                 .shadow(color: appearance.tint.opacity(0.9), radius: 4)
-            Text(appearance.title)
-                .font(.caption.weight(.semibold))
+            ZStack(alignment: .leading) {
+                Text(IOSStatusAppearanceMapper.widestTitle)
+                    .font(.caption.weight(.semibold))
+                    .hidden()
+                Text(appearance.title)
+                    .font(.caption.weight(.semibold))
+                    .contentTransition(.numericText())
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)

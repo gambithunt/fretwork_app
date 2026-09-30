@@ -31,13 +31,43 @@ import Observation
 @MainActor @Observable
 final class IOSAudioController: AudioControlling {
 
+    /// How long after the last scheduled sample's nominal end the playback
+    /// gate keeps suppressing detection. Derived from the detector's own
+    /// latency, not from any acoustic tail: both device runs (quiet room,
+    /// noise floor -66 dB; TV/talking room, floor -52 dB) showed the mic level
+    /// back at its floor within ~0.25–0.5 s of the sample's nominal end and
+    /// **zero** detections of the played pitch after the end in the quiet room
+    /// — the speaker tail is effectively zero. The margin therefore only has
+    /// to cover the note detector's latency: the 2048-sample YIN window must
+    /// fully flush (2048 / 48000 ≈ 43 ms at the iPhone's session rate) plus the
+    /// worker's 3-of-5 median confirmation (3 publishes at its 33 ms cadence
+    /// ≈ 99 ms). 43 ms + 99 ms = 142 ms, rounded up to 150 ms. A longer hold
+    /// would only mute the next real note; a shorter one risks re-confirming
+    /// the sample's own tail while the window still holds it.
+    static let samplePlaybackGateTail: TimeInterval = 0.150
+
     // MARK: - AudioControlling
 
     var onEvent: (@MainActor @Sendable (AudioControllerEvent) -> Void)?
 
+    /// RAW (ungated) worker updates, for the DEBUG bleed probe only: fired on
+    /// every note/chord worker update regardless of the playback gate, so the
+    /// probe can report both gated and ungated detection. Production consumers
+    /// must use `onEvent`, which is the gated stream `AppState` sees.
+    var onRawWorkerUpdate: (@MainActor @Sendable (AudioControllerEvent) -> Void)?
+
     // MARK: - iOS-only observable surface
 
     private(set) var status: IOSAudioStatus = .idle
+    /// True while the playback gate is suppressing detection — any app sample
+    /// sounding through its nominal end plus `samplePlaybackGateTail`. Derived
+    /// from the gate on read (rather than a stored flag) so it can never go
+    /// stale across a stop/start cycle; the Listen pill reads it to say
+    /// "Playing" instead of "Listening".
+    var isSuppressingForPlayback: Bool {
+        guard let end = playbackGate.gateEnd else { return false }
+        return now() < end
+    }
     /// The current microphone permission, read from the session seam. Exposed
     /// so the Listen screen's start-decision logic can tell `.idle`-after-grant
     /// apart from `.idle`-after-denial without reaching into the session.
@@ -62,6 +92,9 @@ final class IOSAudioController: AudioControlling {
     private let graphBuilder: IOSAudioGraphBuilding
     private let playerFactory: @Sendable (NoteSampleLibrary, Double) -> SamplePlayer
     private let playThroughPlayer: @Sendable (SamplePlayer, Int, Int, Double, Float) -> Void
+    /// Monotonic time source for the playback gate. Injectable so gate timing
+    /// can be stepped deterministically in tests.
+    private let now: @Sendable () -> TimeInterval
 
     // MARK: - State
 
@@ -84,6 +117,9 @@ final class IOSAudioController: AudioControlling {
     /// to quiescence rather than a single link (a transition may enqueue the
     /// next one, e.g. permission grant → run build).
     private var transitionSerial = 0
+    /// The playback gate: suppresses note/chord events while any app sample
+    /// is sounding (through its nominal end) plus `samplePlaybackGateTail`.
+    private var playbackGate: PlaybackGate
 
     private struct IOSAudioRun {
         let leg: IOSAudioGraphLeg
@@ -107,12 +143,15 @@ final class IOSAudioController: AudioControlling {
          },
          playThroughPlayer: @escaping @Sendable (SamplePlayer, Int, Int, Double, Float) -> Void = { player, string, fret, rate, gain in
              player.play(string: string, fret: fret, rateMultiplier: rate, gain: gain)
-         }) {
+         },
+         now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.session = session
         self.foreground = foreground
         self.graphBuilder = graphBuilder
         self.playerFactory = playerFactory
         self.playThroughPlayer = playThroughPlayer
+        self.now = now
+        self.playbackGate = PlaybackGate(tail: Self.samplePlaybackGateTail)
 
         foreground.onForegroundChange = { [weak self] active in
             self?.setForegroundActive(active)
@@ -235,6 +274,20 @@ final class IOSAudioController: AudioControlling {
         }
         guard let player = run?.player else { return }
         playThroughPlayer(player, string, resolution.fret, resolution.rateMultiplier, 1)
+        // Playback gate: suppress detection from this play call until the
+        // played take's nominal end (overlapping plays extend it). The take is
+        // looked up by its *source* fret — `resolution.fret` — because that is
+        // the audio the player is about to read.
+        if let sample = sampleLibrary?.sample(string: string, fret: resolution.fret) {
+            let duration = Double(sample.frameCount) / sample.sampleRate / resolution.rateMultiplier
+            if playbackGate.recordPlay(duration: duration, at: now()) == .closed {
+                // The gate just closed: clear the readout so a note detected
+                // before playback does not linger on screen while the app is
+                // audibly playing its own sample.
+                onEvent?(.noteUpdate(PitchDisplayState()))
+                onEvent?(.chordUpdate(ChordDisplayState()))
+            }
+        }
     }
 
     // MARK: - Foreground policy
@@ -337,10 +390,10 @@ final class IOSAudioController: AudioControlling {
         let analysisWorker = AudioAnalysisWorker(ring: analysisRing, sensitivity: sensitivity)
         let chordWorker = ChordAnalysisWorker(ring: chordRing)
         analysisWorker.onUpdate = { [weak self] display, _ in
-            Task { @MainActor [weak self] in self?.onEvent?(.noteUpdate(display)) }
+            Task { @MainActor [weak self] in self?.forwardNoteUpdate(display) }
         }
         chordWorker.onUpdate = { [weak self] chord in
-            Task { @MainActor [weak self] in self?.onEvent?(.chordUpdate(chord)) }
+            Task { @MainActor [weak self] in self?.forwardChordUpdate(chord) }
         }
 
         let sampleRate = session.sampleRate
@@ -445,6 +498,58 @@ final class IOSAudioController: AudioControlling {
         onEvent?(.error(message))
     }
 
+    // MARK: - Playback gate forwarding
+
+    /// Drops the triggering pre-gate update plus the one already in flight on
+    /// each worker thread when the gate lifts, so a reading computed before the
+    /// reset can never leak out. Two per stream covers the worst realistic
+    /// case: the update being processed (the one that saw the gate open) and
+    /// the one the worker computed before observing the reset flag.
+    private var dropNextNote = 0
+    private var dropNextChord = 0
+
+    /// The gated path every worker update takes. The raw value is forwarded to
+    /// `onRawWorkerUpdate` first (probe-only), then the playback gate decides
+    /// whether `onEvent` — and therefore `AppState` and every consumer — sees
+    /// it.
+    private func forwardNoteUpdate(_ display: PitchDisplayState) {
+        onRawWorkerUpdate?(.noteUpdate(display))
+        guard !applyGate() else { return }
+        if dropNextNote > 0 {
+            dropNextNote -= 1
+            return
+        }
+        onEvent?(.noteUpdate(display))
+    }
+
+    private func forwardChordUpdate(_ chord: ChordDisplayState) {
+        onRawWorkerUpdate?(.chordUpdate(chord))
+        guard !applyGate() else { return }
+        if dropNextChord > 0 {
+            dropNextChord -= 1
+            return
+        }
+        onEvent?(.chordUpdate(chord))
+    }
+
+    /// Recomputes the gate at the current time and returns true while
+    /// suppression is active. On the closed→open transition the workers are
+    /// reset, so a reading computed from pre-gate audio cannot leak into the
+    /// first post-gate update; the stale in-flight updates are then dropped by
+    /// the counters above.
+    private func applyGate() -> Bool {
+        switch playbackGate.update(at: now()) {
+        case .opened:
+            run?.analysisWorker.reset()
+            run?.chordWorker.reset()
+            dropNextNote = 2
+            dropNextChord = 2
+        case .closed, .none:
+            break
+        }
+        return playbackGate.isSuppressed
+    }
+
     // MARK: - Transitions
 
     /// Chains one unit of graph/session work behind the previous one. The work
@@ -518,6 +623,28 @@ final class IOSAudioController: AudioControlling {
     var currentLeg: IOSAudioGraphLeg? { run?.leg }
     var hasRunForTesting: Bool { run != nil }
     var sensitivityValueForTesting: Double { sensitivity.value }
+
+    /// Drives one synthetic worker update through the gate exactly as a real
+    /// worker `onUpdate` would, so tests can prove suppression/delivery and the
+    /// reset-on-lift drop without standing up a live ring buffer. Returns true
+    /// when the update reached `onEvent`.
+    @discardableResult
+    func deliverWorkerNoteForTesting(_ display: PitchDisplayState) -> Bool {
+        let delivered = !playbackGate.isSuppressed && dropNextNote == 0
+        forwardNoteUpdate(display)
+        return delivered
+    }
+
+    /// Same as `deliverWorkerNoteForTesting` for the chord stream.
+    @discardableResult
+    func deliverWorkerChordForTesting(_ chord: ChordDisplayState) -> Bool {
+        let delivered = !playbackGate.isSuppressed && dropNextChord == 0
+        forwardChordUpdate(chord)
+        return delivered
+    }
+
+    /// Whether the playback gate is currently suppressing the gated stream.
+    var isPlaybackGateSuppressedForTesting: Bool { playbackGate.isSuppressed }
 
     /// A stable category/mode label for the smoke log, derived from the active
     /// leg rather than asking `AVAudioSession` after the fact.
