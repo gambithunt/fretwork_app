@@ -39,6 +39,11 @@ final class IOSModuleLandscapeTests: XCTestCase {
         XCTAssertFalse(IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: .normal))
     }
 
+    func testInlineDrawerShowsOnlyWhenTheBandIsNormal() {
+        XCTAssertTrue(IOSModuleBandDecision.showsInlineDrawer(when: .normal))
+        XCTAssertFalse(IOSModuleBandDecision.showsInlineDrawer(when: .guidedRun))
+    }
+
     // MARK: - Subtitles
 
     func testIntervalSubtitleNamesTheIntervalAndItsDistance() {

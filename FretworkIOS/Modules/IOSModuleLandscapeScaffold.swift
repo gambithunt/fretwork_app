@@ -57,6 +57,12 @@ enum IOSModuleBandDecision {
     static func shouldDismissDrawer(transitioningTo mode: IOSModuleBandMode) -> Bool {
         mode == .guidedRun
     }
+
+    /// D-27 (portrait): the inline drawer stays put on screen, so it is hidden
+    /// for the duration of a run rather than left usable mid-exercise.
+    static func showsInlineDrawer(when mode: IOSModuleBandMode) -> Bool {
+        mode == .normal
+    }
 }
 
 // MARK: - Subtitle / step formatting
@@ -392,8 +398,20 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
             bottomBand
                 .padding(.horizontal, 12)
                 .padding(.top, 4)
-            drawer
-                .padding(.top, 8)
+            if IOSModuleBandDecision.showsInlineDrawer(when: bandMode) {
+                drawer
+                    .padding(.top, 8)
+            } else {
+                // D-27: mid-run the drawer's pickers/buttons would change the
+                // exercise under the player, so portrait shows a calm line
+                // instead (landscape hides it behind the Stop band).
+                Text("Practising — stop to change settings")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+            }
         }
         .background(NotePalette.backdrop)
     }
