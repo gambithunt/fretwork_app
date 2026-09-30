@@ -20,6 +20,9 @@ struct IOSAppRootView: View {
     @State private var path: [AppScreen] = IOSSnapshot.initialPath
     @State private var selection: AppScreen? = .listen
     @State private var isShowingSettings = IOSSnapshot.showsSettingsSheet
+    #if DEBUG
+    @State private var sessionLogger: SessionLogger?
+    #endif
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -67,6 +70,15 @@ struct IOSAppRootView: View {
         }
         // Single observer for the keep-screen-on setting/status/scene decision.
         .fretworkKeepsScreenOn(state: appState)
+        #if DEBUG
+        .task {
+            if CommandLine.arguments.contains("-FretworkSessionLog") {
+                let logger = SessionLogger(appState: appState)
+                sessionLogger = logger
+                logger.start()
+            }
+        }
+        #endif
     }
 
     // MARK: - iPhone (push)
