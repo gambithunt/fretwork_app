@@ -19,7 +19,13 @@ struct BleedProbeView: View {
         Text("Speaker-bleed probe running — see the console (stderr).")
             .font(.body)
             .padding()
-            .task { await BleedProbeRunner().run() }
+            .task {
+                // The run is unattended and ~2 minutes long; auto-lock would
+                // end the audio session mid-leg.
+                UIApplication.shared.isIdleTimerDisabled = true
+                await BleedProbeRunner().run()
+                UIApplication.shared.isIdleTimerDisabled = false
+            }
     }
 }
 
