@@ -1,46 +1,33 @@
 import SwiftUI
 
-/// The Chords module on iOS.
-///
-/// Portrait reuses the existing Mac `ChordsModuleScreen` verbatim as the
-/// fallback (D-18) — the model, shapes and playback are all real, wired by
-/// `AppState`. Landscape is the M2 arrangement (D-20/D-22), rendered by the
-/// shared `IOSModuleLandscapeScaffold`: a centred neck with fret numbers on
-/// its top edge, translucent ‹ › arrows in the band just below the low E at
-/// the neck's bottom corners, a drawer handle between them, and a slide-up
-/// drawer holding the root/family/chord pickers, Strum/Stop and the
-/// explanation.
+/// The Chords module on iOS, built entirely on the shared `IOSModuleScaffold`
+/// (D-11/D-18): the M2 landscape arrangement (a centred neck, ‹ › arrows and
+/// a slide-up drawer) and, in portrait, the board as a scroll strip with the
+/// same controls and drawer contents inline.
 struct IOSChordsScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: ChordsModuleModel?
+    @State private var model: ChordsModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSChordsLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeChordsModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSChordsStage(state: state, model: model)
             } else {
-                ChordsModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeChordsModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSChordsLandscape: View {
+private struct IOSChordsStage: View {
     let state: AppState
     let model: ChordsModuleModel
 
@@ -63,7 +50,7 @@ private struct IOSChordsLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .chords),
             subtitle: subtitle,
             tuning: state.tuning,
@@ -97,7 +84,9 @@ private struct IOSChordsLandscape: View {
             },
             bandMode: .normal,
             guidedRunStepText: "",
-            onStopGuidedRun: {}
+            onStopGuidedRun: {},
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stop() }
     }

@@ -233,4 +233,41 @@ final class IOSModuleLandscapeTests: XCTestCase {
             "Next: E · Low E string fret 0"
         )
     }
+
+    // MARK: - Portrait strip (D-06/D-18)
+
+    func testFocusFretPicksTheLowestOutlinedDot() {
+        let dots = [
+            FretboardDot(id: "a", position: FretPosition(string: 0, fret: 7), label: "1", color: .white, outline: true),
+            FretboardDot(id: "b", position: FretPosition(string: 1, fret: 5), label: "1", color: .white, outline: true),
+            FretboardDot(id: "c", position: FretPosition(string: 2, fret: 3), label: "1", color: .white)
+        ]
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: dots, highestFret: 15), 5)
+    }
+
+    func testFocusFretFallsBackToAllDotsWhenNothingIsOutlined() {
+        let dots = [
+            FretboardDot(id: "a", position: FretPosition(string: 0, fret: 9), label: "1", color: .white),
+            FretboardDot(id: "b", position: FretPosition(string: 1, fret: 4), label: "1", color: .white)
+        ]
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: dots, highestFret: 12), 4)
+    }
+
+    func testFocusFretIsZeroWithNoDotsAndClampsToTheBoard() {
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: [], highestFret: 12), 0)
+        let pastEnd = [FretboardDot(id: "a", position: FretPosition(string: 0, fret: 20), label: "1", color: .white, outline: true)]
+        XCTAssertEqual(IOSModulePortraitStrip.focusFret(for: pastEnd, highestFret: 12), 12)
+    }
+
+    func testStripGeometryAndScrollOffset() {
+        XCTAssertEqual(IOSModulePortraitStrip.width(for: 12), 62 + 44 * 13)
+        XCTAssertEqual(IOSModulePortraitStrip.leadingEdge(ofFret: 3, frets: 12), 62 + 44 * 3)
+        // A mid fret scrolls so the shape sits near the leading edge with a
+        // little context before it.
+        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 2, frets: 12, viewportWidth: 390), 62 + 44 * 2 - 20)
+        // Near the end it clamps to the last page rather than overshooting.
+        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 12, frets: 12, viewportWidth: 390), 634 - 390)
+        // A viewport wider than the strip needs no scroll.
+        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 3, frets: 12, viewportWidth: 700), 0)
+    }
 }

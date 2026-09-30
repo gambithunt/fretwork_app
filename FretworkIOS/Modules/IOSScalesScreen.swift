@@ -1,44 +1,34 @@
 import SwiftUI
 
-/// The Scales module on iOS.
-///
-/// Portrait reuses the Mac `ScalesModuleScreen` verbatim (D-18). Landscape is
-/// the M2 arrangement (D-20/D-22): the neck with the guided-run emphasis, a
-/// single ▶ Practise button where the ‹ › step arrows would be (D-26 — Scales
-/// has no positions to move along the neck), and a drawer holding the root,
-/// quality, direction, labels, tempo and the explanation. During a guided run
-/// the band switches to ■ Stop + the next note (D-27).
+/// The Scales module on iOS, built on the shared `IOSModuleScaffold`
+/// (D-11/D-18): a single ▶ Practise button where the ‹ › step arrows would be
+/// (D-26 — Scales has no positions to move along the neck) and a drawer
+/// holding the root, quality, direction, labels, tempo and the explanation.
+/// During a guided run the band switches to ■ Stop + the next note (D-27).
 struct IOSScalesScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: ScalesModuleModel?
+    @State private var model: ScalesModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSScalesLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeScalesModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSScalesStage(state: state, model: model)
             } else {
-                ScalesModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeScalesModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSScalesLandscape: View {
+private struct IOSScalesStage: View {
     let state: AppState
     let model: ScalesModuleModel
 
@@ -56,7 +46,7 @@ private struct IOSScalesLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .scales),
             subtitle: IOSModuleLandscapeFormat.scalesSubtitle(
                 scaleName: model.scaleName,
@@ -91,7 +81,9 @@ private struct IOSScalesLandscape: View {
             bandMode: bandMode,
             guidedRunStepText: guidedStepText,
             onStopGuidedRun: { model.stopGuided() },
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stopGuided() }
     }

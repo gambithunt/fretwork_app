@@ -61,8 +61,8 @@ enum IOSModuleBandDecision {
 
 // MARK: - Subtitle / step formatting
 
-/// The one place the landscape subtitle and guided-run step strings are
-/// spelled, so the wording can be unit-tested without a view or audio.
+/// The one place the subtitle and guided-run step strings are spelled, so the
+/// wording can be unit-tested without a view or audio.
 enum IOSModuleLandscapeFormat {
     /// "Major 3rd · 4 frets" — the interval's name and its distance in frets.
     static func intervalSubtitle(_ interval: Interval) -> String {
@@ -151,19 +151,64 @@ enum IOSModuleLandscapeFormat {
     }
 }
 
+// MARK: - Portrait board strip
+
+/// Sizing and scroll-target math for the portrait board strip (D-06/D-18):
+/// the same board view, laid out at a legible per-fret width and scrolled
+/// horizontally so the current shape is in view rather than shrunk to fit.
+enum IOSModulePortraitStrip {
+    /// Column width reserved per fret, so dots stay the size they are on the
+    /// landscape neck instead of being uniformly shrunk (D-06).
+    static let fretWidth: CGFloat = 44
+    /// The board's left gutter (string labels), matching
+    /// `BoardGeometry.Margins.labelled.leading`.
+    static let leadingMargin: CGFloat = 62
+    /// The strip's fixed height: six strings plus the fret-number row.
+    static let height: CGFloat = 260
+    /// Breathing room left before the target fret, so the shape is not hard
+    /// against the leading edge.
+    static let leadingInset: CGFloat = 20
+
+    static func width(for frets: Int) -> CGFloat {
+        leadingMargin + fretWidth * CGFloat(frets + 1)
+    }
+
+    /// The x of a fret's leading edge inside the strip.
+    static func leadingEdge(ofFret fret: Int, frets: Int) -> CGFloat {
+        leadingMargin + fretWidth * CGFloat(fret)
+    }
+
+    /// The scroll offset that brings `fret` into view near the leading edge,
+    /// clamped so the strip never scrolls past its end.
+    static func scrollOffset(for fret: Int, frets: Int, viewportWidth: CGFloat) -> CGFloat {
+        let leading = leadingEdge(ofFret: fret, frets: frets)
+        return max(0, min(leading - leadingInset, max(0, width(for: frets) - viewportWidth)))
+    }
+
+    /// Which fret the strip should open on: the lowest fret of the emphasised
+    /// (outlined) dots — the current shape — falling back to the lowest of all
+    /// dots when nothing is outlined (Notes before anything is placed).
+    static func focusFret(for dots: [FretboardDot], highestFret: Int) -> Int {
+        let emphasised = dots.filter(\.outline)
+        let pool = emphasised.isEmpty ? dots : emphasised
+        guard let lowest = pool.map(\.position.fret).min() else { return 0 }
+        return min(max(lowest, 0), max(highestFret, 0))
+    }
+}
+
 // MARK: - The primitive
 
-/// One shared landscape layout for every learning module (D-11): a top row of
-/// chrome (glass back, title + subtitle, the standard-tuning pill, the
-/// live-note leaf), a centred stage in the middle, and a bottom band of corner
-/// controls plus a drawer button — or, during a guided run, Stop + the current
-/// step (D-27).
+/// The one module layout for both orientations (D-11/D-18): a shared top row
+/// of chrome, a centred stage in landscape, and — in portrait — the board as a
+/// horizontal scroll strip with the same controls beneath it and the drawer's
+/// contents inline as a scrolling page.
 ///
 /// Modules supply their own `neck` (almost always `FretboardBoardView`),
-/// `drawer` (the sheet content) and two optional `leadingAction`/`trailingAction`
-/// corners; the chrome, spacing (D-22: 12pt top, 16pt side, 12pt bottom) and
-/// band behaviour live here once.
-struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
+/// `drawer` (the sheet/page content), two optional `leadingAction`/
+/// `trailingAction` corners and an optional `companion` (Circle's ring, drawn
+/// leading of the board in landscape and above the strip in portrait). The
+/// chrome, spacing and band behaviour live here once.
+struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     let title: String
     let subtitle: String
     let tuning: Tuning
@@ -171,15 +216,13 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
     /// "standard tuning shapes" pill when the global tuning is not standard.
     let isFixedShapeModule: Bool
     let state: AppState
-    @ViewBuilder var neck: Neck
-
+    let neck: Neck
+    let companion: Companion
     let leadingAction: IOSModuleBandAction?
     let trailingAction: IOSModuleBandAction?
-
     let drawerTitle: String
     let drawerSystemImage: String
-    @ViewBuilder var drawer: Drawer
-
+    let drawer: Drawer
     let bandMode: IOSModuleBandMode
     let guidedRunStepText: String
     let onStopGuidedRun: () -> Void
@@ -188,16 +231,89 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
     /// shapes (or, for Notes, stop and re-pitch what is placed). Fixed-shape
     /// modules (Chords/Pentatonic/Harmonizing) leave it nil — their frets
     /// detune rather than transpose, which the notice pill explains.
-    var onTuningChange: ((Tuning) -> Void)? = nil
+    let onTuningChange: ((Tuning) -> Void)?
+    /// The fret count the board draws; sizes the portrait strip so frets stay
+    /// legible rather than shrinking.
+    let frets: Int
+    /// The fret the portrait strip scrolls to, so the current shape is in view.
+    let focusFret: Int
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var showsDrawer = IOSSnapshot.showsModuleDrawer
+    @State private var stripPosition = ScrollPosition(x: 0)
+
+    private var isLandscape: Bool { verticalSizeClass == .compact }
+
+    init(
+        title: String,
+        subtitle: String,
+        tuning: Tuning,
+        isFixedShapeModule: Bool,
+        state: AppState,
+        @ViewBuilder neck: () -> Neck,
+        @ViewBuilder companion: () -> Companion = { EmptyView() },
+        leadingAction: IOSModuleBandAction?,
+        trailingAction: IOSModuleBandAction?,
+        drawerTitle: String,
+        drawerSystemImage: String,
+        @ViewBuilder drawer: () -> Drawer,
+        bandMode: IOSModuleBandMode,
+        guidedRunStepText: String,
+        onStopGuidedRun: @escaping () -> Void,
+        onTuningChange: ((Tuning) -> Void)? = nil,
+        frets: Int,
+        focusFret: Int
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.tuning = tuning
+        self.isFixedShapeModule = isFixedShapeModule
+        self.state = state
+        self.neck = neck()
+        self.companion = companion()
+        self.leadingAction = leadingAction
+        self.trailingAction = trailingAction
+        self.drawerTitle = drawerTitle
+        self.drawerSystemImage = drawerSystemImage
+        self.drawer = drawer()
+        self.bandMode = bandMode
+        self.guidedRunStepText = guidedRunStepText
+        self.onStopGuidedRun = onStopGuidedRun
+        self.onTuningChange = onTuningChange
+        self.frets = frets
+        self.focusFret = focusFret
+    }
 
     var body: some View {
+        Group {
+            if isLandscape {
+                landscape
+            } else {
+                portrait
+            }
+        }
+        .onChange(of: state.tuning) { _, tuning in
+            onTuningChange?(tuning)
+        }
+        .onChange(of: bandMode) { _, mode in
+            if IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: mode) {
+                showsDrawer = false
+            }
+        }
+    }
+
+    // MARK: Landscape
+
+    private var landscape: some View {
         VStack(spacing: 8) {
             topRow
-            neck
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(alignment: .center, spacing: 20) {
+                companion
+                neck
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             bottomBand
         }
         .padding(.top, 12)
@@ -210,17 +326,7 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
                 .preferredColorScheme(.dark)
                 .tint(NotePalette.accent)
         }
-        .onChange(of: state.tuning) { _, tuning in
-            onTuningChange?(tuning)
-        }
-        .onChange(of: bandMode) { _, mode in
-            if IOSModuleBandDecision.shouldDismissDrawer(transitioningTo: mode) {
-                showsDrawer = false
-            }
-        }
     }
-
-    // MARK: Top row
 
     private var topRow: some View {
         HStack(spacing: 12) {
@@ -255,6 +361,72 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
         .accessibilityLabel("Back")
     }
 
+    // MARK: Portrait
+
+    private var portrait: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            subtitleRow
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            if isFixedShapeModule {
+                IOSCompactStandardTuningNotice(tuning: tuning)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+            }
+            companion
+            boardStrip
+                .padding(.top, 8)
+            bottomBand
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+            drawer
+                .padding(.top, 8)
+        }
+        .background(NotePalette.backdrop)
+    }
+
+    /// Portrait has no drawer button — the drawer's contents are inline below
+    /// the band — so the subtitle takes the title's place under the nav bar
+    /// and the live-note leaf stays top-right.
+    private var subtitleRow: some View {
+        HStack(spacing: 12) {
+            Text(subtitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Spacer(minLength: 8)
+            IOSModuleLiveNoteLeaf(state: state, enabled: state.showsLiveNoteOnModules)
+        }
+    }
+
+    private var boardStrip: some View {
+        GeometryReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                neck
+                    .frame(
+                        width: IOSModulePortraitStrip.width(for: frets),
+                        height: IOSModulePortraitStrip.height
+                    )
+            }
+            .scrollPosition($stripPosition)
+            .onAppear { scrollStrip(viewport: proxy.size.width) }
+            .onChange(of: focusFret) { scrollStrip(viewport: proxy.size.width) }
+            .onChange(of: frets) { scrollStrip(viewport: proxy.size.width) }
+        }
+        .frame(height: IOSModulePortraitStrip.height)
+    }
+
+    private func scrollStrip(viewport: CGFloat) {
+        stripPosition = ScrollPosition(
+            x: IOSModulePortraitStrip.scrollOffset(
+                for: focusFret,
+                frets: frets,
+                viewportWidth: viewport
+            )
+        )
+    }
+
     // MARK: Bottom band
 
     private var bottomBand: some View {
@@ -265,7 +437,9 @@ struct IOSModuleLandscapeScaffold<Neck: View, Drawer: View>: View {
                     bandActionButton(leadingAction)
                 }
                 Spacer(minLength: 0)
-                drawerHandle
+                if isLandscape {
+                    drawerHandle
+                }
                 Spacer(minLength: 0)
                 if let trailingAction {
                     bandActionButton(trailingAction)

@@ -1,43 +1,34 @@
 import SwiftUI
 
-/// The Harmonizing module on iOS.
-///
-/// Portrait reuses the Mac `HarmonizingModuleScreen` verbatim (D-18).
-/// Landscape is the M2 arrangement (D-20/D-22): ‹ › step through the seven
-/// chords of the key (I→vii°), and the drawer holds the key, mode, labels,
-/// Play chord and the explanation. The voicings are fixed shapes drawn in
-/// standard tuning, so the standard-tuning notice is kept (D-12).
+/// The Harmonizing module on iOS, built on the shared `IOSModuleScaffold`
+/// (D-11/D-18): ‹ › step through the seven chords of the key (I→vii°), and the
+/// drawer holds the key, mode, labels, Play chord and the explanation. The
+/// voicings are fixed shapes drawn in standard tuning, so the standard-tuning
+/// notice is kept (D-12).
 struct IOSHarmonizingScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: HarmonizingModuleModel?
+    @State private var model: HarmonizingModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSHarmonizingLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeHarmonizingModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSHarmonizingStage(state: state, model: model)
             } else {
-                HarmonizingModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeHarmonizingModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSHarmonizingLandscape: View {
+private struct IOSHarmonizingStage: View {
     let state: AppState
     let model: HarmonizingModuleModel
     @State private var labelMode: FretboardLabelMode = .degrees
@@ -54,7 +45,7 @@ private struct IOSHarmonizingLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .harmonizing),
             subtitle: subtitle,
             tuning: state.tuning,
@@ -88,7 +79,9 @@ private struct IOSHarmonizingLandscape: View {
             },
             bandMode: .normal,
             guidedRunStepText: "",
-            onStopGuidedRun: {}
+            onStopGuidedRun: {},
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stop() }
     }

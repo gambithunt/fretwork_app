@@ -1,43 +1,33 @@
 import SwiftUI
 
-/// The Pentatonic module on iOS.
-///
-/// Portrait reuses the Mac `PentatonicModuleScreen` verbatim (D-18).
-/// Landscape is the M2 arrangement (D-20/D-22): ‹ › step through boxes 1–5,
-/// and the drawer holds root, quality, show and the practise button. During a
-/// guided run the bottom band switches to ■ Stop + the current step (D-27),
-/// so the drawer cannot be opened mid-exercise.
+/// The Pentatonic module on iOS, built entirely on the shared
+/// `IOSModuleScaffold` (D-11/D-18): ‹ › step through boxes 1–5 and the drawer
+/// holds root, quality, show and the practise button. During a guided run the
+/// bottom band switches to ■ Stop + the current step (D-27).
 struct IOSPentatonicScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: PentatonicModuleModel?
+    @State private var model: PentatonicModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSPentatonicLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makePentatonicModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSPentatonicStage(state: state, model: model)
             } else {
-                PentatonicModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makePentatonicModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSPentatonicLandscape: View {
+private struct IOSPentatonicStage: View {
     let state: AppState
     let model: PentatonicModuleModel
 
@@ -61,7 +51,7 @@ private struct IOSPentatonicLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .pentatonic),
             subtitle: subtitle,
             tuning: state.tuning,
@@ -95,7 +85,9 @@ private struct IOSPentatonicLandscape: View {
             },
             bandMode: bandMode,
             guidedRunStepText: guidedStepText,
-            onStopGuidedRun: { model.stopGuided() }
+            onStopGuidedRun: { model.stopGuided() },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stop() }
     }

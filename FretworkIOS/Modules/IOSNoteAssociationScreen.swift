@@ -1,43 +1,34 @@
 import SwiftUI
 
-/// The Note association module on iOS.
-///
-/// Portrait reuses the Mac `NoteAssociationModuleScreen` verbatim (D-18).
-/// Landscape is the M2 arrangement (D-20/D-22): ‹ › step through the seven
-/// chords of the key (I→vii°, the chord underneath the layered neck), and the
-/// drawer holds the key, mode, labels, the three layer chips, the progression
-/// and its loop, Play progression / Strum chord, and the explanation.
+/// The Note association module on iOS, built on the shared
+/// `IOSModuleScaffold` (D-11/D-18): ‹ › step through the seven chords of the
+/// key (I→vii°, the chord underneath the layered neck), and the drawer holds
+/// the key, mode, labels, the three layer chips, the progression and its
+/// loop, Play progression / Strum chord, and the explanation.
 struct IOSNoteAssociationScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: NoteAssociationModuleModel?
+    @State private var model: NoteAssociationModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSNoteAssociationLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeNoteAssociationModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSNoteAssociationStage(state: state, model: model)
             } else {
-                NoteAssociationModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeNoteAssociationModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSNoteAssociationLandscape: View {
+private struct IOSNoteAssociationStage: View {
     let state: AppState
     let model: NoteAssociationModuleModel
 
@@ -47,7 +38,7 @@ private struct IOSNoteAssociationLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .noteAssociation),
             subtitle: subtitle,
             tuning: model.tuning,
@@ -82,7 +73,9 @@ private struct IOSNoteAssociationLandscape: View {
             bandMode: .normal,
             guidedRunStepText: "",
             onStopGuidedRun: {},
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stopEverything() }
     }

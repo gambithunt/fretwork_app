@@ -1,42 +1,34 @@
 import SwiftUI
 
-/// The Circle of fifths module on iOS.
-///
-/// Portrait reuses the Mac `CircleModuleScreen` verbatim (D-18). Landscape is
-/// the one non-fretboard stage (D-28): the ring on the left, a small board
-/// with the selected key's tonic triad on the right, and ‹ › turning the
-/// circle. The drawer holds the label mode, Play tonic and the explanation.
+/// The Circle of fifths module on iOS, built on the shared
+/// `IOSModuleScaffold` (D-11/D-18/D-28). The ring is the scaffold's
+/// `companion` — leading of the tonic-triad board in landscape, above the
+/// board strip in portrait — and ‹ › turn the circle. The drawer holds the
+/// label mode, Play tonic and the explanation.
 struct IOSCircleScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: CircleModuleModel?
+    @State private var model: CircleModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSCircleLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeCircleModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                            }
-                        }
-                }
+            if let model {
+                IOSCircleStage(state: state, model: model)
             } else {
-                CircleModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeCircleModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSCircleLandscape: View {
+private struct IOSCircleStage: View {
     let state: AppState
     let model: CircleModuleModel
     @State private var labelMode: FretboardLabelMode = .notes
@@ -59,13 +51,30 @@ private struct IOSCircleLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .circle),
             subtitle: IOSModuleLandscapeFormat.circleSubtitle(model.selected),
             tuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
-            neck: { stage },
+            neck: {
+                FretboardBoardView(
+                    dots: dots,
+                    frets: 12,
+                    tuning: model.tuning,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses
+                )
+            },
+            companion: {
+                VStack(spacing: 8) {
+                    circleRing(model, size: 200)
+                    Text("Tonic triad")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            },
             leadingAction: .step(
                 systemImage: "chevron.left",
                 accessibilityLabel: "Anticlockwise",
@@ -86,29 +95,11 @@ private struct IOSCircleLandscape: View {
             bandMode: .normal,
             guidedRunStepText: "",
             onStopGuidedRun: {},
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: 12,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: 12)
         )
         .onDisappear { model.stop() }
-    }
-
-    private var stage: some View {
-        HStack(alignment: .center, spacing: 20) {
-            circleRing(model, size: 200)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Tonic triad")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                FretboardBoardView(
-                    dots: dots,
-                    frets: 12,
-                    tuning: model.tuning,
-                    flipped: state.isFretboardFlipped,
-                    pulses: model.pulses
-                )
-            }
-            .frame(maxWidth: 400, maxHeight: .infinity)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// The ring, drawn rather than laid out — the arrangement (each step

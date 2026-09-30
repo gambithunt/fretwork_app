@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// Triads on iOS.
-///
-/// Portrait reuses the Mac `TriadsModuleScreen` verbatim (D-18). Landscape is
-/// the M2 arrangement (D-20/D-22), and it has two faces:
+/// Triads on iOS, built on the shared `IOSModuleScaffold` (D-11/D-18), with
+/// two faces:
 ///
 /// - **Shapes** — ‹ › walk every compact voicing, the subtitle naming the
 ///   chord and its inversion.
@@ -16,41 +14,34 @@ import SwiftUI
 struct IOSTriadsScreen: View {
     @Bindable var state: AppState
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: TriadsModuleModel?
+    @State private var model: TriadsModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSTriadsLandscape(state: state, model: model)
-                } else {
-                    Color.clear
-                        .task {
-                            if landscapeModel == nil {
-                                landscapeModel = state.makeTriadsModuleModel()
-                                state.refreshSamplePlaybackReadiness()
-                                #if DEBUG
-                                // The snapshot harness opens directly on the
-                                // Paths face; nothing else forces that mode.
-                                if IOSSnapshot.forcesTriadsPathMode {
-                                    landscapeModel?.setPathMode(true)
-                                }
-                                #endif
-                            }
-                        }
-                }
+            if let model {
+                IOSTriadsStage(state: state, model: model)
             } else {
-                TriadsModuleScreen(state: state)
+                Color.clear
+                    .task {
+                        if model == nil {
+                            model = state.makeTriadsModuleModel()
+                            state.refreshSamplePlaybackReadiness()
+                            #if DEBUG
+                            // The snapshot harness opens directly on the
+                            // Paths face; nothing else forces that mode.
+                            if IOSSnapshot.forcesTriadsPathMode {
+                                model?.setPathMode(true)
+                            }
+                            #endif
+                        }
+                    }
             }
         }
         .background(NotePalette.backdrop)
     }
 }
 
-// MARK: - Landscape (M2)
-
-private struct IOSTriadsLandscape: View {
+private struct IOSTriadsStage: View {
     let state: AppState
     let model: TriadsModuleModel
 
@@ -116,7 +107,7 @@ private struct IOSTriadsLandscape: View {
     }
 
     var body: some View {
-        IOSModuleLandscapeScaffold(
+        IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .triads),
             subtitle: subtitle,
             tuning: model.tuning,
@@ -151,7 +142,9 @@ private struct IOSTriadsLandscape: View {
             bandMode: bandMode,
             guidedRunStepText: guidedStepText,
             onStopGuidedRun: { model.stopEverything() },
-            onTuningChange: { model.retune(to: $0) }
+            onTuningChange: { model.retune(to: $0) },
+            frets: model.highestFret,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
         )
         .onDisappear { model.stopEverything() }
     }
