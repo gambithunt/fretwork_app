@@ -18,24 +18,19 @@ The iOS surface is a thin wrapper:
 ```swift
 struct IOSIntervalsScreen: View {
     @Bindable var state: AppState
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var landscapeModel: IntervalsModuleModel?
+    @State private var model: IntervalsModuleModel?
 
     var body: some View {
         Group {
-            if verticalSizeClass == .compact {
-                if let model = landscapeModel {
-                    IOSIntervalsLandscape(state: state, model: model)
-                } else {
-                    Color.clear.task {
-                        if landscapeModel == nil {
-                            landscapeModel = state.makeIntervalsModuleModel()
-                            state.refreshSamplePlaybackReadiness()
-                        }
+            if let model {
+                IOSIntervalsStage(state: state, model: model)
+            } else {
+                Color.clear.task {
+                    if model == nil {
+                        model = state.makeIntervalsModuleModel()
+                        state.refreshSamplePlaybackReadiness()
                     }
                 }
-            } else {
-                IntervalsModuleScreen(state: state)   // Mac portrait fallback (D-18)
             }
         }
         .background(NotePalette.backdrop)
@@ -43,18 +38,22 @@ struct IOSIntervalsScreen: View {
 }
 ```
 
-The landscape view wraps the shared `IOSModuleLandscapeScaffold`
-(`IOSModuleLandscapeScaffold.swift`) — the **one** primitive, not ten one-offs:
+The screen wraps the shared `IOSModuleScaffold` (`IOSModuleScaffold.swift`) —
+the **one** primitive for both orientations, not ten one-offs:
 
-- **top row** — glass back, title + subtitle, optional standard-tuning pill
-  (`isFixedShapeModule: true` for Chords/Pentatonic/Harmonizing), live-note
-  leaf.
-- **neck** — `@ViewBuilder`; usually `FretboardBoardView`. Circle passes its
-  ring + small triad board instead.
+- **top row (landscape)** — glass back, title + subtitle, optional
+  standard-tuning pill (`isFixedShapeModule: true` for
+  Chords/Pentatonic/Harmonizing), live-note leaf. Portrait keeps the native
+  nav bar (back, title, gear) and renders the subtitle + live note under it.
+- **neck** — `@ViewBuilder`; almost always `FretboardBoardView`. In portrait
+  the scaffold puts it in a horizontal scroll strip sized by `frets` and
+  auto-scrolled to `focusFret` (D-06 — legible, not shrunk).
+- **companion** — `@ViewBuilder` (default `EmptyView`); Circle's ring, drawn
+  leading of the board in landscape and above the strip in portrait (D-28).
 - **bottom band** — two optional corner controls (`leadingAction`/
   `trailingAction`, each an `IOSModuleBandAction`) around the centre drawer
-  button, or (during a guided run) ■ Stop + the current step (`bandMode`,
-  `guidedRunStepText`, `onStopGuidedRun`).
+  button (landscape only), or (during a guided run) ■ Stop + the current step
+  (`bandMode`, `guidedRunStepText`, `onStopGuidedRun`).
 
   The corner slots are one API, not two:
 
@@ -83,13 +82,15 @@ The landscape view wraps the shared `IOSModuleLandscapeScaffold`
 
   A `nil` corner is simply not drawn; a non-nil `title` renders the labelled
   prominent button, a `nil` title renders the icon-only glass circle.
-- **drawer** — a native Liquid Glass sheet (medium/large detents, system
-  grabber). Content is your `@ViewBuilder`; the scaffold adds the dark scheme
-  and accent tint.
+- **drawer** — your `@ViewBuilder`. In landscape it is a native Liquid Glass
+  sheet (medium/large detents, system grabber); in portrait the same view is
+  rendered inline below the band as the scrolling page (no sheet, no duplicate
+  content definitions).
 
 Then register the screen in `IOSModuleScreen.swift` — add the `content` switch
 case (and, if it ever stops being exhaustive, the `hasScaffold` case). All ten
-modules now have a screen; the "coming soon" placeholder is unused.
+modules now have a screen; the Mac screens are no longer used on iOS and the
+"coming soon" placeholder is unused.
 
 ## Rules that must not be re-litigated
 
@@ -110,8 +111,9 @@ modules now have a screen; the "coming soon" placeholder is unused.
 
 ## Screenshot scenarios
 
-Add a `-IOSSnapshot<Name>Landscape`, `-IOSSnapshot<Name>Drawer` (and, for
-guided-run modules, `-IOSSnapshot<Name>Guided`) to
-`FretworkIOS/Shell/IOSSnapshotHarness.swift` so the landscape surface can be
-captured deterministically. See the existing `intervals`/`pentatonic`/`circle`
-scenarios for the shape.
+Add a `-IOSSnapshot<Name>Landscape`, `-IOSSnapshot<Name>Drawer`,
+`-IOSSnapshot<Name>Portrait` (and, for guided-run modules,
+`-IOSSnapshot<Name>Guided`) to `FretworkIOS/Shell/IOSSnapshotHarness.swift` so
+each surface can be captured deterministically. Portrait scenarios set
+`moduleScenario` without adding the case to `forcesLandscape`, so the
+simulator's default portrait orientation wins.

@@ -39,6 +39,18 @@ enum IOSSnapshotHarness {
         case noteAssociationDrawer = "-IOSSnapshotNoteAssociationDrawer"
         case circleLandscape = "-IOSSnapshotCircleLandscape"
         case circleDrawer = "-IOSSnapshotCircleDrawer"
+        // Portrait module surfaces (D-18): open the module without forcing
+        // landscape, so the simulator's default portrait orientation wins.
+        case notesPortrait = "-IOSSnapshotNotesPortrait"
+        case intervalsPortrait = "-IOSSnapshotIntervalsPortrait"
+        case octavesPortrait = "-IOSSnapshotOctavesPortrait"
+        case triadsPortrait = "-IOSSnapshotTriadsPortrait"
+        case chordsPortrait = "-IOSSnapshotChordsPortrait"
+        case pentatonicPortrait = "-IOSSnapshotPentatonicPortrait"
+        case scalesPortrait = "-IOSSnapshotScalesPortrait"
+        case harmonizingPortrait = "-IOSSnapshotHarmonizingPortrait"
+        case noteAssociationPortrait = "-IOSSnapshotNoteAssociationPortrait"
+        case circlePortrait = "-IOSSnapshotCirclePortrait"
         case settings = "-IOSSnapshotSettings"
         case permissionDenied = "-IOSSnapshotPermissionDenied"
     }
@@ -77,6 +89,16 @@ enum IOSSnapshotHarness {
         case .harmonizingLandscape, .harmonizingDrawer: return .harmonizing
         case .noteAssociationLandscape, .noteAssociationDrawer: return .noteAssociation
         case .circleLandscape, .circleDrawer: return .circle
+        case .notesPortrait: return .notes
+        case .intervalsPortrait: return .intervals
+        case .octavesPortrait: return .octaves
+        case .triadsPortrait: return .triads
+        case .chordsPortrait: return .chords
+        case .pentatonicPortrait: return .pentatonic
+        case .scalesPortrait: return .scales
+        case .harmonizingPortrait: return .harmonizing
+        case .noteAssociationPortrait: return .noteAssociation
+        case .circlePortrait: return .circle
         default: return nil
         }
     }
