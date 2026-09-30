@@ -65,6 +65,8 @@ struct IOSAppRootView: View {
                 appState.chordDisplay = ChordDisplayState()
             }
         }
+        // Single observer for the keep-screen-on setting/status/scene decision.
+        .fretworkKeepsScreenOn(state: appState)
     }
 
     // MARK: - iPhone (push)

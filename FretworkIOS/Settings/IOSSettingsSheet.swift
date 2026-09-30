@@ -44,6 +44,12 @@ struct IOSSettingsSheet: View {
                 }
 
                 Section {
+                    Toggle("Keep screen on while listening", isOn: $state.keepsScreenOnWhileListening)
+                } footer: {
+                    Text("The phone won't auto-lock while Fretwork is listening.")
+                }
+
+                Section {
                     Toggle("Live note on lessons", isOn: $state.showsLiveNoteOnModules)
                     Toggle("Highlight matching notes", isOn: $state.highlightsLiveNoteOnFretboards)
                         .disabled(!state.showsLiveNoteOnModules)

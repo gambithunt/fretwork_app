@@ -115,6 +115,17 @@ final class PracticeStateTests: XCTestCase {
         XCTAssertNil(store.state.settings.outputDeviceUID)
     }
 
+    func testKeepScreenOnDefaultsTrueWhenAbsentFromAnOldDocument() {
+        // A document written before `preventsAutoLockWhileListening` existed
+        // must decode it as true (the on-by-default choice), never as a
+        // failure.
+        let store = PracticeStateStore(storage: storage(
+            json: #"{"version":1,"settings":{"sensitivity":0.5,"tuningID":"standard"}}"#
+        ))
+        XCTAssertEqual(store.state.settings.preventsAutoLockWhileListening, true)
+        XCTAssertEqual(store.state.settings.sensitivity, 0.5)
+    }
+
     // MARK: - Migration off the loose keys
 
     func testLegacyKeysMigrateIntoTheDocument() {
