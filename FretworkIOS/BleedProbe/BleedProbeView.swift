@@ -12,6 +12,10 @@ import UIKit
 /// `onUpdate`/`chord onUpdate` stream through the controller's `onEvent` seam.
 /// It never opens a second `RingBuffer` reader on the audio thread (that would
 /// corrupt the SPSC read cursor), and it never builds its own graph.
+///
+/// The tail the probe reports is **detector-based**, not level-based: the last
+/// worker update whose confidence cleared the production threshold. The level
+/// at fixed offsets after each sample is logged only as context.
 struct BleedProbeView: View {
     var body: some View {
         Text("Speaker-bleed probe running — see the console (stderr).")
@@ -39,8 +43,9 @@ private final class BleedProbeRunner {
     private var noiseFloor: Float = 0
 
     /// How long after a sample's nominal end the probe keeps recording. This
-    /// doubles as the ≥ 4 s gap between samples the task requires.
-    private static let postRollSeconds = 4.0
+    /// doubles as the gap between samples (≥ 8 s, so the previous sample's
+    /// detector tail can never run into the next sample's window).
+    private static let postRollSeconds = 8.0
 
     private struct Leg {
         let label: String
@@ -53,8 +58,9 @@ private final class BleedProbeRunner {
     }
 
     private struct LegResult {
-        let tail: Double
+        let lastAfterEnd: Double?
         let falseCredit: Bool
+        let otherPitches: [Int]
         let summary: String
     }
 
@@ -96,18 +102,19 @@ private final class BleedProbeRunner {
             return
         }
 
-        var tails: [Double] = []
-        var falseCreditCount = 0
+        var results: [LegResult] = []
         for leg in legs {
             let result = await runLeg(leg)
             log(result.summary)
-            tails.append(result.tail)
-            if result.falseCredit { falseCreditCount += 1 }
+            results.append(result)
         }
 
-        let maxTail = tails.max() ?? 0
-        let medianTail = BleedProbeAnalysis.median(tails)
-        log("BLEED-PROBE SUMMARY maxTail=\(String(format: "%.3f", maxTail)) medianTail=\(String(format: "%.3f", medianTail)) falseCredits=\(falseCreditCount)/\(legs.count)")
+        let lastAfterEnds = results.map { $0.lastAfterEnd ?? 0 }
+        let maxLast = lastAfterEnds.max() ?? 0
+        let p90Last = BleedProbeAnalysis.p90(lastAfterEnds)
+        let falseCreditCount = results.filter { $0.falseCredit }.count
+        let otherPitchMisreads = results.filter { !$0.otherPitches.isEmpty }.count
+        log("BLEED-PROBE SUMMARY maxLastDetectionAfterEnd=\(String(format: "%.3f", maxLast)) p90LastDetectionAfterEnd=\(String(format: "%.3f", p90Last)) falseCredits=\(falseCreditCount)/\(legs.count) otherPitchMisreads=\(otherPitchMisreads)/\(legs.count)")
         log("BLEED-PROBE DONE")
     }
 
@@ -247,49 +254,79 @@ private final class BleedProbeRunner {
 
         var firstDetection: Double?
         var falseCredit = false
-        var activeReadings: [BleedProbeAnalysis.ActiveReading]
+        var falseCreditS = 0.0
+        var lastAfterEnd: Double?
+        var lastPlayedAfterEnd: Double?
+        var otherPitches: [Int] = []
 
         if leg.isChord, let playedChordName = leg.playedChordName {
             if let first = chordReadings.first(where: { inWindow($0.time) && $0.name != nil }) {
                 firstDetection = first.time - start
             }
-            let credited = BleedProbeAnalysis.chordFalseCreditDuration(
+            falseCreditS = BleedProbeAnalysis.chordFalseCreditDuration(
                 playedChordName: playedChordName,
                 readings: chordReadings,
                 from: start,
                 to: windowEnd
             )
-            falseCredit = credited > 0
-            activeReadings = chordReadings.map { .init(time: $0.time, active: $0.name != nil) }
+            falseCredit = falseCreditS > 0
+            lastAfterEnd = BleedProbeAnalysis.lastChordDetectionAfterEnd(
+                readings: chordReadings,
+                nominalEnd: nominalEnd,
+                gapEnd: windowEnd
+            )
         } else {
             if let first = noteReadings.first(where: { inWindow($0.time) && $0.midiNote != nil }) {
                 firstDetection = first.time - start
             }
-            let credited = BleedProbeAnalysis.falseCreditDuration(
+            falseCreditS = BleedProbeAnalysis.falseCreditDuration(
                 playedPitchClasses: leg.playedPitchClasses,
                 readings: noteReadings,
                 from: start,
                 to: windowEnd
             )
-            falseCredit = credited > 0
-            activeReadings = noteReadings.map { .init(time: $0.time, active: $0.midiNote != nil) }
+            falseCredit = falseCreditS > 0
+            lastAfterEnd = BleedProbeAnalysis.lastDetectionAfterEnd(
+                readings: noteReadings,
+                nominalEnd: nominalEnd,
+                gapEnd: windowEnd
+            )
+            lastPlayedAfterEnd = BleedProbeAnalysis.lastPlayedPitchAfterEnd(
+                playedPitchClasses: leg.playedPitchClasses,
+                readings: noteReadings,
+                nominalEnd: nominalEnd,
+                gapEnd: windowEnd
+            )
+            otherPitches = BleedProbeAnalysis.otherPitchClasses(
+                playedPitchClasses: leg.playedPitchClasses,
+                readings: noteReadings,
+                from: start,
+                to: windowEnd
+            )
         }
 
-        let tail = BleedProbeAnalysis.decayTail(
-            noiseFloor: noiseFloor,
-            levelReadings: levelReadings,
-            activeReadings: activeReadings,
-            nominalEnd: nominalEnd
-        )
+        let levelParts: [String] = [0.25, 0.5, 1.0, 2.0, 4.0].compactMap { offset in
+            guard let db = BleedProbeAnalysis.levelDB(near: nominalEnd + offset, in: levelReadings) else { return nil }
+            return "+\(String(format: "%.2f", offset))s=\(String(format: "%.1f", db))dB"
+        }
 
-        let summary = "BLEED-PROBE result=\(leg.label)"
+        var summary = "BLEED-PROBE result=\(leg.label)"
             + " duration=\(String(format: "%.3f", leg.duration))"
-            + " firstDetection=\((firstDetection.map { String(format: "%.3f", $0) } ?? "none"))"
+            + " firstDetection=\(fmt(firstDetection))"
             + " falseCredit=\(falseCredit ? "yes" : "no")"
-            + " tail=\(String(format: "%.3f", tail))"
-            + " maxLevelDb=\(String(format: "%.1f", BleedProbeAnalysis.levelDB(maxLevel)))"
+            + " falseCreditS=\(String(format: "%.3f", falseCreditS))"
+        if leg.isChord {
+            summary += " lastChordAfterEnd=\(fmt(lastAfterEnd))"
+        } else {
+            let otherPitchNames = otherPitches.map { NoteMapper.pitchClassNames[$0] }
+            summary += " lastDetectionAfterEnd=\(fmt(lastAfterEnd))"
+            summary += " lastPlayedPitchAfterEnd=\(fmt(lastPlayedAfterEnd))"
+            summary += " otherPitches=\(otherPitchNames.isEmpty ? "none" : otherPitchNames.joined(separator: ","))"
+        }
+        summary += " maxLevelDb=\(String(format: "%.1f", BleedProbeAnalysis.levelDB(maxLevel)))"
+        summary += " levels[\(levelParts.joined(separator: " "))]"
 
-        return LegResult(tail: tail, falseCredit: falseCredit, summary: summary)
+        return LegResult(lastAfterEnd: lastAfterEnd, falseCredit: falseCredit, otherPitches: otherPitches, summary: summary)
     }
 
     private func playChord() {
@@ -307,7 +344,7 @@ private final class BleedProbeRunner {
         switch event {
         case .noteUpdate(let display):
             levelReadings.append(.init(time: now, level: display.level))
-            noteReadings.append(.init(time: now, midiNote: display.note?.midiNote))
+            noteReadings.append(.init(time: now, midiNote: display.note?.midiNote, confidence: display.confidence))
         case .chordUpdate(let display):
             chordReadings.append(.init(time: now, name: display.chord?.name))
         case .error, .recovered, .reconnecting:
@@ -319,6 +356,10 @@ private final class BleedProbeRunner {
         levelReadings.removeAll(keepingCapacity: true)
         noteReadings.removeAll(keepingCapacity: true)
         chordReadings.removeAll(keepingCapacity: true)
+    }
+
+    private func fmt(_ value: Double?) -> String {
+        value.map { String(format: "%.3f", $0) } ?? "none"
     }
 
     private func statusDescription(_ status: IOSAudioStatus) -> String {
