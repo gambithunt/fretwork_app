@@ -13,7 +13,7 @@ pipeline, the manual harness UI and telemetry, permission/inert-launch/fake-
 injection behavior, and realtime-aware callback wiring — all without microphone
 hardware.
 
-**Phase 6 landscape complete (2026-09-30), merged in `bf1dd5b`:** all ten modules on the shared M2 scaffold per D-26..D-28, independently reviewed, owner-verified on device. **Remaining for Phase 6:** portrait built from the same scaffold (D-18 revised).
+**Phase 6 landscape complete (2026-09-30), merged in `bf1dd5b`:** all ten modules on the shared M2 scaffold per D-26..D-28, independently reviewed, owner-verified on device. **Phase 6 complete (2026-09-30):** portrait built from the same scaffold (D-18 revised) and guided runs that leave the screen still (D-27 revised); independently reviewed; owner-verified on device.
 
 **Phases 4–5 complete on iPhone (2026-09-29), merged in `3473449`.** Built from the device-tested C + M2 prototype per `009-ios-interface-design.md` (D-01..D-25): list→push shell on iPhone (sidebar on iPad), native Settings, portrait tuner-only Listen, landscape full-neck Listen with one glass chrome row, Chords in the M2 landscape layout, denied/paused/failed/stopped surfaces with recovery, accessibility pass. Independent review caught a deny→grant recovery dead-end and a silently mute Strum (both fixed); a landscape back-navigation layout jump was reproduced and fixed by screenshot. iOS 71/0, Mac 479/0. Owner verified on device. Phase 6 (nine modules) awaits the owner's per-module control table.
 
@@ -65,7 +65,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-30 (Phase 6 landscape merged; portrait on the shared scaffold next).
+Last updated: 2026-09-30 (Phase 6 complete: all ten modules in portrait and landscape on the shared scaffold; Phase 7 next).
 
 ## Objective
 
