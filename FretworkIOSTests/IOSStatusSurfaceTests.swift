@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import XCTest
 @testable import Fretwork
 
@@ -41,6 +42,19 @@ final class IOSStatusSurfaceTests: XCTestCase {
         // Playing must never mask a non-listening state (idle/failure/etc.).
         XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .idle, playing: true).title, "Stopped")
         XCTAssertEqual(IOSStatusAppearanceMapper.appearance(for: .failed("x"), playing: true).title, "Audio error")
+    }
+
+    func testWidestTitleIsMeasuredNotAssumed() {
+        // The pill uses `.caption.weight(.semibold)`; measure every title at
+        // that font so the fixed-width spacer stays the widest by evidence,
+        // not by eye. `.caption` == `UIFont.TextStyle.caption1` (12 pt).
+        let font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+        let titles = ["Listening", "Starting…", "Paused", "Mic off", "Audio error", "Stopped", "Playing"]
+        let widest = titles.max { lhs, rhs in
+            (lhs as NSString).size(withAttributes: [.font: font]).width
+                < (rhs as NSString).size(withAttributes: [.font: font]).width
+        }
+        XCTAssertEqual(widest, IOSStatusAppearanceMapper.widestTitle)
     }
 
     func testStartDecision() {

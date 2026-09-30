@@ -58,8 +58,10 @@ final class ChordAnalysisWorker: @unchecked Sendable {
     private var enabled: Int32 = 0
     /// Set by `reset()`; the consume thread clears the locked chord on its
     /// next iteration, so a pre-gate chord cannot leak out after the playback
-    /// gate lifts.
-    private var resetRequested: Int32 = 0
+    /// gate lifts. Guarded by `resetLock` (a class stored var has no stable
+    /// address for `&`, and `OSAtomic*` is deprecated).
+    private let resetLock = NSLock()
+    private var resetRequested = false
     var onUpdate: (@Sendable (ChordDisplayState) -> Void)?
 
     init(ring: RingBuffer, windowSize: Int = ChordAnalysisWorker.windowSize) {
@@ -75,8 +77,13 @@ final class ChordAnalysisWorker: @unchecked Sendable {
     func stop() { OSAtomicCompareAndSwap32Barrier(1, 0, &running) }
 
     /// Requests a state reset on the consume thread. Safe from any thread:
-    /// the flag is atomic and the fields it clears are owned by that thread.
-    func reset() { OSAtomicCompareAndSwap32Barrier(0, 1, &resetRequested) }
+    /// the flag is lock-guarded and the fields it clears are owned by that
+    /// thread.
+    func reset() {
+        resetLock.lock()
+        resetRequested = true
+        resetLock.unlock()
+    }
 
     func setEnabled(_ value: Bool) {
         let target: Int32 = value ? 1 : 0
@@ -95,7 +102,14 @@ final class ChordAnalysisWorker: @unchecked Sendable {
 
     private func consume(sampleRate: Double) {
         while OSAtomicAdd32Barrier(0, &running) == 1 {
-            if OSAtomicCompareAndSwap32Barrier(1, 0, &resetRequested) {
+            let shouldReset: Bool = {
+                resetLock.lock()
+                defer { resetLock.unlock() }
+                let value = resetRequested
+                resetRequested = false
+                return value
+            }()
+            if shouldReset {
                 lockedMatch = nil
                 previousRMS = 0
                 settleUntil = nil

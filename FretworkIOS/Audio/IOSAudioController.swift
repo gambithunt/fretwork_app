@@ -60,14 +60,12 @@ final class IOSAudioController: AudioControlling {
 
     private(set) var status: IOSAudioStatus = .idle
     /// True while the playback gate is suppressing detection — any app sample
-    /// sounding through its nominal end plus `samplePlaybackGateTail`. Derived
-    /// from the gate on read (rather than a stored flag) so it can never go
-    /// stale across a stop/start cycle; the Listen pill reads it to say
+    /// sounding through its nominal end plus `samplePlaybackGateTail`. A stored
+    /// flag written **only** on a real `.closed`/`.opened` transition (see
+    /// `playbackGate`, which is `@ObservationIgnored`), so readers are never
+    /// invalidated at worker cadence. The Listen pill reads it to say
     /// "Playing" instead of "Listening".
-    var isSuppressingForPlayback: Bool {
-        guard let end = playbackGate.gateEnd else { return false }
-        return now() < end
-    }
+    private(set) var isSuppressingForPlayback = false
     /// The current microphone permission, read from the session seam. Exposed
     /// so the Listen screen's start-decision logic can tell `.idle`-after-grant
     /// apart from `.idle`-after-denial without reaching into the session.
@@ -119,7 +117,17 @@ final class IOSAudioController: AudioControlling {
     private var transitionSerial = 0
     /// The playback gate: suppresses note/chord events while any app sample
     /// is sounding (through its nominal end) plus `samplePlaybackGateTail`.
+    /// `@ObservationIgnored` because it is mutated at worker cadence; the
+    /// observable surface is `isSuppressingForPlayback`, written only on a
+    /// real transition.
+    @ObservationIgnored
     private var playbackGate: PlaybackGate
+    /// A wake-up scheduled to `gateEnd`, so the `.opened` transition (and the
+    /// `isSuppressingForPlayback` flip) happens even with no worker traffic.
+    /// Cancelled and re-armed on every play that extends the window, and on
+    /// teardown.
+    @ObservationIgnored
+    private var gateLiftTask: Task<Void, Never>?
 
     private struct IOSAudioRun {
         let leg: IOSAudioGraphLeg
@@ -280,13 +288,16 @@ final class IOSAudioController: AudioControlling {
         // the audio the player is about to read.
         if let sample = sampleLibrary?.sample(string: string, fret: resolution.fret) {
             let duration = Double(sample.frameCount) / sample.sampleRate / resolution.rateMultiplier
-            if playbackGate.recordPlay(duration: duration, at: now()) == .closed {
+            let transition = playbackGate.recordPlay(duration: duration, at: now())
+            if transition == .closed {
+                if !isSuppressingForPlayback { isSuppressingForPlayback = true }
                 // The gate just closed: clear the readout so a note detected
                 // before playback does not linger on screen while the app is
                 // audibly playing its own sample.
                 onEvent?(.noteUpdate(PitchDisplayState()))
                 onEvent?(.chordUpdate(ChordDisplayState()))
             }
+            scheduleGateLiftCheck()
         }
     }
 
@@ -453,6 +464,12 @@ final class IOSAudioController: AudioControlling {
     private func teardownRun(deactivate: Bool) {
         // Invalidate any in-flight build so it cannot adopt a run after us.
         generation &+= 1
+        // No run means no more playback: drop any pending lift wake-up and
+        // leave the flag for the next run's worker traffic to re-evaluate
+        // (the pill only shows "Playing" while `.listening`, so a stale true
+        // here is invisible).
+        gateLiftTask?.cancel()
+        gateLiftTask = nil
         if let oldRun = run {
             run = nil
             stopRunNow(oldRun)
@@ -549,14 +566,45 @@ final class IOSAudioController: AudioControlling {
     private func applyGate() -> Bool {
         switch playbackGate.update(at: now()) {
         case .opened:
-            run?.analysisWorker.reset()
-            run?.chordWorker.reset()
-            dropNextNote = 2
-            dropNextChord = 2
+            setGateOpen()
         case .closed, .none:
             break
         }
         return playbackGate.isSuppressed
+    }
+
+    /// The closed→open transition, however it is observed (a worker update
+    /// calling `applyGate`, or the scheduled lift check firing at `gateEnd`):
+    /// publish the flag flip once, then reset the workers and drop the stale
+    /// in-flight frames so nothing computed before the reset leaks out.
+    private func setGateOpen() {
+        if isSuppressingForPlayback { isSuppressingForPlayback = false }
+        run?.analysisWorker.reset()
+        run?.chordWorker.reset()
+        dropNextNote = 2
+        dropNextChord = 2
+    }
+
+    /// Arms (or re-arms, cancelling the previous) a main-actor task that fires
+    /// exactly at `gateEnd`. This is what makes the lift transition happen on
+    /// time even when no worker update arrives around it — the flag is not
+    /// observable time and `gateEnd` is never cleared, so the transition must
+    /// be driven, not read.
+    private func scheduleGateLiftCheck() {
+        gateLiftTask?.cancel()
+        guard let end = playbackGate.gateEnd else { return }
+        let delay = end - now()
+        guard delay > 0 else { return }
+        gateLiftTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled else { return }
+            switch self.playbackGate.update(at: self.now()) {
+            case .opened:
+                self.setGateOpen()
+            case .closed, .none:
+                break
+            }
+        }
     }
 
     // MARK: - Transitions

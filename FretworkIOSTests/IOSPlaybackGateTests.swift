@@ -74,4 +74,24 @@ final class IOSPlaybackGateTests: XCTestCase {
         XCTAssertTrue(controller.deliverWorkerNoteForTesting(display), "fresh post-gate detection")
         XCTAssertEqual(appState.display.note?.midiNote, 40)
     }
+
+    func testLiftFlagFlipsWithoutWorkerTraffic() async throws {
+        let clock = FakeClock()
+        let (controller, foreground) = makeController(now: { clock.now })
+        foreground.fire(true)
+        XCTAssertTrue(controller.start())
+        await loadLibrary(controller)
+        await controller.settleGraphWork()
+        XCTAssertEqual(controller.status, .listening)
+
+        // 17th fret high e is a 3.071 s take; the gate runs to 3.071 + 0.150 s.
+        controller.playSample(string: 5, fret: 17, tuning: Tunings.standard)
+        XCTAssertTrue(controller.isSuppressingForPlayback)
+
+        // Move the injected clock past end + tail, then wait for the scheduled
+        // lift check — with NO worker update driving the transition.
+        clock.advance(3.3)
+        try await Task.sleep(for: .seconds(3.4))
+        XCTAssertFalse(controller.isSuppressingForPlayback, "the lift check flips the flag at gateEnd even without worker traffic")
+    }
 }
