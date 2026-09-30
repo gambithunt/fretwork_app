@@ -16,6 +16,29 @@ enum IOSSnapshotHarness {
         case list = "-IOSSnapshotList"
         case chordsLandscape = "-IOSSnapshotChordsLandscape"
         case chordsDrawer = "-IOSSnapshotChordsDrawer"
+        case notesLandscape = "-IOSSnapshotNotesLandscape"
+        case notesDrawer = "-IOSSnapshotNotesDrawer"
+        case intervalsLandscape = "-IOSSnapshotIntervalsLandscape"
+        case intervalsDrawer = "-IOSSnapshotIntervalsDrawer"
+        case octavesLandscape = "-IOSSnapshotOctavesLandscape"
+        case octavesDrawer = "-IOSSnapshotOctavesDrawer"
+        case triadsShapesLandscape = "-IOSSnapshotTriadsShapesLandscape"
+        case triadsShapesDrawer = "-IOSSnapshotTriadsShapesDrawer"
+        case triadsPathsLandscape = "-IOSSnapshotTriadsPathsLandscape"
+        case triadsPathsDrawer = "-IOSSnapshotTriadsPathsDrawer"
+        case triadsPathsGuided = "-IOSSnapshotTriadsPathsGuided"
+        case pentatonicLandscape = "-IOSSnapshotPentatonicLandscape"
+        case pentatonicDrawer = "-IOSSnapshotPentatonicDrawer"
+        case pentatonicGuided = "-IOSSnapshotPentatonicGuided"
+        case scalesLandscape = "-IOSSnapshotScalesLandscape"
+        case scalesDrawer = "-IOSSnapshotScalesDrawer"
+        case scalesGuided = "-IOSSnapshotScalesGuided"
+        case harmonizingLandscape = "-IOSSnapshotHarmonizingLandscape"
+        case harmonizingDrawer = "-IOSSnapshotHarmonizingDrawer"
+        case noteAssociationLandscape = "-IOSSnapshotNoteAssociationLandscape"
+        case noteAssociationDrawer = "-IOSSnapshotNoteAssociationDrawer"
+        case circleLandscape = "-IOSSnapshotCircleLandscape"
+        case circleDrawer = "-IOSSnapshotCircleDrawer"
         case settings = "-IOSSnapshotSettings"
         case permissionDenied = "-IOSSnapshotPermissionDenied"
     }
@@ -40,10 +63,41 @@ enum IOSSnapshotHarness {
         }
     }
 
+    /// The module a scenario opens in landscape, if any.
+    static var moduleScenario: LearningModule? {
+        switch scenario {
+        case .chordsLandscape, .chordsDrawer: return .chords
+        case .notesLandscape, .notesDrawer: return .notes
+        case .intervalsLandscape, .intervalsDrawer: return .intervals
+        case .octavesLandscape, .octavesDrawer: return .octaves
+        case .triadsShapesLandscape, .triadsShapesDrawer,
+             .triadsPathsLandscape, .triadsPathsDrawer, .triadsPathsGuided: return .triads
+        case .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided: return .pentatonic
+        case .scalesLandscape, .scalesDrawer, .scalesGuided: return .scales
+        case .harmonizingLandscape, .harmonizingDrawer: return .harmonizing
+        case .noteAssociationLandscape, .noteAssociationDrawer: return .noteAssociation
+        case .circleLandscape, .circleDrawer: return .circle
+        default: return nil
+        }
+    }
+
     static var forcesLandscape: Bool {
         switch scenario {
-        case .listenLandscape, .popBack, .list, .chordsLandscape, .chordsDrawer: return true
-        default: return false
+        case .listenLandscape, .popBack, .list,
+             .chordsLandscape, .chordsDrawer,
+             .notesLandscape, .notesDrawer,
+             .intervalsLandscape, .intervalsDrawer,
+             .octavesLandscape, .octavesDrawer,
+             .triadsShapesLandscape, .triadsShapesDrawer,
+             .triadsPathsLandscape, .triadsPathsDrawer, .triadsPathsGuided,
+             .pentatonicLandscape, .pentatonicDrawer, .pentatonicGuided,
+             .scalesLandscape, .scalesDrawer, .scalesGuided,
+             .harmonizingLandscape, .harmonizingDrawer,
+             .noteAssociationLandscape, .noteAssociationDrawer,
+             .circleLandscape, .circleDrawer:
+            return true
+        default:
+            return false
         }
     }
 
@@ -54,15 +108,41 @@ enum IOSSnapshotHarness {
 
     /// The navigation stack's initial path.
     static var initialPath: [AppScreen] {
+        if let module = moduleScenario {
+            return [.module(module)]
+        }
         switch scenario {
-        case .chordsLandscape, .chordsDrawer: return [.module(.chords)]
         case .list: return []
         default: return [.listen]
         }
     }
 
     static var showsSettingsSheet: Bool { scenario == .settings }
-    static var showsChordsDrawer: Bool { scenario == .chordsDrawer }
+    static var showsModuleDrawer: Bool {
+        switch scenario {
+        case .chordsDrawer, .intervalsDrawer, .notesDrawer, .octavesDrawer,
+             .triadsShapesDrawer, .triadsPathsDrawer, .pentatonicDrawer,
+             .scalesDrawer, .harmonizingDrawer, .noteAssociationDrawer, .circleDrawer:
+            return true
+        default: return false
+        }
+    }
+
+    /// Forces the Triads landscape onto its Paths face; the Shapes face is
+    /// what the persisted default opens to.
+    static var forcesTriadsPathMode: Bool {
+        switch scenario {
+        case .triadsPathsLandscape, .triadsPathsDrawer, .triadsPathsGuided: return true
+        default: return false
+        }
+    }
+
+    /// Forces a landscape band into its guided-run form (D-27) without running
+    /// a real session: the Stop button and the "Next:" step text render
+    /// against a fixed, real note from the model's own run.
+    static var guidedRunActive: Bool {
+        scenario == .pentatonicGuided || scenario == .triadsPathsGuided || scenario == .scalesGuided
+    }
 
     static func effectiveStatus(_ actual: IOSAudioStatus?) -> IOSAudioStatus? {
         guard isActive else { return actual }

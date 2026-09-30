@@ -1,0 +1,250 @@
+import SwiftUI
+
+/// The Note association module on iOS.
+///
+/// Portrait reuses the Mac `NoteAssociationModuleScreen` verbatim (D-18).
+/// Landscape is the M2 arrangement (D-20/D-22): ‹ › step through the seven
+/// chords of the key (I→vii°, the chord underneath the layered neck), and the
+/// drawer holds the key, mode, labels, the three layer chips, the progression
+/// and its loop, Play progression / Strum chord, and the explanation.
+struct IOSNoteAssociationScreen: View {
+    @Bindable var state: AppState
+
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var landscapeModel: NoteAssociationModuleModel?
+
+    var body: some View {
+        Group {
+            if verticalSizeClass == .compact {
+                if let model = landscapeModel {
+                    IOSNoteAssociationLandscape(state: state, model: model)
+                } else {
+                    Color.clear
+                        .task {
+                            if landscapeModel == nil {
+                                landscapeModel = state.makeNoteAssociationModuleModel()
+                                state.refreshSamplePlaybackReadiness()
+                            }
+                        }
+                }
+            } else {
+                NoteAssociationModuleScreen(state: state)
+            }
+        }
+        .background(NotePalette.backdrop)
+    }
+}
+
+// MARK: - Landscape (M2)
+
+private struct IOSNoteAssociationLandscape: View {
+    let state: AppState
+    let model: NoteAssociationModuleModel
+
+    private var subtitle: String {
+        guard let chord = model.chord else { return model.keyName }
+        return IOSModuleLandscapeFormat.noteAssociationSubtitle(roman: chord.roman, chordName: chord.name)
+    }
+
+    var body: some View {
+        IOSModuleLandscapeScaffold(
+            title: IOSModuleScreenTitle.title(for: .noteAssociation),
+            subtitle: subtitle,
+            tuning: model.tuning,
+            isFixedShapeModule: false,
+            state: state,
+            neck: {
+                FretboardBoardView(
+                    dots: model.dots,
+                    frets: model.highestFret,
+                    tuning: model.tuning,
+                    flipped: state.isFretboardFlipped,
+                    pulses: model.pulses
+                )
+            },
+            leadingAction: .step(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Previous chord",
+                disabled: model.focusedDegree == 0,
+                action: { withAnimation(FretworkMotion.gravity) { model.selectDegree(model.focusedDegree - 1) } }
+            ),
+            trailingAction: .step(
+                systemImage: "chevron.right",
+                accessibilityLabel: "Next chord",
+                disabled: model.focusedDegree == 6,
+                action: { withAnimation(FretworkMotion.gravity) { model.selectDegree(model.focusedDegree + 1) } }
+            ),
+            drawerTitle: "Key & layers",
+            drawerSystemImage: "slider.horizontal.3",
+            drawer: {
+                IOSNoteAssociationDrawer(state: state, model: model)
+            },
+            bandMode: .normal,
+            guidedRunStepText: "",
+            onStopGuidedRun: {},
+            onTuningChange: { model.retune(to: $0) }
+        )
+        .onDisappear { model.stopEverything() }
+    }
+}
+
+// MARK: - Drawer
+
+private struct IOSNoteAssociationDrawer: View {
+    let state: AppState
+    let model: NoteAssociationModuleModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                PitchClassPicker(
+                    title: "Key",
+                    selection: model.keyRoot,
+                    onSelect: model.selectKeyRoot
+                )
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Mode & labels")
+                        .font(.headline)
+                    VStack(spacing: 12) {
+                        LabeledContent("Mode") {
+                            modePicker
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        LabeledContent("Labels") {
+                            labelPicker
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                    }
+                }
+
+                layers
+                progression
+                explanation
+            }
+            .padding(20)
+        }
+    }
+
+    private var modePicker: some View {
+        Picker("Mode", selection: Binding(
+            get: { model.isMajor },
+            set: { model.selectMajor($0) }
+        )) {
+            Text("Major").tag(true)
+            Text("Minor").tag(false)
+        }
+        .pickerStyle(.menu)
+    }
+
+    private var labelPicker: some View {
+        Picker("Labels", selection: Binding(
+            get: { model.labelMode },
+            set: { model.setLabelMode($0) }
+        )) {
+            Text("Notes").tag(NoteAssociationModuleModel.LabelMode.notes)
+            Text("Numbers").tag(NoteAssociationModuleModel.LabelMode.degrees)
+        }
+        .pickerStyle(.menu)
+    }
+
+    /// The layer switches: chord tones alone is arpeggio practice, pentatonic
+    /// alone is where most solos live. Chips, not checkboxes, so a second fact
+    /// (a chord tone that is also pentatonic) can keep both visible.
+    private var layers: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Layers")
+                .font(.headline)
+            HStack(spacing: 8) {
+                ToggleChip(
+                    title: "Chord tones",
+                    isOn: model.showsChordTones,
+                    tint: NotePalette.accent,
+                    onTap: { model.setLayer(chordTones: !model.showsChordTones) },
+                    help: "Show the notes of the chord in focus"
+                )
+                ToggleChip(
+                    title: "Pentatonic",
+                    isOn: model.showsPentatonic,
+                    tint: NotePalette.accent,
+                    onTap: { model.setLayer(pentatonic: !model.showsPentatonic) },
+                    help: "Show the safe notes around them"
+                )
+                ToggleChip(
+                    title: "Rest of scale",
+                    isOn: model.showsScale,
+                    tint: NotePalette.accent,
+                    onTap: { model.setLayer(scale: !model.showsScale) },
+                    help: "Show the rest of the key's scale"
+                )
+            }
+        }
+    }
+
+    private var progression: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Progression")
+                .font(.headline)
+            HStack(spacing: 12) {
+                Picker("Progression", selection: Binding(
+                    get: { model.progressionID },
+                    set: { model.selectProgression($0) }
+                )) {
+                    ForEach(model.progressions, id: \.id) { progression in
+                        Text(progression.name).tag(progression.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .fixedSize(horizontal: true, vertical: false)
+                .disabled(model.progressions.isEmpty)
+
+                ToggleChip(
+                    title: "Loop",
+                    isOn: model.loop,
+                    tint: NotePalette.accent,
+                    onTap: { model.setLoop(!model.loop) }
+                )
+            }
+
+            IOSModulePlaybackNotice(state: state)
+
+            HStack(spacing: 12) {
+                Button {
+                    model.startProgression()
+                } label: {
+                    Label("Play progression", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .tint(NotePalette.accent)
+                .disabled(model.progressionChords.isEmpty || !state.isSamplePlaybackReady)
+
+                Button {
+                    model.strumChord()
+                } label: {
+                    Label("Strum chord", systemImage: "guitars")
+                }
+                .buttonStyle(.glass)
+                .disabled(model.chord == nil || !state.isSamplePlaybackReady)
+
+                Button("Stop") { model.stopEverything() }
+                    .buttonStyle(.glass)
+            }
+        }
+    }
+
+    private var explanation: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("About")
+                .font(.headline)
+            if let chord = model.chord {
+                Text("Everything in \(model.keyName) is on the neck at once, coloured by what it is doing over \(chord.name) right now. The chord tones are the notes that land; the pentatonic is the safe ground around them; the rest of the scale is available but wants more care.")
+                Text("Play the progression and watch the colours move while the dots stay still. Not one note shifts — what changes is each note's job, because the chord underneath moved.")
+                Text("Turn the layers off one at a time. Chord tones alone is arpeggio practice; pentatonic alone is where most solos live; all three is what an improviser is actually seeing.")
+            }
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
