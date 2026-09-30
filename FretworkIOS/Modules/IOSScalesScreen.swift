@@ -53,6 +53,7 @@ private struct IOSScalesStage: View {
                 direction: model.direction
             ),
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {

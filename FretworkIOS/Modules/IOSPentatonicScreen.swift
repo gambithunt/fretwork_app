@@ -55,6 +55,7 @@ private struct IOSPentatonicStage: View {
             title: IOSModuleScreenTitle.title(for: .pentatonic),
             subtitle: subtitle,
             tuning: state.tuning,
+            boardTuning: Tunings.standard,
             isFixedShapeModule: true,
             state: state,
             neck: {

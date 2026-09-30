@@ -49,6 +49,7 @@ private struct IOSHarmonizingStage: View {
             title: IOSModuleScreenTitle.title(for: .harmonizing),
             subtitle: subtitle,
             tuning: state.tuning,
+            boardTuning: Tunings.standard,
             isFixedShapeModule: true,
             state: state,
             neck: {

@@ -39,6 +39,7 @@ private struct IOSNotesStage: View {
             title: IOSModuleScreenTitle.title(for: .notes),
             subtitle: IOSModuleLandscapeFormat.notesPlacedSubtitle(count: model.placed.count),
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {

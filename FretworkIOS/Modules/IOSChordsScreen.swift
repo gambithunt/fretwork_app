@@ -54,6 +54,7 @@ private struct IOSChordsStage: View {
             title: IOSModuleScreenTitle.title(for: .chords),
             subtitle: subtitle,
             tuning: state.tuning,
+            boardTuning: Tunings.standard,
             isFixedShapeModule: true,
             state: state,
             neck: {

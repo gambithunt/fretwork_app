@@ -294,6 +294,9 @@ struct ToggleChip: View {
             Text(title)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(isOn ? Color.black : tint)
+                // A chip label never wraps: it is one line at its ideal width,
+                // and a wrapping row layout moves the whole chip instead.
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .background(ChipFill(color: tint, lit: isOn))

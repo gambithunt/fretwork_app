@@ -42,6 +42,7 @@ private struct IOSNoteAssociationStage: View {
             title: IOSModuleScreenTitle.title(for: .noteAssociation),
             subtitle: subtitle,
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {
@@ -148,7 +149,7 @@ private struct IOSNoteAssociationDrawer: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Layers")
                 .font(.headline)
-            HStack(spacing: 8) {
+            IOSFlowLayout(spacing: 8) {
                 ToggleChip(
                     title: "Chord tones",
                     isOn: model.showsChordTones,

@@ -56,6 +56,7 @@ private struct IOSOctavesStage: View {
             title: IOSModuleScreenTitle.title(for: .octaves),
             subtitle: subtitle,
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {

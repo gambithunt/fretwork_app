@@ -111,6 +111,7 @@ private struct IOSTriadsStage: View {
             title: IOSModuleScreenTitle.title(for: .triads),
             subtitle: subtitle,
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {

@@ -262,9 +262,9 @@ final class IOSModuleLandscapeTests: XCTestCase {
     func testStripGeometryAndScrollOffset() {
         XCTAssertEqual(IOSModulePortraitStrip.width(for: 12), 62 + 44 * 13)
         XCTAssertEqual(IOSModulePortraitStrip.leadingEdge(ofFret: 3, frets: 12), 62 + 44 * 3)
-        // A mid fret scrolls so the shape sits near the leading edge with a
-        // little context before it.
-        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 2, frets: 12, viewportWidth: 390), 62 + 44 * 2 - 20)
+        // A mid fret scrolls so the shape sits just right of the pinned gutter,
+        // with the board's own (scrolled-out) gutter and a little context gone.
+        XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 2, frets: 12, viewportWidth: 390), 44 * 2 - 20)
         // Near the end it clamps to the last page rather than overshooting.
         XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 12, frets: 12, viewportWidth: 390), 634 - 390)
         // A viewport wider than the strip needs no scroll.

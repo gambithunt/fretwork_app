@@ -160,29 +160,35 @@ enum IOSModulePortraitStrip {
     /// Column width reserved per fret, so dots stay the size they are on the
     /// landscape neck instead of being uniformly shrunk (D-06).
     static let fretWidth: CGFloat = 44
-    /// The board's left gutter (string labels), matching
+    /// The fixed string-name gutter pinned left of the scroll, and the board's
+    /// internal leading margin it covers. Matches
     /// `BoardGeometry.Margins.labelled.leading`.
-    static let leadingMargin: CGFloat = 62
+    static let gutterWidth: CGFloat = 62
     /// The strip's fixed height: six strings plus the fret-number row.
     static let height: CGFloat = 260
-    /// Breathing room left before the target fret, so the shape is not hard
-    /// against the leading edge.
-    static let leadingInset: CGFloat = 20
+    /// The board's top/bottom label rows, matching
+    /// `BoardGeometry.Margins.labelled`, so the pinned gutter's string names
+    /// line up with the board's string rows.
+    static let boardTopMargin: CGFloat = 34
+    static let boardBottomMargin: CGFloat = 4
+    /// Breathing room between the fixed gutter and the target fret.
+    static let fretInset: CGFloat = 20
 
     static func width(for frets: Int) -> CGFloat {
-        leadingMargin + fretWidth * CGFloat(frets + 1)
+        gutterWidth + fretWidth * CGFloat(frets + 1)
     }
 
-    /// The x of a fret's leading edge inside the strip.
+    /// The x of a fret's leading edge inside the (gutter-bearing) board.
     static func leadingEdge(ofFret fret: Int, frets: Int) -> CGFloat {
-        leadingMargin + fretWidth * CGFloat(fret)
+        gutterWidth + fretWidth * CGFloat(fret)
     }
 
-    /// The scroll offset that brings `fret` into view near the leading edge,
-    /// clamped so the strip never scrolls past its end.
+    /// The scroll offset that puts `fret` just right of the pinned gutter,
+    /// clamped so the strip never scrolls past its end. Because the gutter is
+    /// fixed, the board's own gutter must be scrolled out of view first.
     static func scrollOffset(for fret: Int, frets: Int, viewportWidth: CGFloat) -> CGFloat {
         let leading = leadingEdge(ofFret: fret, frets: frets)
-        return max(0, min(leading - leadingInset, max(0, width(for: frets) - viewportWidth)))
+        return max(0, min(leading - gutterWidth - fretInset, max(0, width(for: frets) - viewportWidth)))
     }
 
     /// Which fret the strip should open on: the lowest fret of the emphasised
@@ -211,7 +217,12 @@ enum IOSModulePortraitStrip {
 struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     let title: String
     let subtitle: String
+    /// The global tuning, used only for the standard-tuning notice pill.
     let tuning: Tuning
+    /// The tuning the `neck` actually draws — `Tunings.standard` for the
+    /// fixed-shape modules, the model's tuning otherwise — so the pinned
+    /// portrait string-name gutter names the same strings as the board.
+    let boardTuning: Tuning
     /// Fixed-fret-shape modules (Chords, Pentatonic, Harmonizing) show the
     /// "standard tuning shapes" pill when the global tuning is not standard.
     let isFixedShapeModule: Bool
@@ -249,6 +260,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
         title: String,
         subtitle: String,
         tuning: Tuning,
+        boardTuning: Tuning,
         isFixedShapeModule: Bool,
         state: AppState,
         @ViewBuilder neck: () -> Neck,
@@ -268,6 +280,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
         self.title = title
         self.subtitle = subtitle
         self.tuning = tuning
+        self.boardTuning = boardTuning
         self.isFixedShapeModule = isFixedShapeModule
         self.state = state
         self.neck = neck()
@@ -402,17 +415,28 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
 
     private var boardStrip: some View {
         GeometryReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                neck
-                    .frame(
-                        width: IOSModulePortraitStrip.width(for: frets),
-                        height: IOSModulePortraitStrip.height
-                    )
+            ZStack(alignment: .leading) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    neck
+                        .frame(
+                            width: IOSModulePortraitStrip.width(for: frets),
+                            height: IOSModulePortraitStrip.height
+                        )
+                }
+                .scrollPosition($stripPosition)
+                .onAppear { scrollStrip(viewport: proxy.size.width) }
+                .onChange(of: focusFret) { scrollStrip(viewport: proxy.size.width) }
+                .onChange(of: frets) { scrollStrip(viewport: proxy.size.width) }
+
+                // The string-name gutter is pinned here, over the board's own
+                // (scrolling) gutter, so only the frets move. The board still
+                // draws its own names — they scroll underneath and are covered
+                // by this opaque, matching gutter.
+                IOSModuleStringGutter(
+                    tuning: boardTuning,
+                    flipped: state.isFretboardFlipped
+                )
             }
-            .scrollPosition($stripPosition)
-            .onAppear { scrollStrip(viewport: proxy.size.width) }
-            .onChange(of: focusFret) { scrollStrip(viewport: proxy.size.width) }
-            .onChange(of: frets) { scrollStrip(viewport: proxy.size.width) }
         }
         .frame(height: IOSModulePortraitStrip.height)
     }
@@ -529,6 +553,91 @@ struct IOSModuleLiveNoteLeaf: View {
             }
             .animation(.easeInOut(duration: 0.2), value: display.note?.midiNote)
         }
+    }
+}
+
+/// A wrapping row layout: places subviews left-to-right and moves a whole
+/// subview to the next row when it would not fit, so chips stay one line and
+/// equal height instead of compressing and wrapping their own text.
+struct IOSFlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth.isFinite ? maxWidth : x, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+/// The pinned string-name gutter for the portrait board strip: an opaque,
+/// matching cover over the board's own scrolling gutter, drawing the same
+/// string names at the same rows (respecting `flipped`) so only the frets
+/// scroll while the names stay put.
+private struct IOSModuleStringGutter: View {
+    let tuning: Tuning
+    let flipped: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            let strings = tuning.openMIDINotes.count
+            let names = tuning.stringNames
+            let boardHeight = size.height
+                - IOSModulePortraitStrip.boardTopMargin
+                - IOSModulePortraitStrip.boardBottomMargin
+            for string in 0..<strings where string < names.count {
+                let row = flipped ? string : strings - 1 - string
+                let y = IOSModulePortraitStrip.boardTopMargin
+                    + boardHeight * (CGFloat(row) + 0.5) / CGFloat(strings)
+                context.draw(
+                    Text(names[string].uppercased())
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.1)
+                        .foregroundColor(.white.opacity(0.55)),
+                    at: CGPoint(x: 30, y: y)
+                )
+            }
+        }
+        .frame(width: IOSModulePortraitStrip.gutterWidth, height: IOSModulePortraitStrip.height)
+        .background(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 14,
+                bottomLeadingRadius: 14,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 0,
+                style: .continuous
+            )
+            .fill(Color(red: 0.085, green: 0.085, blue: 0.105))
+        )
+        .allowsHitTesting(false)
     }
 }
 

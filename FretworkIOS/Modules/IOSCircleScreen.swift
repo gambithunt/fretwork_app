@@ -55,6 +55,7 @@ private struct IOSCircleStage: View {
             title: IOSModuleScreenTitle.title(for: .circle),
             subtitle: IOSModuleLandscapeFormat.circleSubtitle(model.selected),
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {

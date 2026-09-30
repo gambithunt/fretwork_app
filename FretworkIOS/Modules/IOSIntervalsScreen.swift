@@ -58,6 +58,7 @@ private struct IOSIntervalsStage: View {
             title: IOSModuleScreenTitle.title(for: .intervals),
             subtitle: IOSModuleLandscapeFormat.intervalSubtitle(model.interval),
             tuning: model.tuning,
+            boardTuning: model.tuning,
             isFixedShapeModule: false,
             state: state,
             neck: {
