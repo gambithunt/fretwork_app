@@ -493,7 +493,16 @@ final class IOSAudioController: AudioControlling {
     }
 
     private func fail(_ error: Error) {
-        let message = String(describing: error)
+        // `setActive` on a session another app is holding throws
+        // AVAudioSessionErrorCodeInsufficientPriority (561017449). Surface it
+        // as an actionable message with the existing Retry rather than a raw
+        // code, which the player cannot act on.
+        let message: String
+        if (error as NSError).code == AVAudioSession.ErrorCode.insufficientPriority.rawValue {
+            message = "Audio is in use by another app. Close it, then try again."
+        } else {
+            message = String(describing: error)
+        }
         status = .failed(message)
         onEvent?(.error(message))
     }
