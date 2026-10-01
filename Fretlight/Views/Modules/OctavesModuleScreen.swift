@@ -78,21 +78,22 @@ struct OctavesModuleScreen: View {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
 
-            HStack(spacing: 12) {
+            ModuleControlCard {
                 FretboardLabelPicker(selection: $labelMode)
-                Button {
-                    model.hearOctave()
-                } label: {
-                    Label("Hear octave", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.currentShape == nil)
+                .moduleMenuPicker()
+                    .moduleControlCell(caption: "LABELS")
 
-                Spacer()
                 challengeControls(model)
+                    .moduleControlCell(caption: "CHALLENGE")
+
+                ModulePrimaryAction(
+                    title: "Hear octave",
+                    disabled: model.currentShape == nil,
+                    action: { model.hearOctave() },
+                    stopAction: { model.stop() }
+                )
+                .moduleControlCell(caption: "PLAY", alignment: .trailing)
             }
-            .moduleOptionsCard()
         }
     }
 
@@ -100,40 +101,42 @@ struct OctavesModuleScreen: View {
     private func challengeControls(_ model: OctavesModuleModel) -> some View {
         switch model.challenge.phase {
         case .idle:
-            Button("Start recall") { model.startRecall() }
-                .disabled(model.shapes.isEmpty)
+            ModuleSecondaryAction(
+                title: "Start recall",
+                disabled: model.shapes.isEmpty,
+                action: { model.startRecall() }
+            )
         case .prompt:
             HStack(spacing: 8) {
                 Text("Where is the octave?")
                     .font(.callout)
                     .foregroundStyle(NotePalette.accent)
-                Button("Stop") { model.stopRecall() }
+                ModuleSecondaryAction(title: "Stop", action: { model.stopRecall() })
             }
         case .incorrect:
             HStack(spacing: 8) {
                 Text("Not that one.")
                     .font(.callout)
                     .foregroundStyle(.orange)
-                Button("Try again") { model.challenge.retry() }
-                Button("Stop") { model.stopRecall() }
+                ModuleSecondaryAction(title: "Try again", action: { model.challenge.retry() })
+                ModuleSecondaryAction(title: "Stop", action: { model.stopRecall() })
             }
         case .correct:
             HStack(spacing: 8) {
                 Text("That's it.")
                     .font(.callout)
                     .foregroundStyle(NotePalette.color(for: .root))
-                Button(model.challenge.index + 1 == model.challenge.total ? "Finish round" : "Next octave") {
-                    model.challenge.next()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
+                ModuleSecondaryAction(
+                    title: model.challenge.index + 1 == model.challenge.total ? "Finish round" : "Next octave",
+                    action: { model.challenge.next() }
+                )
             }
         case .complete:
             HStack(spacing: 8) {
                 Text("\(model.challenge.correctCount) of \(model.challenge.total)")
                     .font(.callout.weight(.medium))
-                Button("Again") { model.challenge.restart() }
-                Button("Done") { model.stopRecall() }
+                ModuleSecondaryAction(title: "Again", action: { model.challenge.restart() })
+                ModuleSecondaryAction(title: "Done", action: { model.stopRecall() })
             }
         }
     }

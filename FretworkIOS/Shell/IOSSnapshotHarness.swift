@@ -155,6 +155,14 @@ enum IOSSnapshotHarness {
     }
 
     static var showsSettingsSheet: Bool { scenario == .settings }
+
+    /// Collapses the iPad sidebar so a run can capture the detail at full width
+    /// (sidebar closed) alongside the default open state. A standalone launch
+    /// argument rather than a scenario, so it composes with every module's
+    /// `-IOSSnapshot<Name>Landscape` scenario.
+    static var collapsesSidebar: Bool {
+        CommandLine.arguments.contains("-IOSSnapshotSidebarClosed")
+    }
     static var showsUnlockSheet: Bool {
         scenario == .unlockSheet || scenario == .unlockSheetLight
     }
@@ -207,11 +215,18 @@ enum IOSSnapshotHarness {
     @MainActor
     static func requestOrientationIfNeeded() {
         let mask: UIInterfaceOrientationMask = forcesLandscape ? .landscapeRight : .portrait
-        guard let scene = UIApplication.shared.connectedScenes
-                  .compactMap({ $0 as? UIWindowScene })
-                  .first
-        else { return }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+        Task { @MainActor in
+            // A cold launch can reach this before the window scene is
+            // connected, and a request made then is silently dropped — the
+            // scene keeps its previous orientation. Give the scene a beat to
+            // connect, then request once; the iPad sim keeps that orientation
+            // across relaunches.
+            try? await Task.sleep(for: .milliseconds(500))
+            if let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+            }
+        }
     }
 }
 #endif

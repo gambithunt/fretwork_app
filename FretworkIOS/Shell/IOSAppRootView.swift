@@ -20,6 +20,7 @@ struct IOSAppRootView: View {
     @State private var path: [AppScreen] = IOSSnapshot.initialPath
     @State private var selection: AppScreen? = IOSSnapshot.initialSelection ?? .listen
     @State private var isShowingSettings = IOSSnapshot.showsSettingsSheet
+    @State private var columnVisibility: NavigationSplitViewVisibility = IOSSnapshot.collapsesSidebar ? .detailOnly : .all
     @State private var unlockStore: IOSUnlockStore
     @State private var unlockTarget: LearningModule?
     @State private var showsUnlockSheet = IOSSnapshot.showsUnlockSheet
@@ -178,7 +179,7 @@ struct IOSAppRootView: View {
     // MARK: - iPad (split)
 
     private var padShell: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             padList
                 .navigationTitle("Fretwork")
         } detail: {

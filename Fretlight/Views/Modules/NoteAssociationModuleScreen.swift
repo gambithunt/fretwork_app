@@ -51,37 +51,43 @@ struct NoteAssociationModuleScreen: View {
             PitchClassPicker(title: "KEY", selection: model.keyRoot, onSelect: model.selectKeyRoot)
                 .moduleNotesCard()
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Picker("Mode", selection: Binding(
-                        get: { model.isMajor },
-                        set: { model.selectMajor($0) }
-                    )) {
-                        Text("Major").tag(true)
-                        Text("Minor").tag(false)
-                    }
-                    .fixedSize()
-
-                    Picker("Labels", selection: Binding(
-                        get: { model.labelMode },
-                        set: { model.setLabelMode($0) }
-                    )) {
-                        Text("Notes").tag(NoteAssociationModuleModel.LabelMode.notes)
-                        Text("Numbers").tag(NoteAssociationModuleModel.LabelMode.degrees)
-                    }
-                    .fixedSize()
+            // Three rows, rebuilt to the owner's balance: row 1 is what to
+            // show (Mode · Labels · Layers), row 2 is the chord degree row at
+            // full width so its seven chips stay one line, row 3 is the
+            // progression (with Loop beside it) and the actions together.
+            ModuleControlCard {
+                Picker("Mode", selection: Binding(
+                    get: { model.isMajor },
+                    set: { model.selectMajor($0) }
+                )) {
+                    Text("Major").tag(true)
+                    Text("Minor").tag(false)
                 }
+                .labelsHidden()
+                .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "MODE")
+
+                Picker("Labels", selection: Binding(
+                    get: { model.labelMode },
+                    set: { model.setLabelMode($0) }
+                )) {
+                    Text("Notes").tag(NoteAssociationModuleModel.LabelMode.notes)
+                    Text("Numbers").tag(NoteAssociationModuleModel.LabelMode.degrees)
+                }
+                .labelsHidden()
+                .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "LABELS")
 
                 // The layer switches. Seeing the scale alone, or the chord
                 // tones alone, is a different exercise from seeing all three
                 // at once. Chips, not the macOS-only checkbox style, so the
-                // same control works on the Mac and on touch — and because a
-                // chip is what every other selection on this screen already is.
-                // A row of independent `ToggleChip`s rather than a
-                // `ToggleChipGrid`: with three longer labels the grid's
-                // adaptive columns hyphenate them ("Penta-tonic"), while these
-                // stay one line each.
-                HStack(spacing: 8) {
+                // same control works on the Mac and on touch. Kept as a row of
+                // `ToggleChip`s — not a `ToggleChipGrid` — and wrapped inside
+                // the cell so a narrow column never hyphenates a label
+                // ("Penta-tonic").
+                ModuleChipWrapLayout {
                     ToggleChip(
                         title: "Chord tones",
                         isOn: model.showsChordTones,
@@ -104,72 +110,83 @@ struct NoteAssociationModuleScreen: View {
                         help: "Show the rest of the key's scale"
                     )
                 }
+                .moduleControlCell(caption: "LAYERS")
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("CHORD")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    ChipPicker(
-                        values: Array(model.chords.indices),
-                        selection: model.focusedDegree,
-                        tint: { _ in NotePalette.accent },
-                        onSelect: model.selectDegree,
-                        isEmphasized: { model.playingDegree == $0 },
-                        accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" }
-                    ) { index, isActive in
-                        VStack(spacing: 2) {
-                            Text(model.chords[index].roman)
-                                .font(.callout.weight(.semibold))
-                                .foregroundStyle(isActive ? .black : .primary)
-                            Text(model.chords[index].name)
-                                .font(.caption2)
-                                .foregroundStyle(isActive ? .black.opacity(0.65) : .secondary)
-                        }
+                // The chord degree row spans its own full-width row, so the
+                // whole key stays one line at wide widths and wraps evenly only
+                // when the card forces it to.
+                ChipPicker(
+                    values: Array(model.chords.indices),
+                    selection: model.focusedDegree,
+                    tint: { _ in NotePalette.accent },
+                    onSelect: model.selectDegree,
+                    isEmphasized: { model.playingDegree == $0 },
+                    accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" }
+                ) { index, isActive in
+                    VStack(spacing: 2) {
+                        Text(model.chords[index].roman)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(isActive ? .black : .primary)
+                        Text(model.chords[index].name)
+                            .font(.caption2)
+                            .foregroundStyle(isActive ? .black.opacity(0.65) : .secondary)
                     }
                 }
+                .moduleControlCell(caption: "CHORD")
+                .moduleControlFullWidth()
 
-                progressionControls(model)
-            }
-            .moduleOptionsCard()
-        }
-    }
+                HStack(spacing: 8) {
+                    Picker("Progression", selection: Binding(
+                        get: { model.progressionID },
+                        set: { model.selectProgression($0) }
+                    )) {
+                        ForEach(model.progressions, id: \.id) { progression in
+                            Text(progression.name).tag(progression.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .moduleMenuPicker()
+                    .disabled(model.progressions.isEmpty)
 
-    private func progressionControls(_ model: NoteAssociationModuleModel) -> some View {
-        HStack(spacing: 12) {
-            Picker("Progression", selection: Binding(
-                get: { model.progressionID },
-                set: { model.selectProgression($0) }
-            )) {
-                ForEach(model.progressions, id: \.id) { progression in
-                    Text(progression.name).tag(progression.id)
+                    ToggleChip(
+                        title: "Loop",
+                        isOn: model.loop,
+                        tint: NotePalette.accent,
+                        onTap: { model.setLoop(!model.loop) }
+                    )
                 }
-            }
-            .fixedSize()
-            .disabled(model.progressions.isEmpty)
+                .moduleControlCell(caption: "PROGRESSION")
 
-            ToggleChip(
-                title: "Loop",
-                isOn: model.loop,
-                tint: NotePalette.accent,
-                onTap: { model.setLoop(!model.loop) }
-            )
+                // The actions stay together in the last cell: the primary
+                // action, its Stop, and Strum chord — a secondary action that
+                // belongs with the others rather than a lonely cell of its own.
+                VStack(alignment: .trailing, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Button(action: { model.startProgression() }) {
+                            Label("Play progression", systemImage: "play.fill")
+                                .frame(minWidth: 132)
+                        }
+                        .modulePrimaryButton()
+                        .disabled(model.progressionChords.isEmpty)
 
-            Button {
-                model.startProgression()
-            } label: {
-                Label("Play progression", systemImage: "play.fill")
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(NotePalette.accent)
-            .disabled(model.progressionChords.isEmpty)
+                        Button(action: { model.strumChord() }) {
+                            Label("Strum chord", systemImage: "guitars")
+                        }
+                        .moduleSecondaryButton()
 
-            Button { model.strumChord() } label: { Label("Strum chord", systemImage: "guitars") }
-            Button("Stop") { model.stopEverything() }
-
-            if let beat = model.progressionSnapshot.countInBeat {
-                Text("Count in… \(beat)")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(NotePalette.accent)
+                        Button(action: { model.stopEverything() }) {
+                            Label("Stop", systemImage: "stop.fill")
+                        }
+                        .moduleSecondaryButton()
+                    }
+                    if let beat = model.progressionSnapshot.countInBeat {
+                        Text("Count in… \(beat)")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(NotePalette.accent)
+                    }
+                }
+                .moduleControlCell(caption: "PLAY", alignment: .trailing)
             }
         }
     }

@@ -58,7 +58,7 @@ struct ChordsModuleScreen: View {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
 
-            HStack(spacing: 16) {
+            ModuleControlCard {
                 Picker("Family", selection: Binding(
                     get: { model.family },
                     set: { model.selectFamily($0) }
@@ -67,7 +67,10 @@ struct ChordsModuleScreen: View {
                         Text(ChordsModuleModel.label(for: family)).tag(family)
                     }
                 }
+                .labelsHidden()
                 .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "FAMILY")
 
                 Picker("Chord", selection: Binding(
                     get: { model.formula.id },
@@ -79,21 +82,23 @@ struct ChordsModuleScreen: View {
                         Text(formula.label.isEmpty ? "Major" : formula.label).tag(formula.id)
                     }
                 }
+                .labelsHidden()
                 .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "CHORD")
 
                 FretboardLabelPicker(selection: $labelMode)
+                .moduleMenuPicker()
+                    .moduleControlCell(caption: "LABELS")
 
-                Button {
-                    model.strum()
-                } label: {
-                    Label("Strum", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.currentVoicing == nil)
-                Button("Stop") { model.stop() }
+                ModulePrimaryAction(
+                    title: "Strum",
+                    disabled: model.currentVoicing == nil,
+                    action: { model.strum() },
+                    stopAction: { model.stop() }
+                )
+                .moduleControlCell(caption: "PLAY", alignment: .trailing)
             }
-            .moduleOptionsCard()
         }
     }
 

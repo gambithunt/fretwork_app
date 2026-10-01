@@ -66,7 +66,7 @@ struct IntervalsModuleScreen: View {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
 
-            HStack(spacing: 16) {
+            ModuleControlCard {
                 Picker("Interval", selection: Binding(
                     get: { model.interval.short },
                     set: { short in
@@ -79,22 +79,23 @@ struct IntervalsModuleScreen: View {
                         Text("\(interval.name) (\(interval.short))").tag(interval.short)
                     }
                 }
+                .labelsHidden()
                 .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "INTERVAL")
 
                 FretboardLabelPicker(selection: $labelMode)
+                .moduleMenuPicker()
+                    .moduleControlCell(caption: "LABELS")
 
-                Button {
-                    model.playInterval()
-                } label: {
-                    Label("Play interval", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.practicalTarget == nil)
-
-                Button("Stop") { model.stop() }
+                ModulePrimaryAction(
+                    title: "Play interval",
+                    disabled: model.practicalTarget == nil,
+                    action: { model.playInterval() },
+                    stopAction: { model.stop() }
+                )
+                .moduleControlCell(caption: "PLAY", alignment: .trailing)
             }
-            .moduleOptionsCard()
         }
     }
 
