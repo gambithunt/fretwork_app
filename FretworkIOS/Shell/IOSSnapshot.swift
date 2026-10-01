@@ -44,6 +44,7 @@ enum IOSSnapshot {
         #endif
     }
 
+    @MainActor
     static func requestOrientationIfNeeded() {
         #if DEBUG
         IOSSnapshotHarness.requestOrientationIfNeeded()

@@ -204,6 +204,7 @@ enum IOSSnapshotHarness {
     /// `.landscapeRight`; everything else forces `.portrait` so a previous
     /// landscape run cannot leak into a portrait capture (the iPad simulator
     /// keeps its orientation across app relaunches, unlike the phone's default).
+    @MainActor
     static func requestOrientationIfNeeded() {
         let mask: UIInterfaceOrientationMask = forcesLandscape ? .landscapeRight : .portrait
         guard let scene = UIApplication.shared.connectedScenes

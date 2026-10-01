@@ -477,7 +477,7 @@
 				DEVELOPMENT_TEAM = 2752L3B5JB;
 				ENABLE_STRICT_CONCURRENCY = complete;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/Info-iOS.plist;
+				INFOPLIST_FILE = "Config/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
@@ -515,7 +515,7 @@
 				DEVELOPMENT_TEAM = 2752L3B5JB;
 				ENABLE_STRICT_CONCURRENCY = complete;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Config/Info-iOS.plist;
+				INFOPLIST_FILE = "Config/Info-iOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
