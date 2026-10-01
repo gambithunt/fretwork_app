@@ -19,6 +19,15 @@ struct IOSNotesScreen: View {
                         if model == nil {
                             model = state.makeNotesModuleModel()
                             state.refreshSamplePlaybackReadiness()
+                            #if DEBUG
+                            // A snapshot must show the primary action enabled,
+                            // and Play all is only meaningful once notes are on
+                            // the board — so drop every C (toggle, not tap, so
+                            // nothing plays and no graph is built).
+                            if IOSSnapshot.isActive {
+                                model?.toggleNote(PitchClass(0))
+                            }
+                            #endif
                         }
                     }
             }
@@ -71,8 +80,9 @@ private struct IOSNotesStage: View {
                 disabled: model.placed.isEmpty,
                 action: { model.clearAll() }
             ),
-            trailingAction: .step(
-                systemImage: "play.fill",
+            trailingAction: nil,
+            primaryAction: .primary(
+                title: "Play all",
                 accessibilityLabel: "Play all notes",
                 disabled: !canPlay,
                 action: { model.playAll() }

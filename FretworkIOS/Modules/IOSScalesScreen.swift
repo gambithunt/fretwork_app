@@ -72,10 +72,12 @@ private struct IOSScalesStage: View {
                     flipped: state.isFretboardFlipped
                 )
             },
-            // No positions to step through (D-26): the leading corner is a
-            // single ▶ Practise action that turns into ■ Stop in place while
-            // a run is active, and there is no trailing control.
-            leadingAction: .runToggle(
+            // No positions to step through (D-26): the primary action is a
+            // single ▶ Practise that turns into ■ Stop in place while a run
+            // is active, always the trailing corner (one size, one place).
+            leadingAction: nil,
+            trailingAction: nil,
+            primaryAction: .runToggle(
                 title: "Practise",
                 accessibilityLabel: "Practise",
                 isRunActive: isRunActive,
@@ -83,7 +85,6 @@ private struct IOSScalesStage: View {
                 start: { model.startGuided() },
                 stop: { model.stopGuided() }
             ),
-            trailingAction: nil,
             drawerTitle: "Scale & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {

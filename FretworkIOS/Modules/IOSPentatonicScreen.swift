@@ -91,6 +91,14 @@ private struct IOSPentatonicStage: View {
                 disabled: isRunActive || model.position == 4,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectPosition(model.position + 1) } }
             ),
+            primaryAction: .runToggle(
+                title: "Practise",
+                accessibilityLabel: "Practise",
+                isRunActive: isRunActive,
+                disabled: !isRunActive && (model.box.isEmpty || !state.isSamplePlaybackReady),
+                start: { model.startGuided() },
+                stop: { model.stopGuided() }
+            ),
             drawerTitle: "Scale & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -139,31 +147,14 @@ private struct IOSPentatonicDrawer: View {
                 }
                 .disabled(isRunActive)
 
-                practise
+                Text("A four-beat count-in, then one note per beat up the box. Tempo can be changed while practising.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 IOSModulePlaybackNotice(state: state)
             }
             .padding(20)
-        }
-    }
-
-    private var practise: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Practise")
-                .font(.headline)
-            Button {
-                if isRunActive { model.stopGuided() } else { model.startGuided() }
-            } label: {
-                Label(isRunActive ? "Stop" : "Practise", systemImage: isRunActive ? "stop.fill" : "play.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(isRunActive ? .red : NotePalette.accent)
-            .disabled(!isRunActive && (model.box.isEmpty || !state.isSamplePlaybackReady))
-            Text("A four-beat count-in, then one note per beat up the box. Tempo can be changed while practising.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

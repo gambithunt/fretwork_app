@@ -91,6 +91,12 @@ private struct IOSIntervalsStage: View {
                 disabled: isNextDisabled,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectInterval(Self.shiftedInterval(from: model.interval, by: 1)) } }
             ),
+            primaryAction: .primary(
+                title: "Play interval",
+                accessibilityLabel: "Play interval",
+                disabled: model.practicalTarget == nil || !state.isSamplePlaybackReady,
+                action: { model.playInterval() }
+            ),
             drawerTitle: "Interval & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -144,25 +150,7 @@ private struct IOSIntervalsDrawer: View {
                     .fixedSize(horizontal: true, vertical: false)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Play")
-                        .font(.headline)
-                    HStack(spacing: 12) {
-                        Button {
-                            model.playInterval()
-                        } label: {
-                            Label("Play interval", systemImage: "play.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .tint(NotePalette.accent)
-                        .disabled(model.practicalTarget == nil || !state.isSamplePlaybackReady)
-
-                        Button("Stop") { model.stop() }
-                            .buttonStyle(.glass)
-                    }
-                    IOSModulePlaybackNotice(state: state)
-                }
+                IOSModulePlaybackNotice(state: state)
 
                 uses
                 explanation

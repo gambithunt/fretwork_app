@@ -83,6 +83,12 @@ private struct IOSChordsStage: View {
                 disabled: isNextDisabled,
                 action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) } }
             ),
+            primaryAction: .primary(
+                title: "Strum",
+                accessibilityLabel: "Strum chord",
+                disabled: model.currentVoicing == nil || !state.isSamplePlaybackReady,
+                action: { model.strum() }
+            ),
             drawerTitle: "Chord & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -137,21 +143,6 @@ private struct IOSChordsDrawer: View {
                     .foregroundStyle(.secondary)
 
                 IOSModulePlaybackNotice(state: state)
-
-                HStack(spacing: 12) {
-                    Button {
-                        model.strum()
-                    } label: {
-                        Label("Strum", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(NotePalette.accent)
-                    .disabled(model.currentVoicing == nil || !state.isSamplePlaybackReady)
-
-                    Button("Stop") { model.stop() }
-                        .buttonStyle(.glass)
-                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("About")

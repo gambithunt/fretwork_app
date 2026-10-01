@@ -277,7 +277,7 @@ final class IOSModuleLandscapeTests: XCTestCase {
         XCTAssertEqual(IOSModulePortraitStrip.scrollOffset(for: 3, frets: 12, viewportWidth: 700), 0)
     }
 
-    // MARK: - iPad neck (full 22 frets, scale)
+    // MARK: - iPad neck (full 22 frets)
 
     func testIPadDrawsTheFullNeckRegardlessOfModuleRange() {
         XCTAssertEqual(IOSModuleBoard.frets(idiom: .pad, moduleFrets: 12), 22)
@@ -289,17 +289,5 @@ final class IOSModuleLandscapeTests: XCTestCase {
         XCTAssertEqual(IOSModuleBoard.frets(idiom: .phone, moduleFrets: 12), 12)
         XCTAssertEqual(IOSModuleBoard.frets(idiom: .phone, moduleFrets: 15), 15)
         XCTAssertEqual(IOSModuleBoard.frets(idiom: .phone, moduleFrets: 22), 22)
-    }
-
-    func testBoardScaleIsPhoneNeutralAndIPadCapped() {
-        XCTAssertEqual(IOSBoardScale.scale(neckWidth: 5000, neckHeight: 5000, idiom: .phone), 1)
-        // The phone-sized neck is the reference; a larger iPad neck grows the
-        // markers, a smaller one never shrinks them.
-        XCTAssertEqual(IOSBoardScale.scale(neckWidth: 750, neckHeight: 260, idiom: .pad), 1)
-        XCTAssertEqual(IOSBoardScale.scale(neckWidth: 375, neckHeight: 130, idiom: .pad), 1)
-        XCTAssertEqual(IOSBoardScale.scale(neckWidth: 1500, neckHeight: 700, idiom: .pad), IOSBoardScale.cap)
-        // The tighter dimension wins, so a marker can never outgrow a fret.
-        let wide = IOSBoardScale.scale(neckWidth: 2000, neckHeight: 260, idiom: .pad)
-        XCTAssertEqual(wide, 1, accuracy: 0.001)
     }
 }

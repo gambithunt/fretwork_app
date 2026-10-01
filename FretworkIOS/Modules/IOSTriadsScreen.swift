@@ -82,10 +82,31 @@ private struct IOSTriadsStage: View {
         return IOSModuleLandscapeFormat.triadsPathStepText(next: model.currentPathStep)
     }
 
-    // The corners change meaning with the exercise: arrows walk the shapes,
-    // while the path's start button turns into ■ Stop in place (D-27 revised)
-    // and its separate Stop stays as a second, always-available way out.
-    private var leadingAction: IOSModuleBandAction {
+    // Shapes walk the voicings with ‹ › and play the current one; Paths swap
+    // both corners for a single ▶ Play path that becomes ■ Stop in place
+    // (D-27 revised). The primary action is always the trailing corner, one
+    // size — no module sizes its own.
+    private var leadingAction: IOSModuleBandAction? {
+        guard !model.isPathMode else { return nil }
+        return .step(
+            systemImage: "chevron.left",
+            accessibilityLabel: "Previous position",
+            disabled: model.voicings.isEmpty,
+            action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: -1) } }
+        )
+    }
+
+    private var trailingAction: IOSModuleBandAction? {
+        guard !model.isPathMode else { return nil }
+        return .step(
+            systemImage: "chevron.right",
+            accessibilityLabel: "Next position",
+            disabled: model.voicings.isEmpty,
+            action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) } }
+        )
+    }
+
+    private var primaryAction: IOSModuleBandAction {
         if model.isPathMode {
             return .runToggle(
                 title: "Play path",
@@ -96,28 +117,11 @@ private struct IOSTriadsStage: View {
                 stop: { model.stopEverything() }
             )
         }
-        return .step(
-            systemImage: "chevron.left",
-            accessibilityLabel: "Previous position",
-            disabled: model.voicings.isEmpty,
-            action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: -1) } }
-        )
-    }
-
-    private var trailingAction: IOSModuleBandAction {
-        if model.isPathMode {
-            return .step(
-                systemImage: "stop.fill",
-                accessibilityLabel: "Stop path",
-                disabled: model.progressionSnapshot.status == .idle,
-                action: { model.stopEverything() }
-            )
-        }
-        return .step(
-            systemImage: "chevron.right",
-            accessibilityLabel: "Next position",
-            disabled: model.voicings.isEmpty,
-            action: { withAnimation(FretworkMotion.gravity) { model.movePosition(by: 1) } }
+        return .primary(
+            title: "Play shape",
+            accessibilityLabel: "Play shape",
+            disabled: model.activeVoicing == nil || !state.isSamplePlaybackReady,
+            action: { model.playVoicing() }
         )
     }
 
@@ -140,6 +144,7 @@ private struct IOSTriadsStage: View {
             },
             leadingAction: leadingAction,
             trailingAction: trailingAction,
+            primaryAction: primaryAction,
             drawerTitle: "Triad & key",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -220,21 +225,6 @@ private struct IOSTriadsDrawer: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
             }
-
-            HStack(spacing: 12) {
-                Button {
-                    model.playVoicing()
-                } label: {
-                    Label("Play shape", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.activeVoicing == nil || !state.isSamplePlaybackReady)
-
-                Button("Stop") { model.stop() }
-                    .buttonStyle(.glass)
-            }
         }
     }
 
@@ -298,17 +288,10 @@ private struct IOSTriadsDrawer: View {
             }
             .disabled(isRunActive)
 
+            // The band's ▶ Play path / ■ Stop is the primary action; Loop is
+            // the one other way to start a run, so it stays here as a
+            // secondary control.
             HStack(spacing: 12) {
-                Button {
-                    if isRunActive { model.stopEverything() } else { model.startProgression(loop: false) }
-                } label: {
-                    Label(isRunActive ? "Stop" : "Play path", systemImage: isRunActive ? "stop.fill" : "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(isRunActive ? .red : NotePalette.accent)
-                .disabled(!isRunActive && (model.pathSteps.isEmpty || !state.isSamplePlaybackReady))
-
                 Button {
                     model.startProgression(loop: true)
                 } label: {
@@ -316,10 +299,6 @@ private struct IOSTriadsDrawer: View {
                 }
                 .buttonStyle(.glass)
                 .disabled(isRunActive || model.pathSteps.isEmpty || !state.isSamplePlaybackReady)
-
-                Button("Stop") { model.stopEverything() }
-                    .buttonStyle(.glass)
-                    .disabled(model.progressionSnapshot.status == .idle)
             }
 
             if model.progressionSnapshot.status != .idle {

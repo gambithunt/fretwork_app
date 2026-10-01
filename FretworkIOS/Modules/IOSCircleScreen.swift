@@ -93,6 +93,12 @@ private struct IOSCircleStage: View {
                 disabled: false,
                 action: { withAnimation(FretworkMotion.gravity) { model.step(by: 1) } }
             ),
+            primaryAction: .primary(
+                title: "Play tonic",
+                accessibilityLabel: "Play tonic chord",
+                disabled: model.dots.isEmpty || !state.isSamplePlaybackReady,
+                action: { model.strum() }
+            ),
             drawerTitle: "Key & labels",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -186,25 +192,7 @@ private struct IOSCircleDrawer: View {
                     .fixedSize(horizontal: true, vertical: false)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Play")
-                        .font(.headline)
-                    HStack(spacing: 12) {
-                        Button {
-                            model.strum()
-                        } label: {
-                            Label("Play tonic", systemImage: "play.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .tint(NotePalette.accent)
-                        .disabled(model.dots.isEmpty || !state.isSamplePlaybackReady)
-
-                        Button("Stop") { model.stop() }
-                            .buttonStyle(.glass)
-                    }
-                    IOSModulePlaybackNotice(state: state)
-                }
+                IOSModulePlaybackNotice(state: state)
 
                 explanation
             }

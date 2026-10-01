@@ -256,7 +256,19 @@ final class AppState {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.samplePlaybackError = error
+                #if DEBUG
+                // A snapshot capture has marked readiness without a real graph
+                // (the headless simulator's audio HAL deadlocks); the async
+                // decode's completion must not overwrite that with the real
+                // (false) value.
+                if self.snapshotForcesSamplePlaybackReady {
+                    self.isSamplePlaybackReady = true
+                } else {
+                    self.isSamplePlaybackReady = self.audio.isSamplePlaybackReady
+                }
+                #else
                 self.isSamplePlaybackReady = self.audio.isSamplePlaybackReady
+                #endif
                 if error != nil { self.hasRequestedSamplePlayback = false }
             }
         }
@@ -268,8 +280,32 @@ final class AppState {
     /// now replaces the player.
     func refreshSamplePlaybackReadiness() {
         prepareSamplePlaybackIfNeeded()
+        #if DEBUG
+        // A snapshot capture has marked readiness without a real graph (the
+        // headless simulator's audio HAL deadlocks); don't let the module
+        // screen's own re-check overwrite that with the real (false) value.
+        if snapshotForcesSamplePlaybackReady {
+            isSamplePlaybackReady = true
+            return
+        }
+        #endif
         isSamplePlaybackReady = audio.isSamplePlaybackReady
     }
+
+    #if DEBUG
+    private var snapshotForcesSamplePlaybackReady = false
+
+    /// Snapshot capture only: mark sample playback ready without building a
+    /// real output graph. The headless simulator's audio HAL deadlocks and
+    /// aborts (Core Audio RPC timeout) when a playback graph is built and
+    /// later torn down, so a snapshot run cannot reach readiness through the
+    /// real `prepareSamplePlayback` path. Never compiled into Release.
+    func snapshotMarkSamplePlaybackReady() {
+        snapshotForcesSamplePlaybackReady = true
+        samplePlaybackError = nil
+        isSamplePlaybackReady = true
+    }
+    #endif
 
     private let resolver = FretPositionResolver()
     private var resolvedMIDI: Int?
