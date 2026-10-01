@@ -104,6 +104,7 @@ final class FakeIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     private var _isRunning = false
     private var _attachedPlayers: [SamplePlayer] = []
     private var _sampleRate: Double = 48_000
+    private var _captureSampleRate: Double? = 48_000
 
     init(stats: FakeIOSAudioGraphStats, startError: TestFailure?) {
         self.stats = stats
@@ -113,6 +114,10 @@ final class FakeIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     var sampleRate: Double {
         get { locked { _sampleRate } }
         set { locked { _sampleRate = newValue } }
+    }
+    var captureSampleRate: Double? {
+        get { locked { _captureSampleRate } }
+        set { locked { _captureSampleRate = newValue } }
     }
     var isRunning: Bool { locked { _isRunning } }
     var attachedPlayers: [SamplePlayer] { locked { _attachedPlayers } }

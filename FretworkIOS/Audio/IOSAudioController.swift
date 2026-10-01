@@ -446,9 +446,18 @@ final class IOSAudioController: AudioControlling {
                 // Nothing feeds the rings without the input leg, so detection
                 // workers would only poll empty buffers.
                 guard captures else { return }
-                analysisWorker.start(sampleRate: sampleRate, bufferSize: 1024)
+                // The workers must be told the rate of the samples in their
+                // rings — the input node's format rate, not the session rate
+                // captured above (which is read before activation and can
+                // disagree with what the sink actually delivers). A mismatch
+                // here scales every detected frequency by the ratio, which is
+                // exactly the class of error that read low notes flat on iOS
+                // while the Mac (which passes the tap's format rate) stayed
+                // correct.
+                let workerRate = graph.captureSampleRate ?? sampleRate
+                analysisWorker.start(sampleRate: workerRate, bufferSize: 1024)
                 chordWorker.setEnabled(chordEnabled)
-                chordWorker.start(sampleRate: sampleRate)
+                chordWorker.start(sampleRate: workerRate)
                 self.status = .listening
                 if notifyRecovered { self.onEvent?(.recovered) }
             } catch {
