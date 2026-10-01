@@ -99,6 +99,7 @@ final class SessionLogger {
     private var recentLevels: [Float] = []
     private static let recentLevelCap = 128
     private var onsetSince: Double?
+    private var belowSince: Double?
     private var lastLevelAboveThreshold = false
     private var lastConfirmedMIDI: Int?
     private var lastConfirmedTime: Double?
@@ -153,6 +154,11 @@ final class SessionLogger {
     private func track() {
         let now = ProcessInfo.processInfo.systemUptime
         let t = now - startedAt
+
+        // Level/onset first: a publish that both raises the level and changes
+        // the note must arm the onset before the note block below records the
+        // latency, or the confirmation misses its onset by one frame.
+        trackLevel(appState.display.level, now: now)
 
         if let status = appState.iosAudio?.status, status != lastStatus {
             lastStatus = status
@@ -210,29 +216,32 @@ final class SessionLogger {
             lastChordName = chordName
             write(SessionLogFormat.chordLine(t: t, chord: chordName))
         }
-
-        trackLevel(appState.display.level, now: now)
     }
 
-    /// Onset = the gated level rising above the running noise floor + 6 dB.
-    /// Re-arms automatically: `lastLevelAboveThreshold` flips back to false the
-    /// moment the level falls back under floor + 6 dB, so the next attack is a
-    /// fresh onset. Zero readings are skipped (they are the pre-listening and
-    /// playback-gate defaults, not real microphone level).
+    /// Onset = the gated level crossing floor + 6 dB from below, **after at
+    /// least 150 ms below it** — so a level dip during a still-held note never
+    /// re-arms the metric and then blames the next note change for the whole
+    /// intervening sustain. The 150 ms silence floor matches the note worker's
+    /// own hold and a pick's natural gap, and rejects mid-note level chatter.
+    /// Zero readings (the pre-listening and playback-gate defaults) count as
+    /// silence and are not added to the level ring.
     private func trackLevel(_ level: Float, now: Double) {
-        guard level > 0 else {
-            lastLevelAboveThreshold = false
-            return
-        }
-        recentLevels.append(level)
-        if recentLevels.count > Self.recentLevelCap {
-            recentLevels.removeFirst(recentLevels.count - Self.recentLevelCap)
+        if level > 0 {
+            recentLevels.append(level)
+            if recentLevels.count > Self.recentLevelCap {
+                recentLevels.removeFirst(recentLevels.count - Self.recentLevelCap)
+            }
         }
         let floor = currentNoiseFloor()
         let threshold = floor * pow(10, 6.0 / 20.0)
         let isAbove = level > threshold
-        if isAbove && !lastLevelAboveThreshold {
-            onsetSince = now
+        if isAbove {
+            if !lastLevelAboveThreshold, let below = belowSince, now - below >= 0.150 {
+                onsetSince = now
+            }
+            belowSince = nil
+        } else {
+            if belowSince == nil { belowSince = now }
         }
         lastLevelAboveThreshold = isAbove
     }
