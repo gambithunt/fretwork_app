@@ -16,9 +16,13 @@ import Darwin
 ///
 /// Usage:
 ///   offline-replay <mono.wav> [sensitivity 0..1] [--all]
+///   offline-replay --synthetic [sensitivity 0..1]
 ///
-///   --all  print every published frame (~30 Hz), not just note changes,
-///          to inspect confidence decay on low notes.
+///   --all       print every published frame (~30 Hz), not just note changes,
+///               to inspect confidence decay on low notes.
+///   --synthetic generate A2→E4→A2→E4 sine steps (clean and noisy onset) and
+///               report the ms from each leap's first new-pitch sample to the
+///               frequency readout and the note-name switch, plus the lag.
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data("offline-replay: \(message)\n".utf8))
@@ -132,19 +136,143 @@ func noteLine(t: Double, display: PitchDisplayState, sampleRate: Double) -> Stri
 
 func uptimeNanos() -> UInt64 { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) }
 
+// MARK: - Synthetic leap test
+
+struct Leap {
+    let name: String
+    let sample: Int
+    let targetMIDI: Int
+    let targetFrequency: Double
+}
+
+struct PublishedFrame: Sendable { let t: Double; let frequency: Double?; let midi: Int? }
+
+final class PublishedLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [PublishedFrame] = []
+    func append(_ frame: PublishedFrame) { lock.lock(); entries.append(frame); lock.unlock() }
+    func snapshot() -> [PublishedFrame] { lock.lock(); defer { lock.unlock() }; return entries }
+}
+
+func midiFrequency(_ midi: Int) -> Double { 440 * pow(2, Double(midi - 69) / 12) }
+
+/// A2 (110 Hz) → E4 (329.6 Hz) and back, repeated, so the first note is
+/// confirmed before each leap and the worker takes the *changed*-note path
+/// rather than the new-note path. `noisyOnset` adds a ~20 ms noise burst at
+/// the start of each new pitch to mimic a pluck attack.
+func syntheticLeapFrames(sampleRate: Double, noisyOnset: Bool) -> (frames: [Float], leaps: [Leap]) {
+    let a2 = 45
+    let e4 = 64
+    let segmentLength = Int(sampleRate * 0.6)
+    let pattern = [a2, e4, a2, e4]
+    var frames: [Float] = []
+    // A second of quiet room tone first so the running noise floor is already
+    // populated. Without it, a single nil-detection frame at a leap boundary
+    // drags the (still mostly empty) floor up to the note's own level and
+    // gates the next note out — an artifact of the synthetic back-to-back
+    // signal, not of the leap rule under test.
+    let roomTone = Int(sampleRate * 1.0)
+    frames.append(contentsOf: (0..<roomTone).map { _ in Float.random(in: -0.001...0.001) })
+    var leaps: [Leap] = []
+    for (index, midi) in pattern.enumerated() {
+        if index > 0 {
+            leaps.append(Leap(name: index % 2 == 1 ? "A2→E4" : "E4→A2",
+                              sample: frames.count, targetMIDI: midi,
+                              targetFrequency: midiFrequency(midi)))
+        }
+        let frequency = midiFrequency(midi)
+        var segment = (0..<segmentLength).map { Float(sin(2 * .pi * frequency * Double($0) / sampleRate)) * 0.5 }
+        if noisyOnset, index > 0 {
+            let onset = min(Int(sampleRate * 0.02), segment.count)
+            for i in 0..<onset { segment[i] += Float.random(in: -0.25...0.25) }
+        }
+        frames.append(contentsOf: segment)
+    }
+    return (frames, leaps)
+}
+
+/// Runs the synthetic leaps through the real worker and reports, for each
+/// leap, the wall-clock time from the first new-pitch sample to (a) the
+/// frequency readout landing within ±60¢ of the target and (b) the note name
+/// switching — plus the lag between the two.
+func runSyntheticLeapTest(sensitivity: SensitivitySettings) {
+    let sampleRate = 48_000.0
+    for noisy in [false, true] {
+        let (decoded, leaps) = syntheticLeapFrames(sampleRate: sampleRate, noisyOnset: noisy)
+        var frames = decoded
+        let remainder = frames.count % 1024
+        if remainder != 0 { frames.append(contentsOf: repeatElement(Float(0), count: 1024 - remainder)) }
+
+        let ring = RingBuffer(capacity: 65_536)
+        let worker = AudioAnalysisWorker(ring: ring, sensitivity: sensitivity)
+        let log = PublishedLog()
+        let feedStart = uptimeNanos()
+        worker.onUpdate = { display, _ in
+            let t = Double(uptimeNanos() - feedStart) / 1_000_000_000
+            log.append(PublishedFrame(t: t, frequency: display.frequency, midi: display.note?.midiNote))
+        }
+        worker.start(sampleRate: sampleRate, bufferSize: 1024)
+
+        var chunk = [Float](repeating: 0, count: 1024)
+        var chunkIndex = 0
+        while chunkIndex * 1024 < frames.count {
+            chunk.withUnsafeMutableBufferPointer { buffer in
+                for i in 0..<1024 { buffer[i] = frames[chunkIndex * 1024 + i] }
+            }
+            chunk.withUnsafeBufferPointer { buffer in
+                ring.write(buffer.baseAddress!, count: 1024, captureTime: UInt64(chunkIndex * 1024))
+            }
+            chunkIndex += 1
+            let pacedFrames = min(chunkIndex * 1024, decoded.count)
+            let targetNanos = feedStart + UInt64(Double(pacedFrames) / sampleRate * 1_000_000_000)
+            while uptimeNanos() < targetNanos { Thread.sleep(forTimeInterval: 0.002) }
+        }
+        while ring.backlogFrames() > 0 { Thread.sleep(forTimeInterval: 0.01) }
+        Thread.sleep(forTimeInterval: 0.25)
+        worker.stop()
+
+        func fmt(_ v: Double?) -> String { v.map { String(format: "%.1f", $0) } ?? "never" }
+        let published = log.snapshot()
+        print("=== synthetic \(noisy ? "noisy onset" : "clean") ===")
+        for leap in leaps {
+            let leapTime = Double(leap.sample) / sampleRate
+            var freqSwitch: Double?
+            var nameSwitch: Double?
+            for p in published where p.t >= leapTime - 0.001 {
+                if freqSwitch == nil, let f = p.frequency, abs(1200 * log2(f / leap.targetFrequency)) <= 60 {
+                    freqSwitch = p.t
+                }
+                if nameSwitch == nil, p.midi == leap.targetMIDI { nameSwitch = p.t }
+                if freqSwitch != nil, nameSwitch != nil { break }
+            }
+            let freqMs = freqSwitch.map { ($0 - leapTime) * 1000 }
+            let nameMs = nameSwitch.map { ($0 - leapTime) * 1000 }
+            let lagMs = (freqSwitch != nil && nameSwitch != nil) ? (nameSwitch! - freqSwitch!) * 1000 : nil
+            print("\(leap.name): freq=\(fmt(freqMs))ms name=\(fmt(nameMs))ms lag=\(fmt(lagMs))ms")
+        }
+    }
+}
+
 // MARK: - Main
 
 let args = CommandLine.arguments
-guard args.count >= 2 else { fail("usage: offline-replay <mono.wav> [sensitivity 0..1] [--all]") }
+let printAll = args.contains("--all")
+let synthetic = args.contains("--synthetic")
+
+let sensitivity = SensitivitySettings()
+if let valueArg = args.dropFirst().first(where: { Double($0) != nil && !$0.hasPrefix("-") }) {
+    sensitivity.value = min(max(Double(valueArg)!, 0), 1)
+}
+
+if synthetic {
+    runSyntheticLeapTest(sensitivity: sensitivity)
+    exit(0)
+}
+
+guard args.count >= 2 else { fail("usage: offline-replay <mono.wav> [sensitivity 0..1] [--all] [--synthetic]") }
 
 let wavURL = URL(fileURLWithPath: args[1])
 let (sampleRate, decoded) = parseWAV(at: wavURL)
-
-let sensitivity = SensitivitySettings()
-if args.count >= 3, let value = Double(args[2]), !args[2].hasPrefix("-") {
-    sensitivity.value = min(max(value, 0), 1)
-}
-let printAll = args.contains("--all")
 
 // Pad to a whole number of 1024-frame chunks so the worker's all-or-nothing
 // `read(into:count: 1024)` consumes the final partial chunk (silence-padded).

@@ -10,8 +10,7 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     private let detector = PitchDetector()
     private var window = Array(repeating: Float.zero, count: 2048)
     private var incoming = Array(repeating: Float.zero, count: 1024)
-    private var history: [Int] = []
-    private var lastMIDI: Int?
+    private var confirmation = NoteConfirmation()
     private var lastFrequency: Double = 0
     private var smoothedCents: Double?
     private var smoothedCentsMIDI: Int?
@@ -41,14 +40,6 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     /// frame's floor update runs only when the *previous* frame had none, so
     /// a sustained note cannot pollute the floor.
     private var previousFrameConfirmed = false
-    /// Pitch-stability confirmation for a *new* note (not continuations): a
-    /// plucked string holds its pitch, while pitched room noise (speech, TV)
-    /// glides. A new note confirms only after two of the last three candidate
-    /// frames agree within this many cents. The candidates are confidence-gated
-    /// but *not* level-gated, so a weak note still accumulates; the level gate
-    /// is applied once on the confirming frame. Cost: one extra publish.
-    private var pendingNewFrequencies: [Double] = []
-    private static let newNoteStabilityCents = 20.0
     var onUpdate: (@Sendable (PitchDisplayState, UInt64) -> Void)?
 
     init(ring: RingBuffer, sensitivity: SensitivitySettings) {
@@ -80,16 +71,6 @@ final class AudioAnalysisWorker: @unchecked Sendable {
         return Double(sorted[index])
     }
 
-    /// True when any two of the candidate frequencies agree within `cents`.
-    private static func anyPairWithinCents(_ frequencies: [Double], cents: Double) -> Bool {
-        guard frequencies.count >= 2 else { return false }
-        let sorted = frequencies.sorted()
-        for index in 0..<(sorted.count - 1) where abs(1200 * log2(sorted[index + 1] / sorted[index])) <= cents {
-            return true
-        }
-        return false
-    }
-
     private func consume(sampleRate: Double, bufferSize: Int) {
         while OSAtomicAdd32Barrier(0, &running) == 1 {
             let shouldReset: Bool = {
@@ -100,14 +81,12 @@ final class AudioAnalysisWorker: @unchecked Sendable {
                 return value
             }()
             if shouldReset {
-                history.removeAll(keepingCapacity: true)
+                confirmation.reset()
                 quietRingWrite = 0
                 quietRingFilled = 0
                 cachedFloorDb = -60
                 quietFramesSinceRecompute = 0
                 previousFrameConfirmed = false
-                pendingNewFrequencies.removeAll(keepingCapacity: true)
-                lastMIDI = nil
                 lastDetection = nil
                 smoothedCents = nil
                 smoothedCentsMIDI = nil
@@ -160,68 +139,30 @@ final class AudioAnalysisWorker: @unchecked Sendable {
                 let decision = NoteGate.decide(
                     candidateMIDI: candidateMIDI,
                     confidence: result.confidence,
-                    lastMIDI: lastMIDI,
+                    lastMIDI: confirmation.lastMIDI,
                     levelDb: levelDb,
                     floorDb: floorDb,
                     sensitivity: sensitivity
                 )
-
-                if decision.isContinuation {
-                    // Hold a confirmed note while the same pitch persists at
-                    // reduced confidence; level-exempt so a decaying note
-                    // doesn't drop when its level falls.
-                    pendingNewFrequencies.removeAll(keepingCapacity: true)
-                    if decision.confidencePasses {
-                        history.append(candidateMIDI); if history.count > 5 { history.removeFirst() }
-                        let median = history.sorted()[history.count / 2]
-                        if abs(median - lastMIDI!) <= 1 || history.filter({ $0 == median }).count >= 3 { lastMIDI = median }
-                        lastFrequency = result.frequency
-                        lastDetection = now
-                        hasCurrentDetection = true
-                        display.confidence = result.confidence
-                    } else { history.removeAll(keepingCapacity: true) }
-                } else if decision.confidencePasses {
-                    if lastMIDI != nil {
-                        // Changed note: full confidence + level gate + median.
-                        if decision.levelPasses {
-                            history.append(candidateMIDI); if history.count > 5 { history.removeFirst() }
-                            let median = history.sorted()[history.count / 2]
-                            if abs(median - lastMIDI!) <= 1 || history.filter({ $0 == median }).count >= 3 { lastMIDI = median }
-                            lastFrequency = result.frequency
-                            lastDetection = now
-                            hasCurrentDetection = true
-                            display.confidence = result.confidence
-                        } else { history.removeAll(keepingCapacity: true) }
-                    } else {
-                        // New note: pitch must be stable across two of the last
-                        // three confidence-gated candidates, then clear the
-                        // level gate once on the confirming frame. Gliding room
-                        // noise never becomes stable; a weak but steady string
-                        // does.
-                        pendingNewFrequencies.append(result.frequency)
-                        if pendingNewFrequencies.count > 3 { pendingNewFrequencies.removeFirst() }
-                        if decision.levelPasses, Self.anyPairWithinCents(pendingNewFrequencies, cents: Self.newNoteStabilityCents) {
-                            history.append(candidateMIDI); if history.count > 5 { history.removeFirst() }
-                            lastMIDI = candidateMIDI
-                            lastFrequency = result.frequency
-                            lastDetection = now
-                            hasCurrentDetection = true
-                            display.confidence = result.confidence
-                            pendingNewFrequencies.removeAll(keepingCapacity: true)
-                        }
-                    }
-                } else {
-                    history.removeAll(keepingCapacity: true)
-                    pendingNewFrequencies.removeAll(keepingCapacity: true)
+                if confirmation.ingest(
+                    candidateMIDI: candidateMIDI,
+                    frequency: result.frequency,
+                    isContinuation: decision.isContinuation,
+                    confidencePasses: decision.confidencePasses,
+                    levelPasses: decision.levelPasses
+                ) {
+                    lastFrequency = result.frequency
+                    lastDetection = now
+                    hasCurrentDetection = true
+                    display.confidence = result.confidence
                 }
             } else {
-                history.removeAll(keepingCapacity: true)
-                pendingNewFrequencies.removeAll(keepingCapacity: true)
+                confirmation.clearTransient()
             }
             // A short hold prevents the display from blinking out during the
             // naturally aperiodic final cycles of a decaying guitar note.
             let isWithinHold = lastDetection.map { now - $0 < .milliseconds(180) } ?? false
-            if let stable = lastMIDI, hasCurrentDetection || isWithinHold {
+            if let stable = confirmation.lastMIDI, hasCurrentDetection || isWithinHold {
                 let stableFrequency = 440 * pow(2, Double(stable - 69) / 12)
                 display.frequency = lastFrequency
                 display.note = NoteMapper.map(frequency: stableFrequency)
@@ -243,7 +184,7 @@ final class AudioAnalysisWorker: @unchecked Sendable {
                     display.note = note
                 }
             } else {
-                lastMIDI = nil
+                confirmation.clearConfirmed()
                 lastDetection = nil
                 smoothedCents = nil
                 smoothedCentsMIDI = nil

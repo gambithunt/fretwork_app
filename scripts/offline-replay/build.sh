@@ -14,6 +14,7 @@ swiftc -O \
   "$SRC/Models/PitchDisplayState.swift" \
   "$SRC/Audio/SensitivitySettings.swift" \
   "$SRC/Audio/NoteGate.swift" \
+  "$SRC/Audio/NoteConfirmation.swift" \
   "$SRC/Audio/RingBuffer.swift" \
   "$SRC/Pitch/PitchDetector.swift" \
   "$SRC/Audio/AudioAnalysisWorker.swift" \
