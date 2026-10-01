@@ -119,14 +119,6 @@ enum IOSSnapshot {
         #endif
     }
 
-    static var collapsesSidebar: Bool {
-        #if DEBUG
-        IOSSnapshotHarness.collapsesSidebar
-        #else
-        false
-        #endif
-    }
-
     /// DEBUG snapshot runs await sample-playback readiness so the primary
     /// action renders enabled in a capture. A no-op in Release and for
     /// non-module scenarios.

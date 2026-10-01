@@ -135,9 +135,6 @@ enum IOSSnapshotHarness {
     /// settled list at fixed offsets.
     static var schedulesPopBack: Bool { scenario == .popBack }
 
-    /// Collapses the iPad split view's sidebar for a capture, so the Listen
-    /// neck can be photographed at full pane width (sidebar open and closed).
-    static var collapsesSidebar: Bool { scenario == .listenLandscapeSidebarClosed }
 
     /// A module snapshot must show its primary action ENABLED. The real path
     /// — decoding the library and building the output-only graph — deadlocks
@@ -176,8 +173,11 @@ enum IOSSnapshotHarness {
     /// (sidebar closed) alongside the default open state. A standalone launch
     /// argument rather than a scenario, so it composes with every module's
     /// `-IOSSnapshot<Name>Landscape` scenario.
+    /// Also set by the Listen sidebar-closed scenario, which predates the
+    /// standalone argument.
     static var collapsesSidebar: Bool {
-        CommandLine.arguments.contains("-IOSSnapshotSidebarClosed")
+        scenario == .listenLandscapeSidebarClosed
+            || CommandLine.arguments.contains("-IOSSnapshotSidebarClosed")
     }
     static var showsUnlockSheet: Bool {
         scenario == .unlockSheet || scenario == .unlockSheetLight
