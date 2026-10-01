@@ -38,9 +38,12 @@ final class SessionLogFormatTests: XCTestCase {
                 distinctPitchClasses: 7,
                 onsetMedian: 0.21,
                 onsetP90: 0.48,
-                noiseFloor: 0.0005
+                noiseFloor: 0.0005,
+                octaveFlips: 2,
+                shortNotes: 3,
+                medianAbsCents: 12.3
             ),
-            "SESSION summary notes=14 distinctPC=7 onsetMedian=0.210 onsetP90=0.480 noiseFloor=-66.0"
+            "SESSION summary notes=14 distinctPC=7 onsetMedian=0.210 onsetP90=0.480 noiseFloor=-66.0 octaveFlips=2 shortNotes=3 medianAbsCents=12.3"
         )
         XCTAssertEqual(
             SessionLogFormat.summaryLine(
@@ -48,9 +51,12 @@ final class SessionLogFormatTests: XCTestCase {
                 distinctPitchClasses: 0,
                 onsetMedian: nil,
                 onsetP90: nil,
-                noiseFloor: 0.001
+                noiseFloor: 0.001,
+                octaveFlips: 0,
+                shortNotes: 0,
+                medianAbsCents: nil
             ),
-            "SESSION summary notes=0 distinctPC=0 onsetMedian=- onsetP90=- noiseFloor=-60.0"
+            "SESSION summary notes=0 distinctPC=0 onsetMedian=- onsetP90=- noiseFloor=-60.0 octaveFlips=0 shortNotes=0 medianAbsCents=-"
         )
     }
 }
