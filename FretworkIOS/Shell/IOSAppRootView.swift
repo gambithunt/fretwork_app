@@ -68,6 +68,21 @@ struct IOSAppRootView: View {
             .task {
                 unlockStore.start()
                 IOSSnapshot.requestOrientationIfNeeded()
+                // Sync the snapshot's initial selection/path to `selectedScreen`
+                // so the playback-preparation gate (`selectedScreen.didSet`)
+                // fires for the initial value — `onChange` never fires for a
+                // pre-set selection, and without this the hosted module
+                // screens' `prepareSamplePlayback` never runs (the silent-mute
+                // bug). A no-op in production, where both start at `.listen`.
+                appState.selectedScreen = selection ?? path.last ?? .listen
+                #if DEBUG
+                if IOSSnapshot.isActive {
+                    // The Mac screenshot shows the live-note capsule because
+                    // its setting was on; mirror that so iPad module shots
+                    // exercise the same capsule.
+                    appState.showsLiveNoteOnModules = true
+                }
+                #endif
                 await unlockStore.refreshEntitlements()
                 await unlockStore.loadProduct()
                 sanitizeForEntitlements()

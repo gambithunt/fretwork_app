@@ -44,14 +44,48 @@ struct IOSModuleScreen: View {
         }
     }
 
+    /// iPad landscape hosts the shared Mac screens unchanged (approach A):
+    /// the Mac layout already has the title/blurb/live-note header, the inline
+    /// control row, a Mac-proportioned board (scale 1, the module's frets by
+    /// default plus the Full neck toggle) and the readout below — and every
+    /// Mac module screen compiles into the iOS target. iPhone (both
+    /// orientations) and iPad portrait keep the iOS scaffold.
+    private var usesMacLayout: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && isLandscape
+    }
+
     var body: some View {
-        content
-            .iosModuleNavigationBar(
-                title: IOSModuleScreenTitle.title(for: module),
-                isLandscape: hasScaffold && isLandscape,
-                isShowingSettings: $isShowingSettings
-            )
-            .background(NotePalette.backdrop)
+        Group {
+            if usesMacLayout {
+                macScreen
+            } else {
+                content
+            }
+        }
+        .iosModuleNavigationBar(
+            title: IOSModuleScreenTitle.title(for: module),
+            isLandscape: hasScaffold && isLandscape,
+            isShowingSettings: $isShowingSettings
+        )
+        .background(NotePalette.backdrop)
+    }
+
+    /// The Mac screens, hosted unchanged so iPad landscape matches the Mac
+    /// module layout (and its pixels, which the Mac snapshot tests prove).
+    @ViewBuilder
+    private var macScreen: some View {
+        switch module {
+        case .notes: NotesModuleScreen(state: state)
+        case .intervals: IntervalsModuleScreen(state: state)
+        case .octaves: OctavesModuleScreen(state: state)
+        case .triads: TriadsModuleScreen(state: state)
+        case .chords: ChordsModuleScreen(state: state)
+        case .pentatonic: PentatonicModuleScreen(state: state)
+        case .circle: CircleModuleScreen(state: state)
+        case .scales: ScalesModuleScreen(state: state)
+        case .harmonizing: HarmonizingModuleScreen(state: state)
+        case .noteAssociation: NoteAssociationModuleScreen(state: state)
+        }
     }
 
     @ViewBuilder

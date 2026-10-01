@@ -4,6 +4,26 @@ All notable changes to Fretwork are recorded here, newest first. The Mac app
 and the iPhone/iPad app version independently; entries are labelled when they
 apply to only one platform.
 
+## 0.2.1 (iOS) — 2026-10-01
+
+- iPad landscape now hosts the shared Mac module screens unchanged, so a
+  landscape module looks like its Mac screen — title/blurb/live-note header,
+  inline controls, a Mac-proportioned board (scale 1, 12 frets with the Full
+  neck toggle) and the readout below, with no drawer. The Mac screens already
+  compile into the iOS target and already carry the live-note capsule,
+  `StandardTuningNotice`, the retune hook and the in-place guided-run
+  behaviour, so nothing was forked. iPhone (both orientations) and iPad
+  portrait keep the iOS scaffold.
+- The hosted screens show iOS wording for the "samples not ready" notice
+  ("Notes will not sound until audio is ready." — iOS has no device picker),
+  and the live-note capsule swaps LISTENING → PLAYING during the iOS playback
+  gate (a new `AudioControlling.isSuppressingForPlayback` default keeps the
+  Mac capsule pixel-identical).
+- The snapshot harness now syncs its initial selection to
+  `AppState.selectedScreen`, so the hosted screens' `prepareSamplePlayback`
+  gate actually fires for a pre-set selection — without it the snapshot (and
+  any restored selection) would silently never prepare playback.
+
 ## 0.2.0 (iOS) — 2026-10-01
 
 - Added the one-time iOS unlock (StoreKit 2, non-consumable
