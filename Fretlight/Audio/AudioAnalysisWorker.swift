@@ -24,6 +24,17 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     /// stable address for `&`, and `OSAtomic*` is deprecated).
     private let resetLock = NSLock()
     private var resetRequested = false
+    /// Ring of recent level readings (dB) from frames where no note was
+    /// confirmed, so a held note never raises its own floor. The running
+    /// noise floor is the ~10th percentile of the last ~8 s of quiet frames —
+    /// the same idea as the session logger's floor, but live on the consume
+    /// thread and feeding the gate rather than a summary.
+    private var recentQuietLevelsDb: [Float] = []
+    private let quietRingCap = 256
+    /// Whether the previous published frame carried a current detection; a
+    /// frame's floor update runs only when the *previous* frame had none, so
+    /// a sustained note cannot pollute the floor.
+    private var previousFrameConfirmed = false
     var onUpdate: (@Sendable (PitchDisplayState, UInt64) -> Void)?
 
     init(ring: RingBuffer, sensitivity: SensitivitySettings) {
@@ -46,6 +57,15 @@ final class AudioAnalysisWorker: @unchecked Sendable {
         resetLock.unlock()
     }
 
+    /// The ~10th percentile of recent quiet-frame levels, or a conservative
+    /// default until enough frames have accumulated.
+    private static func noiseFloor(from levels: [Float]) -> Double {
+        guard !levels.isEmpty else { return -60 }
+        let sorted = levels.sorted()
+        let index = min(sorted.count - 1, max(0, Int(Double(sorted.count) * 0.10)))
+        return Double(sorted[index])
+    }
+
     private func consume(sampleRate: Double, bufferSize: Int) {
         while OSAtomicAdd32Barrier(0, &running) == 1 {
             let shouldReset: Bool = {
@@ -57,6 +77,8 @@ final class AudioAnalysisWorker: @unchecked Sendable {
             }()
             if shouldReset {
                 history.removeAll(keepingCapacity: true)
+                recentQuietLevelsDb.removeAll(keepingCapacity: true)
+                previousFrameConfirmed = false
                 lastMIDI = nil
                 lastDetection = nil
                 smoothedCents = nil
@@ -85,15 +107,43 @@ final class AudioAnalysisWorker: @unchecked Sendable {
             lastPublish = now
             let capture = ring.currentCaptureTime()
             var display = PitchDisplayState(level: rms, latencyMilliseconds: 0, bufferSize: bufferSize)
+
+            // Noise-floor-relative level gate. The floor only tracks frames
+            // that follow a frame with no current detection, so the player's
+            // own note never drags it up; a real note must clear floor +
+            // margin, which rejects the quiet pitched room noise (TV, voices,
+            // mains hum) that otherwise confirms as phantom notes.
+            let levelDb = 20 * log10(max(Double(rms), 0.000_001))
+            if !previousFrameConfirmed {
+                recentQuietLevelsDb.append(Float(levelDb))
+                if recentQuietLevelsDb.count > quietRingCap { recentQuietLevelsDb.removeFirst(recentQuietLevelsDb.count - quietRingCap) }
+            }
+            let floorDb = Self.noiseFloor(from: recentQuietLevelsDb)
+
             var hasCurrentDetection = false
-            if let result, result.confidence > sensitivity.confidenceThreshold, let mapped = NoteMapper.map(frequency: result.frequency) {
-                history.append(mapped.midiNote); if history.count > 5 { history.removeFirst() }
-                let median = history.sorted()[history.count / 2]
-                if lastMIDI == nil || abs(median - lastMIDI!) <= 1 || history.filter({ $0 == median }).count >= 3 { lastMIDI = median }
-                lastFrequency = result.frequency
-                lastDetection = now
-                hasCurrentDetection = true
-                display.confidence = result.confidence
+            if let result, let mapped = NoteMapper.map(frequency: result.frequency) {
+                // A continuation of the currently confirmed note is held at a
+                // relaxed confidence floor (so a decaying low note doesn't
+                // blink out) and is exempt from the level gate (a decaying
+                // note naturally falls in level). A different or new pitch
+                // re-enters at the full confidence gate plus the level gate.
+                let decision = NoteGate.decide(
+                    candidateMIDI: mapped.midiNote,
+                    confidence: result.confidence,
+                    lastMIDI: lastMIDI,
+                    levelDb: levelDb,
+                    floorDb: floorDb,
+                    sensitivity: sensitivity
+                )
+                if decision.accepted {
+                    history.append(mapped.midiNote); if history.count > 5 { history.removeFirst() }
+                    let median = history.sorted()[history.count / 2]
+                    if lastMIDI == nil || abs(median - lastMIDI!) <= 1 || history.filter({ $0 == median }).count >= 3 { lastMIDI = median }
+                    lastFrequency = result.frequency
+                    lastDetection = now
+                    hasCurrentDetection = true
+                    display.confidence = result.confidence
+                } else { history.removeAll(keepingCapacity: true) }
             } else { history.removeAll(keepingCapacity: true) }
             // A short hold prevents the display from blinking out during the
             // naturally aperiodic final cycles of a decaying guitar note.
@@ -125,6 +175,7 @@ final class AudioAnalysisWorker: @unchecked Sendable {
                 smoothedCents = nil
                 smoothedCentsMIDI = nil
             }
+            previousFrameConfirmed = hasCurrentDetection
             onUpdate?(display, capture)
         }
     }

@@ -38,4 +38,28 @@ final class PitchDetectorTests: XCTestCase {
             XCTAssertLessThanOrEqual(abs(cents), 5.0, "fundamental \(fundamental): measured \(result!.frequency) Hz")
         }
     }
+
+    /// The low-frequency cutoff boost: a real low string decays fast and its
+    /// CMNDF at the true period sits above the fixed 0.12 cutoff (measured
+    /// ≈0.15 on an unplugged electric E2), so the fixed cutoff produced no
+    /// candidate at all. An inharmonic partial raises the CMNDF at tau=582
+    /// to ≈0.138 — above the 0.12 base but below the boosted cutoff — and must
+    /// still resolve to E2 at the default threshold.
+    func testLowFrequencyBoostDetectsMarginalLowE() {
+        var samples = [Float](repeating: 0, count: 2048)
+        for i in 0..<2048 {
+            let v = sin(2 * .pi * 82.41 * Double(i) / sampleRate)
+                + 0.3 * sin(2 * .pi * 2.5 * 82.41 * Double(i) / sampleRate)
+            samples[i] = Float(v)
+        }
+        let result = PitchDetector().detect(samples: samples, sampleRate: sampleRate, threshold: 0.12)
+        XCTAssertNotNil(result)
+        let cents = 1200 * log2(result!.frequency / 82.41)
+        // The inharmonic partial pulls the estimate a few cents; the point is
+        // that it still resolves to E2 rather than a harmonic or neighbour.
+        XCTAssertLessThanOrEqual(abs(cents), 15.0, "measured \(result!.frequency) Hz")
+        // Marginal: confidence ≈ 0.86, i.e. CMNDF ≈ 0.14, which a uniform
+        // 0.12 cutoff would reject — the boost is what admits it.
+        XCTAssertLessThan(result!.confidence, 0.95)
+    }
 }
