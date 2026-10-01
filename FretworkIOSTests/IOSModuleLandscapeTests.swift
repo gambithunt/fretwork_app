@@ -95,8 +95,8 @@ final class IOSModuleLandscapeTests: XCTestCase {
     }
 
     func testCircleSubtitleNamesTheSelectedMajorKey() {
-        XCTAssertEqual(IOSModuleLandscapeFormat.circleSubtitle(PitchClass(7)), "G major")
-        XCTAssertEqual(IOSModuleLandscapeFormat.circleSubtitle(PitchClass(10)), "A♯ major")
+        XCTAssertEqual(IOSModuleLandscapeFormat.circleSubtitle(Keys.circleOfFifths[1]), "G major")
+        XCTAssertEqual(IOSModuleLandscapeFormat.circleSubtitle(Keys.circleOfFifths[10]), "B♭ major")
     }
 
     // MARK: - Notes

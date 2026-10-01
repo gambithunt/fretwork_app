@@ -2,6 +2,16 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.5.8 — 2026-10-01
+
+- Fixed the Circle of Fifths spelling every flat-side key as sharps. The ring,
+  the selected key title and the tonic-triad labels read their names from a
+  `PitchClass`, whose default spelling is sharp, so the flat half displayed
+  A♯/D♯/G♯/C♯ instead of B♭/E♭/A♭/D♭ and F major's IV showed as A♯. Added a
+  key-aware `Key`/`Keys.circleOfFifths` in Theory, which spells each key from
+  its own letter, so the ring now reads C G D A E B F♯/G♭ D♭ A♭ E♭ B♭ F and a
+  flat key's scale and triad use flats. Sharp keys are unchanged.
+
 ## 0.5.7 — 2026-10-01
 
 - Added a noise-floor-relative gate, a pitch-stability gate for new notes, and

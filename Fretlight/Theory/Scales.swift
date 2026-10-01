@@ -14,10 +14,15 @@ struct ScaleDef: Sendable, Equatable {
     /// one global sharp-or-flat preference, which is what preserves theory
     /// spellings like E♯ in F♯ major and D♭ in C Locrian. A pitch class alone
     /// cannot distinguish those from F and C♯; the letter sequence can.
-    func spelled(from root: PitchClass) -> [String] {
+    ///
+    /// `tonicName` overrides the letter the root is read from, because
+    /// `root.name()` defaults to the sharp spelling: without it, E♭ major is
+    /// spelled from D♯ and comes out all sharps. The pitch class still supplies
+    /// the semitone targets.
+    func spelled(from root: PitchClass, tonicName: String? = nil) -> [String] {
         let letters = ["C", "D", "E", "F", "G", "A", "B"]
         let naturalValues = [0, 2, 4, 5, 7, 9, 11]
-        let rootLetter = String(root.name().prefix(1))
+        let rootLetter = String((tonicName ?? root.name()).prefix(1))
         let rootLetterIndex = letters.firstIndex(of: rootLetter) ?? 0
 
         return intervals.enumerated().map { index, interval in

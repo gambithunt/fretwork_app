@@ -53,7 +53,7 @@ private struct IOSCircleStage: View {
     var body: some View {
         IOSModuleScaffold(
             title: IOSModuleScreenTitle.title(for: .circle),
-            subtitle: IOSModuleLandscapeFormat.circleSubtitle(model.selected),
+            subtitle: IOSModuleLandscapeFormat.circleSubtitle(model.selectedKey),
             tuning: model.tuning,
             boardTuning: model.tuning,
             isFixedShapeModule: false,
@@ -113,7 +113,7 @@ private struct IOSCircleStage: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
                 .frame(width: majorRadius * 2 + 40, height: majorRadius * 2 + 40)
 
-            ForEach(Array(model.keys.enumerated()), id: \.offset) { index, key in
+            ForEach(Array(model.keySpellings.enumerated()), id: \.offset) { index, key in
                 let role = model.role(at: index)
                 let angle = Angle(degrees: CircleModuleModel.angle(forIndex: index))
 
@@ -123,7 +123,7 @@ private struct IOSCircleStage: View {
                         y: -majorRadius * CGFloat(cos(angle.radians))
                     )
 
-                Text(key.transposed(by: 9).name().lowercased() + "m")
+                Text(key.relativeMinorName.lowercased() + "m")
                     .font(.caption2)
                     .foregroundStyle(role == .tonic ? NotePalette.color(for: .root) : .secondary)
                     .offset(
@@ -135,16 +135,16 @@ private struct IOSCircleStage: View {
         .frame(width: size, height: size)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: model.selected)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Circle of fifths, \(model.selected.name()) selected")
+        .accessibilityLabel("Circle of fifths, \(model.selectedKeyName) selected")
     }
 
-    private func circleKeyButton(_ model: CircleModuleModel, key: PitchClass, role: CircleModuleModel.Role) -> some View {
+    private func circleKeyButton(_ model: CircleModuleModel, key: Key, role: CircleModuleModel.Role) -> some View {
         let isTonic = role == .tonic
         let fill = model.color(for: role)
         return Button {
-            withAnimation(FretworkMotion.gravity) { model.select(key) }
+            withAnimation(FretworkMotion.gravity) { model.select(key.tonic) }
         } label: {
-            Text(key.name())
+            Text(key.name)
                 .font(.callout.weight(role == .none ? .regular : .semibold))
                 .foregroundStyle(role == .none ? Color.white.opacity(0.75) : .black)
                 .frame(width: 40, height: 40)
@@ -157,7 +157,7 @@ private struct IOSCircleStage: View {
                 .scaleEffect(isTonic ? 1.06 : 1)
         }
         .buttonStyle(ElasticPressStyle())
-        .accessibilityLabel("\(key.name()) major")
+        .accessibilityLabel("\(key.name) major")
         .accessibilityAddTraits(isTonic ? [.isSelected] : [])
     }
 }
@@ -213,8 +213,8 @@ private struct IOSCircleDrawer: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text("About")
                 .font(.headline)
-            Text("Each step clockwise is a fifth up. \(model.selected.name()) and \(model.dominant.name()) share \(shared) of their seven notes, so only one note has to change.")
-            Text("Directly opposite is \(opposite.name()), sharing only \(model.sharedNoteCount(with: opposite)) notes — the furthest you can get from home. The inner ring shows each key's relative minor: the same seven notes, started somewhere else.")
+            Text("Each step clockwise is a fifth up. \(model.selectedKeyName) and \(model.dominantKeyName) share \(shared) of their seven notes, so only one note has to change.")
+            Text("Directly opposite is \(model.oppositeKeyName), sharing only \(model.sharedNoteCount(with: opposite)) notes — the furthest you can get from home. The inner ring shows each key's relative minor: the same seven notes, started somewhere else.")
         }
         .font(.callout)
         .foregroundStyle(.secondary)

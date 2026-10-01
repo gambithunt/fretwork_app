@@ -67,4 +67,30 @@ final class TheoryTests: XCTestCase {
         XCTAssertEqual(NoteMapper.pitchClassNames,
                        ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"])
     }
+
+    // MARK: - Key-aware spelling
+
+    /// The circle's twelve keys, in fifths order, with the names it reads.
+    func testCircleOfFifthsNamesReadAsKeys() {
+        XCTAssertEqual(Keys.circleOfFifths.map(\.name),
+                       ["C", "G", "D", "A", "E", "B", "F♯/G♭", "D♭", "A♭", "E♭", "B♭", "F"])
+    }
+
+    /// The flat half of the ring must spell itself with flats: F major's
+    /// fourth degree is B♭, and E♭ major is not spelled from D♯.
+    func testFlatKeyScalesAreSpelledWithFlats() {
+        XCTAssertEqual(Keys.circleOfFifths[11].majorScaleNoteNames,
+                       ["F", "G", "A", "B♭", "C", "D", "E"])
+        XCTAssertEqual(Keys.circleOfFifths[9].majorScaleNoteNames,
+                       ["E♭", "F", "G", "A♭", "B♭", "C", "D"])
+    }
+
+    /// A sharp key is untouched: the optional tonic name only ever rescues a
+    /// flat root from the default sharp spelling.
+    func testSharpKeySpellingIsUnchanged() {
+        XCTAssertEqual(Keys.circleOfFifths[2].majorScaleNoteNames,
+                       ["D", "E", "F♯", "G", "A", "B", "C♯"])
+        XCTAssertEqual(Scales.major.spelled(from: PitchClass(2)),
+                       ["D", "E", "F♯", "G", "A", "B", "C♯"])
+    }
 }

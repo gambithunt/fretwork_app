@@ -43,6 +43,32 @@ final class CircleModuleTests: XCTestCase {
         XCTAssertEqual(model.keys.first?.value, 0, "the circle is conventionally drawn with C at the top")
     }
 
+    /// The twelve ring labels, in order. These are key names, not pitch-class
+    /// names: the flat half must read D♭ A♭ E♭ B♭ F, not C♯ G♯ D♯ A♯ F♯.
+    func testTheRingLabelsSpellTheFlatKeysWithFlats() {
+        let (model, _) = makeModel()
+        XCTAssertEqual(model.keySpellings.map(\.name),
+                       ["C", "G", "D", "A", "E", "B", "F♯/G♭", "D♭", "A♭", "E♭", "B♭", "F"])
+    }
+
+    /// Selecting a flat key drives its title, its scale and its tonic triad —
+    /// all of which used to fall back to the sharp spelling.
+    func testSelectingAFlatKeyNamesItsScaleAndNeighboursWithFlats() {
+        let (model, _) = makeModel()
+        model.select(PitchClass(3))  // E♭
+        XCTAssertEqual(model.selectedKeyName, "E♭")
+        XCTAssertEqual(model.selectedKey.majorScaleNoteNames,
+                       ["E♭", "F", "G", "A♭", "B♭", "C", "D"])
+        XCTAssertEqual(model.relativeMinorKeyName, "C")
+        XCTAssertEqual(model.dominantKeyName, "B♭")
+        XCTAssertEqual(model.subdominantKeyName, "A♭")
+        XCTAssertEqual(Set(model.dots.map(\.label)), ["E♭", "G", "B♭"])
+
+        // B♭ major's relative minor is G minor, never A♯ minor.
+        model.select(PitchClass(10))
+        XCTAssertEqual(model.relativeMinorKeyName, "G")
+    }
+
     /// The fact that makes the circle worth drawing.
     func testNeighbouringKeysShareAllButOneNote() {
         let (model, _) = makeModel()
