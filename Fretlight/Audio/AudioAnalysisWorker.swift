@@ -18,6 +18,12 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     private var lastDetection: ContinuousClock.Instant?
     private var lastPublish = ContinuousClock.now
     private var running: Int32 = 0
+    /// Set by `reset()`; the consume thread clears the smoothing/median state
+    /// on its next iteration, so a pre-gate reading cannot leak out after the
+    /// playback gate lifts. Guarded by `resetLock` (a class stored var has no
+    /// stable address for `&`, and `OSAtomic*` is deprecated).
+    private let resetLock = NSLock()
+    private var resetRequested = false
     var onUpdate: (@Sendable (PitchDisplayState, UInt64) -> Void)?
 
     init(ring: RingBuffer, sensitivity: SensitivitySettings) {
@@ -31,8 +37,32 @@ final class AudioAnalysisWorker: @unchecked Sendable {
     }
     func stop() { OSAtomicCompareAndSwap32Barrier(1, 0, &running) }
 
+    /// Requests a state reset on the consume thread. Safe from any thread:
+    /// the flag is lock-guarded and the fields it clears are owned by that
+    /// thread.
+    func reset() {
+        resetLock.lock()
+        resetRequested = true
+        resetLock.unlock()
+    }
+
     private func consume(sampleRate: Double, bufferSize: Int) {
         while OSAtomicAdd32Barrier(0, &running) == 1 {
+            let shouldReset: Bool = {
+                resetLock.lock()
+                defer { resetLock.unlock() }
+                let value = resetRequested
+                resetRequested = false
+                return value
+            }()
+            if shouldReset {
+                history.removeAll(keepingCapacity: true)
+                lastMIDI = nil
+                lastDetection = nil
+                smoothedCents = nil
+                smoothedCentsMIDI = nil
+                lastFrequency = 0
+            }
             // Read the newest chunk into scratch first — only once we know it's
             // available do we slide the window and splice the chunk into the tail.
             // (Writing straight into `window` and then shifting over it would

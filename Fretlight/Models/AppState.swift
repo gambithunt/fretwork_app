@@ -141,6 +141,18 @@ final class AppState {
         }
     }
 
+    /// Keep the screen awake while a listening run is active. iOS only — the
+    /// Mac reads this but has no UI for it, so it is inert there. The actual
+    /// `isIdleTimerDisabled` write lives in the iOS root's single observer
+    /// (`fretworkKeepsScreenOn`), not here, so every state path stays in one
+    /// place.
+    var keepsScreenOnWhileListening = true {
+        didSet {
+            guard keepsScreenOnWhileListening != oldValue else { return }
+            practiceState.update { $0.settings.preventsAutoLockWhileListening = keepsScreenOnWhileListening }
+        }
+    }
+
     /// Detection costs CPU only while something is looking at it. Screens that
     /// show no live readout leave the workers idle, using the gate
     /// `ChordAnalysisWorker` already has — an idle worker costs one `write` per
@@ -306,6 +318,7 @@ final class AppState {
         showsLiveNoteOnModules = settings.showsLiveNoteOnModules
         highlightsLiveNoteOnFretboards = settings.highlightsLiveNoteOnFretboards
         sharesAnonymousUsageData = settings.sharesAnonymousUsageData
+        keepsScreenOnWhileListening = settings.preventsAutoLockWhileListening
         tuning = Tunings.tuning(id: settings.tuningID)
         // Property observers do not fire for a value assigned inside the
         // type's own initialiser, so restoring `sensitivity` above never

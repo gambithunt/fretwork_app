@@ -29,14 +29,22 @@ struct IOSStatusAppearance: Equatable {
 }
 
 enum IOSStatusAppearanceMapper {
-    static func appearance(for status: IOSAudioStatus?) -> IOSStatusAppearance {
+    /// The widest title any status pill can show; used as an invisible spacer
+    /// so "Listening" ↔ "Playing" swap in place without the capsule resizing
+    /// or the surrounding chrome moving.
+    static let widestTitle = "Audio error"
+
+    static func appearance(for status: IOSAudioStatus?, playing: Bool = false) -> IOSStatusAppearance {
+        if playing, status == .listening {
+            return IOSStatusAppearance(title: "Playing", tint: .orange)
+        }
         switch status {
-        case .listening: IOSStatusAppearance(title: "Listening", tint: .green)
-        case .starting: IOSStatusAppearance(title: "Starting…", tint: .orange)
-        case .interrupted: IOSStatusAppearance(title: "Paused", tint: .orange)
-        case .permissionDenied: IOSStatusAppearance(title: "Mic off", tint: .red)
-        case .failed: IOSStatusAppearance(title: "Audio error", tint: .red)
-        case .idle, nil: IOSStatusAppearance(title: "Stopped", tint: .secondary)
+        case .listening: return IOSStatusAppearance(title: "Listening", tint: .green)
+        case .starting: return IOSStatusAppearance(title: "Starting…", tint: .orange)
+        case .interrupted: return IOSStatusAppearance(title: "Paused", tint: .orange)
+        case .permissionDenied: return IOSStatusAppearance(title: "Mic off", tint: .red)
+        case .failed: return IOSStatusAppearance(title: "Audio error", tint: .red)
+        case .idle, nil: return IOSStatusAppearance(title: "Stopped", tint: .secondary)
         }
     }
 }

@@ -26,7 +26,14 @@ enum IOSAudioGraphLeg: Sendable, Equatable {
 /// why this seam reuses those two types instead of recreating them.
 protocol IOSAudioGraphHandling: AnyObject, Sendable {
     var isRunning: Bool { get }
+    /// The rate the graph's own nodes run at (the session rate it was built
+    /// with). The player uses this.
     var sampleRate: Double { get }
+    /// The rate the capture sink actually receives — the input node's format
+    /// rate, read once the engine is up. This is what the pitch/chord workers
+    /// must be told, because it is the rate of the samples in their rings.
+    /// Nil for an output-only graph (no capture leg).
+    var captureSampleRate: Double? { get }
     func start() throws
     func stop()
     /// Attaches a decoded player, connecting it to the output live if the
@@ -41,7 +48,8 @@ protocol IOSAudioGraphBuilding: Sendable {
     func build(leg: IOSAudioGraphLeg,
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
-               chordRing: RingBuffer) throws -> IOSAudioGraphHandling
+               chordRing: RingBuffer,
+               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling
 }
 
 /// Production builder. Stateless, so it is trivially `Sendable` without an
@@ -50,12 +58,14 @@ struct SystemIOSAudioGraphBuilder: IOSAudioGraphBuilding {
     func build(leg: IOSAudioGraphLeg,
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
-               chordRing: RingBuffer) throws -> IOSAudioGraphHandling {
+               chordRing: RingBuffer,
+               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling {
         try SystemIOSAudioGraph(
             leg: leg,
             sessionSampleRate: sessionSampleRate,
             analysisRing: analysisRing,
-            chordRing: chordRing
+            chordRing: chordRing,
+            recordingRing: recordingRing
         )
     }
 }
@@ -93,29 +103,40 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     private let graphFormat: AVAudioFormat
     private var player: SamplePlayer?
     private var running = false
+    /// The input node's format rate, captured in `start()` once the engine is
+    /// up. This — not the session rate the graph was *built* with — is the
+    /// rate of the samples `CaptureSink` writes into the rings.
+    private var inputSampleRate: Double?
 
     let sampleRate: Double
 
     init(leg: IOSAudioGraphLeg,
          sessionSampleRate: Double,
          analysisRing: RingBuffer,
-         chordRing: RingBuffer) throws {
+         chordRing: RingBuffer,
+         recordingRing: RingBuffer?) throws {
         self.leg = leg
         self.sampleRate = sessionSampleRate
         guard let mono = AVAudioFormat(standardFormatWithSampleRate: sessionSampleRate, channels: 1) else {
             throw IOSAudioGraphError.unsupportedFormat(sampleRate: sessionSampleRate)
         }
         self.graphFormat = mono
-        // No monitor ring and no recording ring: iOS has no live monitoring
-        // (C-03) and no sample-capture tool.
+        // No monitor ring: iOS has no live monitoring (C-03). `recordingRing`
+        // is nil in production and only fed in DEBUG by the -FretworkCaptureDump
+        // diagnostic, whose writer is its single consumer.
         self.sink = leg == .captureAndOutput
-            ? CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: nil)
+            ? CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: recordingRing)
             : nil
     }
 
     var isRunning: Bool {
         lock.lock(); defer { lock.unlock() }
         return running
+    }
+
+    var captureSampleRate: Double? {
+        lock.lock(); defer { lock.unlock() }
+        return inputSampleRate
     }
 
     func start() throws {
@@ -136,6 +157,7 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
             let captureFormat = hardware.channelCount == 1
                 ? hardware
                 : (AVAudioFormat(standardFormatWithSampleRate: hardware.sampleRate, channels: 1) ?? graphFormat)
+            inputSampleRate = hardware.sampleRate
             engine.attach(sink.node)
             engine.connect(input, to: sink.node, format: captureFormat)
         }

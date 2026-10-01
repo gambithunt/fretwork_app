@@ -14,6 +14,7 @@ struct FretworkIOSApp: App {
         #if DEBUG
         if CommandLine.arguments.contains("-FretworkPhase1Harness") { return .phase1Harness }
         if CommandLine.arguments.contains("-FretworkPhase3Smoke") { return .phase3Smoke }
+        if CommandLine.arguments.contains("-FretworkBleedProbe") { return .bleedProbe }
         #endif
         return .app
     }
@@ -25,6 +26,8 @@ struct FretworkIOSApp: App {
                 Phase1HarnessView()
             case .phase3Smoke:
                 IOSAudioControllerSmokeView()
+            case .bleedProbe:
+                BleedProbeView()
             case .app:
                 IOSAppRootView()
             }
@@ -34,6 +37,7 @@ struct FretworkIOSApp: App {
     private enum LaunchMode {
         case phase1Harness
         case phase3Smoke
+        case bleedProbe
         case app
     }
 }

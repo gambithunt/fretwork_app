@@ -542,12 +542,24 @@ struct IOSModuleLiveNoteLeaf: View {
     var body: some View {
         if enabled {
             let display = state.display
+            let playing = state.iosAudio?.isSuppressingForPlayback ?? false
             let noteColor = display.note.map { NotePalette.color(for: $0.name) }
             HStack(spacing: 6) {
-                Text("LISTENING")
-                    .font(.caption2.weight(.bold))
-                    .tracking(1)
-                    .foregroundStyle(.secondary)
+                ZStack(alignment: .leading) {
+                    // "LISTENING" is the wider of the two captions, so it
+                    // reserves the fixed width and the swap never moves the
+                    // surrounding chrome.
+                    Text("LISTENING")
+                        .font(.caption2.weight(.bold))
+                        .tracking(1)
+                        .foregroundStyle(.secondary)
+                        .hidden()
+                    Text(playing ? "PLAYING" : "LISTENING")
+                        .font(.caption2.weight(.bold))
+                        .tracking(1)
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
+                }
                 Text(display.note.map { "\($0.name)\($0.octave)" } ?? "—")
                     .font(.caption.weight(.bold))
                     .monospacedDigit()
@@ -562,6 +574,7 @@ struct IOSModuleLiveNoteLeaf: View {
                     }
             }
             .animation(.easeInOut(duration: 0.2), value: display.note?.midiNote)
+            .animation(.easeInOut(duration: 0.2), value: playing)
         }
     }
 }

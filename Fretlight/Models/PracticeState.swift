@@ -78,6 +78,12 @@ extension PracticeState {
         /// until the player enables it in Settings; it is not bundled into the
         /// microphone permission or any other app preference.
         var sharesAnonymousUsageData = false
+        /// Keep the screen awake while a listening run is active. iOS only —
+        /// the Mac reads this but has no UI for it. On by default so the phone
+        /// does not auto-lock mid-practice. Named after the *effect* (prevent
+        /// auto-lock) rather than the screen so the persisted key cannot
+        /// collide with the "no screen field" guard.
+        var preventsAutoLockWhileListening = true
 
         init() {}
     }
@@ -522,7 +528,7 @@ extension PracticeState {
 
 extension PracticeState.Settings: Codable {
     private enum CodingKeys: String, CodingKey {
-        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID, isFretboardFlipped, showsLiveNoteOnModules, highlightsLiveNoteOnFretboards, sharesAnonymousUsageData
+        case tuningID, sensitivity, inputDeviceUID, outputDeviceUID, isFretboardFlipped, showsLiveNoteOnModules, highlightsLiveNoteOnFretboards, sharesAnonymousUsageData, preventsAutoLockWhileListening
     }
 
     init(from decoder: any Decoder) throws {
@@ -553,6 +559,9 @@ extension PracticeState.Settings: Codable {
         if let value = (try? container.decodeIfPresent(Bool.self, forKey: .sharesAnonymousUsageData)) ?? nil {
             sharesAnonymousUsageData = value
         }
+        if let value = (try? container.decodeIfPresent(Bool.self, forKey: .preventsAutoLockWhileListening)) ?? nil {
+            preventsAutoLockWhileListening = value
+        }
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -565,5 +574,6 @@ extension PracticeState.Settings: Codable {
         try container.encode(showsLiveNoteOnModules, forKey: .showsLiveNoteOnModules)
         try container.encode(highlightsLiveNoteOnFretboards, forKey: .highlightsLiveNoteOnFretboards)
         try container.encode(sharesAnonymousUsageData, forKey: .sharesAnonymousUsageData)
+        try container.encode(preventsAutoLockWhileListening, forKey: .preventsAutoLockWhileListening)
     }
 }

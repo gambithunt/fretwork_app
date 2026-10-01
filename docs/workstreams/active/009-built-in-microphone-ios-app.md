@@ -65,7 +65,7 @@ record and distribution signing remain owner actions deferred to Phase 8. Phase
 failure is a recorded exception until repaired as its own non-iOS change, after
 which both suites must be green; see Blockers.
 
-Last updated: 2026-09-30 (Phase 6 complete: all ten modules in portrait and landscape on the shared scaffold; Phase 7 next).
+Last updated: 2026-10-01 (Phase 7 complete on iPhone: playback gate measured and shipped, real-guitar sessions recorded, Q-03 decided; iPad measurement deferred; Phase 8 next).
 
 ## Objective
 
@@ -350,7 +350,7 @@ mix the port with a repository-wide module and resource migration.
 | --- | --- | --- | --- | --- |
 | Q-01 | What is the minimum supported iOS/iPadOS version? | Controls Observation/SwiftUI API availability and test-device coverage. | User | **Resolved 2026-09-18:** iOS/iPadOS 26.0 and above (C-20). |
 | Q-02 | Is portrait iPhone a first-class practice orientation or merely supported? | Determines how much board and control redesign is necessary. | User | Prototype the smallest supported iPhone in portrait and landscape in Phase 4; both must function, but human review chooses the preferred presentation. |
-| Q-03 | Should unplugged solid-body electric guitar receive explicit UI guidance? | Avoids promising reliable detection from a source the microphone may barely hear. | User | Test in Phase 7; add concise guidance only if failure is common and actionable. |
+| Q-03 | Should unplugged solid-body electric guitar receive explicit UI guidance? | Avoids promising reliable detection from a source the microphone may barely hear. | User | **Resolved 2026-10-01 — no guidance now.** Unplugged electric in a quiet room was reliable for the owner (all strings detected, 6 cents median), lower three strings needing firmer picking. Failure is not common, so the Phase 7 rule says no UI. Its notes (−56 dB) sit at the level of TV-room phantoms (−54 dB), so revisit together with the room-noise finding if noisy-room use is reported. |
 | Q-04 | Should iOS practice state sync with the Mac? | Would introduce an iCloud/container migration beyond a local port. | User | Default to local-only for this workstream; promote to a later workstream if requested. |
 | Q-05 | What public App Store subtitle should be used? | Needed for the App Store listing, not for the architecture spike or any implementation phase. | User | Subtitle remains deferred; owner decides before Phase 8 archive/submission work. The bundle identifier is a separate question, already resolved (C-21). |
 | Q-06 | May iOS development make minimal, behavior-preserving edits to genuinely shared source and the common `Fretlight.xcodeproj`, or is every file compiled or used by the Mac target immutable? | Decides whether the selected C-15 shared project is viable, and whether Phase 0 may mutate the common project at all. Option B forces separate or copied sources and conflicts with C-06. | User | **Resolved 2026-09-18 — option (A)** (C-19). Mac-only files, behavior, UI, audio routing/monitoring, configuration, assets, signing, release tooling and platform-owned source are immutable; minimal, behavior-preserving shared-source and common-project edits are allowed only when required for iOS/iPadOS, with explicit classification and Mac regression verification. Option (B) is rejected. |
@@ -1322,6 +1322,59 @@ remains deferred. Detection gating around sample playback remains Phase 7.
   note.
 - Real-guitar sessions meet an explicitly recorded latency and reliability bar.
 
+### Results (2026-09-30 → 2026-10-01, iPhone 14 Pro Max, iOS 27.0; iPad deferred by owner)
+
+Measured with two DEBUG-only instruments: `-FretworkBleedProbe` (plays 9
+bundled samples through the speaker and logs what the gated and raw detection
+streams report) and `-FretworkSessionLog` (one stderr line per gated note,
+chord, gate and status change, plus 30 s summaries). Phone on a table at
+practice distance.
+
+**Speaker bleed and the gate.** Ungated, the app credited its own speaker on
+7–9 of 9 samples, 0.08–0.26 s after a sample started. After a sample's nominal
+end there were **zero** detections of any pitch in a quiet room (noise floor
+−66 dB), and the level was back at the floor by +0.25 s, so the speaker leaves
+no measurable acoustic tail. The first probe's 4 s "tails" were an artifact of a
+level-based metric and were discarded. The gate (`PlaybackGate`, in
+`IOSAudioController`) suppresses note and chord events from the play call to the
+last scheduled sample's nominal end plus **150 ms**. That margin is the detector's
+own latency, not a speaker tail: a 2048-sample window at 48 kHz (43 ms) plus the
+3-of-5 median (≈99 ms), rounded up. On lift, both workers are reset and the
+stale in-flight frames dropped. With the gate on, false credits were **0/9
+gated against 9/9 raw** (quiet). In a TV/talking room, nothing passed during
+playback either. The gated credits that remained came seconds after the gate
+lifted and matched the room's own pitches, not the sample.
+"Playing" replaces "Listening" in place, on the Listen pill and the module
+capsule, with no layout movement (owner hand-checked).
+
+**Real-guitar sessions** (session log; the owner's external tuner as reference):
+
+| Session | Median abs cents | Octave flips | Onset→note median / p90 | Notes |
+| --- | --- | --- | --- | --- |
+| Acoustic, quiet (tuned) | 4–8 | 2 | (metric fixed afterwards) | Scale and chromatic run note-for-note |
+| Acoustic, TV on | 6–8 | 6 | ≤0.05 s / 0.15–0.5 s | Playing correct, but see the room-noise finding |
+| Electric, unplugged, quiet | 6 | 0 (2 octave-down D3→D2) | 0.10 s / 0.58 s | Notes −56 dB vs acoustic −39 dB |
+
+A "low E reads D♯2" report was traced to the string really being at D♯2.
+An independent autocorrelation of a raw on-device capture measured 77.7–78.2 Hz,
+and the A string 110.3 Hz. The detector was right. The investigation also
+removed a latent rate-chain risk: the workers are now told the sink's actual
+capture rate (`660e936`).
+
+**Bar met (iPhone):** never credits its own speaker (0/9 gated); resumes 150
+ms after nominal end; on a tuned acoustic, median pitch error ≤ 8 cents,
+onset→note median ≤ 0.1 s with p90 ≤ 0.6 s, and ≤ 6 octave flips in a session.
+
+**Findings carried forward (not Phase 7 defects):**
+- *Pitched room noise* (TV, voices) produces phantom notes with no one playing:
+  13 in ~25 s, each ~0.2 s, median −54 dB. They overlap soft real playing
+  (15/78 real notes were below −48 dB), so a plain level cut would drop real
+  notes too. First thing to try is the existing sensitivity control in a noisy
+  room. A noise-floor-relative gate would be a separate piece of work.
+- *Unplugged electric:* low three strings hold the readout for a shorter
+  time and need louder picking (owner). Consistent with the phone mic's weak
+  low-frequency response; a display-hold change would be shared with the Mac.
+
 ## Phase 8 — Store readiness and final gates
 
 The release goal is a public App Store listing for both iPhone and iPad (C-22).
@@ -1423,6 +1476,8 @@ TODO placeholders in the phone interface.
 | 2026-09-28 | `AppShell`, `GlobalSettingsView` and `ListenScreen` stay **Mac-only**; iOS builds its own. | Applying the sharing principle: AppShell is Mac window chrome (minimum widths, desktop sidebar, toolbar popover) — iPhone navigation is a Phase 4 decision on the device. GlobalSettingsView is a fixed-column desktop form — iOS gets a native `Form` in a sheet bound to the same `AppState` settings (sharing the *settings*, not the view). ListenScreen is heavily Mac routing — iOS gets a phone-first Listen screen; individual readout pieces (tuner, board section) are shared in Phase 5 only where one drops in cleanly, without restructuring the Mac file. No `#if os(macOS)` splicing inside these views. Supersedes the Phase 0 C-list note marking them "shared after Phase 2". | C-06, C-19 | If a Phase 4/5 piece turns out identical on both platforms with no adaptation. |
 | 2026-09-28 | The iOS app **bundles the 138-note sample library** (~13 MB). | Owner decision: lessons need the samples and 13 MB is acceptable. Lands in Phase 3 with the iOS audio controller and sample player, plus a test that the iOS bundle contains all 138 `.m4a` files and `index.json` loads, so the library cannot silently drop out (Phase 2's exception set excludes it today). Playback-time detection gating stays Phase 7. | C-04, C-05 | Only if app size becomes a store constraint. |
 | 2026-09-28 | Replace `.toggleStyle(.checkbox)` (macOS-only) in `NoteAssociationModuleScreen` with **chips on both platforms** (owner chose option A). | The screen already uses `ChipPicker` for chords, so layer toggles (chord tones, pentatonic, rest of scale) and Loop as tappable chips match it and are touch-friendly. Mac-visible change: update/compare pixel snapshots per CLAUDE.md. Removes that screen from the iOS exception set. Alternatives considered: custom checkbox (small tap targets), platform split (switches too bulky), keep excluded. | C-06, C-19 | — |
+| 2026-10-01 | Playback gate = sample's nominal end + **150 ms**, in `IOSAudioController`, iOS only. | Measured on device: zero post-end detections and the level at the floor by +0.25 s, so the margin covers detector latency only (43 ms window + ≈99 ms median). A multi-second hold would mute the player's next note. | C-05 | Re-measure when the detector window, the median rule or playback changes. |
+| 2026-10-01 | Keep the screen awake while listening, **default on**, with a Settings toggle (`preventsAutoLockWhileListening`). | Owner: a guitarist's hands are on the instrument; auto-lock ended listening. Applied only while `.listening`, the setting is on and the scene is active. | — | — |
 | 2026-09-16 | Build a native universal iPhone/iPad app, not Catalyst. | The code is already SwiftUI, while the audio lifecycle and compact interface require native iOS treatment either way. | C-06, C-08, C-13 | Only if native target constraints prove impossible. |
 | 2026-09-16 | Treat the device microphone as the primary input and omit routing UI. | Intended users are unlikely to connect audio interfaces; the system route is sufficient for the product promise. | C-01, C-02 | If real users demonstrate meaningful interface demand. |
 | 2026-09-16 | Remove live microphone monitoring on iOS. | Device-speaker monitoring recaptures itself and creates echo/feedback; analysis does not require audible monitoring. | C-03 | If a future headphones-only monitoring feature has a validated need. |
@@ -1450,6 +1505,7 @@ TODO placeholders in the phone interface.
 
 | Date | Constraint delta | Sections rewritten | Direction impact | New decision needed |
 | --- | --- | --- | --- | --- |
+| 2026-10-01 | Phase 7 complete on iPhone: gate measured (nominal end + 150 ms) and shipped, 0/9 gated self-credits; four real-guitar sessions recorded against a bar; Q-03 resolved (no guidance now); keep-screen-on setting added. | Status, Phase 7 results, Q-03, decision log. | No direction change. Room-noise phantoms and the short low-string hold on unplugged electric are carried forward as findings. | iPad measurement when the owner schedules it; Phase 8 needs the developer account. |
 | 2026-09-28 | Owner sharing principle recorded; three Mac views confirmed Mac-only; iOS sample bundling and checkbox→chips decided; Phase 1 closed on iPhone with the guitar sweep. | Status, Phase 1 tasks, decision log. | Phases 4–6 build native iOS views and share below the view layer only where clean. Next: chips (Mac-visible, snapshot-verified), then Phase 3 with bundled samples. | iPad Phase 1 measurement when the owner schedules it. |
 | 2026-09-18 | Accepted same-repository/separate-target ownership, incremental migration, independent platform configuration and deferred package extraction. | Status, constraints, selected direction, alternatives, execution contract, Phases 0/2/4/8 and decision log. | The selected direction is now an executable repository/target plan rather than only a conceptual shared-core split. | Its bundle-ID question was later resolved by C-21. |
 | 2026-09-18 (revision 2) | Moved the C-19/Q-06 Mac-protection decision ahead of the first Phase 0 project mutation, with planning/preflight still allowed; split provisioning so development-level signing/device trust/Developer Mode precede Phase 1 while App Store Connect and distribution signing stay in Phase 8; relabelled C-11 Inferred rather than Accepted; restated the green-suite contract as a recorded exception until the Mac test compile failure is repaired; removed the stale bundle-ID answer from Q-05. | Status, constraints (C-11, C-19, C-23), verified finding 10, selected direction, open questions, Blockers, execution contract, Phases 0/1/2/8, decision log, change log, Implementation Record preflight. | Same direction, but Phase 0 can no longer mutate the common project until Q-06 is answered, and Phase 1 cannot install physically without development provisioning. | Yes — C-19/Q-06 before any Phase 0 target/project mutation; Q-05 subtitle before Phase 8. |

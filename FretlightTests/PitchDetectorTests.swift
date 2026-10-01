@@ -17,4 +17,25 @@ final class PitchDetectorTests: XCTestCase {
         for frequency in [82.41, 110, 146.83, 196, 246.94, 329.63] { assertPitch(frequency) }
     }
     func testOctaveUpDoesNotCollapseAnOctave() { assertPitch(164.81) }
+
+    /// The iOS low-E bug report: a weak/absent fundamental with strong 2nd/3rd
+    /// harmonics must still resolve to E2 at 48 kHz — the difference function
+    /// must find the common period of the harmonics, not a harmonic or a
+    /// detuned neighbour.
+    func testLowEWithWeakAndAbsentFundamental() {
+        for fundamental in [0.0, 0.01, 0.1, 0.3] {
+            var samples = [Float](repeating: 0, count: 2048)
+            for i in 0..<2048 {
+                var v = fundamental * sin(2 * .pi * 82.41 * Double(i) / sampleRate)
+                v += 1.0 * sin(2 * .pi * 2 * 82.41 * Double(i) / sampleRate)
+                v += 0.7 * sin(2 * .pi * 3 * 82.41 * Double(i) / sampleRate)
+                v += 0.4 * sin(2 * .pi * 4 * 82.41 * Double(i) / sampleRate)
+                samples[i] = Float(v)
+            }
+            let result = PitchDetector().detect(samples: samples, sampleRate: sampleRate)
+            XCTAssertNotNil(result, "fundamental amplitude \(fundamental)")
+            let cents = 1200 * log2(result!.frequency / 82.41)
+            XCTAssertLessThanOrEqual(abs(cents), 5.0, "fundamental \(fundamental): measured \(result!.frequency) Hz")
+        }
+    }
 }

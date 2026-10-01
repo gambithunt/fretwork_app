@@ -19,7 +19,7 @@ final class FakeIOSAudioSession: IOSAudioSessionControlling {
 
     private(set) var setActiveValues: [Bool] = []
     private(set) var categories: [AVAudioSession.Category] = []
-    var activationError: TestFailure?
+    var activationError: Error?
     var categoryError: TestFailure?
     var sampleRate: Double = 48_000
     var inputChannelCount: Int = 1
@@ -104,6 +104,7 @@ final class FakeIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     private var _isRunning = false
     private var _attachedPlayers: [SamplePlayer] = []
     private var _sampleRate: Double = 48_000
+    private var _captureSampleRate: Double? = 48_000
 
     init(stats: FakeIOSAudioGraphStats, startError: TestFailure?) {
         self.stats = stats
@@ -113,6 +114,10 @@ final class FakeIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     var sampleRate: Double {
         get { locked { _sampleRate } }
         set { locked { _sampleRate = newValue } }
+    }
+    var captureSampleRate: Double? {
+        get { locked { _captureSampleRate } }
+        set { locked { _captureSampleRate = newValue } }
     }
     var isRunning: Bool { locked { _isRunning } }
     var attachedPlayers: [SamplePlayer] { locked { _attachedPlayers } }
@@ -166,7 +171,8 @@ final class FakeIOSAudioGraphBuilder: IOSAudioGraphBuilding, @unchecked Sendable
     func build(leg: IOSAudioGraphLeg,
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
-               chordRing: RingBuffer) throws -> IOSAudioGraphHandling {
+               chordRing: RingBuffer,
+               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling {
         lock.lock()
         let error = buildError
         let startError = self.startError
@@ -344,6 +350,24 @@ final class IOSAudioControllerTests: XCTestCase {
         XCTAssertEqual(session.setActiveValues, [])
         XCTAssertEqual(builder.builds.count, 0)
         XCTAssertEqual(recorder.messages, ["Microphone permission is off. Enable it in Settings."])
+    }
+
+    func testInsufficientPrioritySurfacesAnActionableMessage() async {
+        let (controller, session, foreground, _, recorder) = makeController(permission: .granted)
+        session.activationError = NSError(
+            domain: "AVFAudio",
+            code: Int(AVAudioSession.ErrorCode.insufficientPriority.rawValue)
+        )
+        foreground.fire(true)
+
+        XCTAssertTrue(controller.start())
+        await controller.settleGraphWork()
+
+        XCTAssertEqual(recorder.messages, ["Audio is in use by another app. Close it, then try again."])
+        guard case .failed(let message) = controller.status else {
+            return XCTFail("expected .failed, got \(controller.status)")
+        }
+        XCTAssertEqual(message, "Audio is in use by another app. Close it, then try again.")
     }
 
     // MARK: 2. Activation policy
