@@ -31,4 +31,22 @@ final class SensitivitySettings: @unchecked Sendable {
     /// 0.06 at sensitivity 0, 0.18 at sensitivity 1; 0.12 — the detector's
     /// original fixed value — falls out at the default 0.5.
     var yinThreshold: Float { Float(0.06 + 0.12 * value) }
+
+    /// The dB margin a detection's level must clear above the running noise
+    /// floor before it can be displayed (compared in AudioAnalysisWorker).
+    /// 13 dB at sensitivity 0 (strict — only notes clearly above room noise
+    /// show), 7 dB at sensitivity 1 (lenient — very quiet notes show, at the
+    /// cost of more room noise). Folded into the same dial as the confidence
+    /// and YIN knobs, so there is still one user control. The margin sits a
+    /// little lower than a pure level cut because the pitch-stability rule
+    /// already rejects gliding room noise, letting weak but steady strings
+    /// through.
+    var floorMarginDb: Double { 13 - 6 * value }
+
+    /// The confidence a *continuation* frame needs while the same note is
+    /// already confirmed. Lower than `confidenceThreshold`, so a decaying
+    /// note is held instead of dropping to "none" the moment confidence dips;
+    /// a changed pitch re-enters at the full `confidenceThreshold`, so a real
+    /// note change is not delayed.
+    var sustainConfidenceThreshold: Float { confidenceThreshold - 0.15 }
 }

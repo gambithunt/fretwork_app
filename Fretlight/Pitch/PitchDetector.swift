@@ -17,6 +17,20 @@ final class PitchDetector: @unchecked Sendable {
     /// matches the detector's original fixed behavior.
     static let defaultThreshold: Float = 0.12
 
+    /// The effective cutoff for a given tau. It rises toward the low-frequency
+    /// end of the tau range (large tau = low pitch): a real low string decays
+    /// fast and carries little fundamental energy, so its CMNDF at the true
+    /// period sits higher than a fixed cutoff would admit — measured on an
+    /// unplugged electric where low E/A sat at CMNDF ≈ 0.15–0.16 against the
+    /// 0.12 default and produced no candidate at all, while the same pickup
+    /// produced clean candidates the moment the cutoff passed ~0.16. The boost
+    /// is linear in tau so high pitches keep the strict cutoff. Downstream,
+    /// `confidence` gating and the noise-floor-relative level gate decide
+    /// whether the extra low-frequency candidates are displayed.
+    private static func cutoff(forTau tau: Int, base: Float, maxTau: Int) -> Float {
+        base * (1 + 0.6 * Float(tau) / Float(maxTau))
+    }
+
     init(maxWindowSize: Int = 2048) {
         difference = .init(repeating: 0, count: maxWindowSize / 2 + 1)
         cmndf = .init(repeating: 0, count: maxWindowSize / 2 + 1)
@@ -57,7 +71,7 @@ final class PitchDetector: @unchecked Sendable {
             cmndf[tau] = running > 0 ? difference[tau] * Float(tau) / running : 1
         }
         var tau = minTau
-        while tau < maxTau && cmndf[tau] >= threshold { tau += 1 }
+        while tau < maxTau && cmndf[tau] >= Self.cutoff(forTau: tau, base: threshold, maxTau: maxTau) { tau += 1 }
         guard tau < maxTau else { return nil }
         while tau + 1 <= maxTau && cmndf[tau + 1] < cmndf[tau] { tau += 1 }
         let left = cmndf[tau - 1], center = cmndf[tau], right = cmndf[tau + 1]
