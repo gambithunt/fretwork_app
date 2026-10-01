@@ -20,9 +20,16 @@ struct IOSAppRootView: View {
     @State private var path: [AppScreen] = IOSSnapshot.initialPath
     @State private var selection: AppScreen? = .listen
     @State private var isShowingSettings = IOSSnapshot.showsSettingsSheet
+    @State private var unlockStore: IOSUnlockStore
+    @State private var unlockTarget: LearningModule?
+    @State private var showsUnlockSheet = IOSSnapshot.showsUnlockSheet
     #if DEBUG
     @State private var sessionLogger: SessionLogger?
     #endif
+
+    init(unlockStore: IOSUnlockStore = IOSUnlockStore()) {
+        _unlockStore = State(initialValue: unlockStore)
+    }
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
@@ -44,12 +51,16 @@ struct IOSAppRootView: View {
             }
         }
         .sheet(isPresented: $isShowingSettings) {
-            IOSSettingsSheet(state: appState)
+            IOSSettingsSheet(state: appState, unlockStore: unlockStore)
         }
         .tint(NotePalette.accent)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(IOSSnapshot.preferredColorScheme)
         .task {
+            unlockStore.start()
             IOSSnapshot.requestLandscapeIfNeeded()
+            await unlockStore.refreshEntitlements()
+            await unlockStore.loadProduct()
+            sanitizeForEntitlements()
             if IOSSnapshot.schedulesPopBack {
                 try? await Task.sleep(for: .seconds(2))
                 NotificationCenter.default.post(name: IOSSnapshot.popBackNotificationName, object: nil)
@@ -96,6 +107,9 @@ struct IOSAppRootView: View {
         .onChange(of: path) { _, newPath in
             appState.selectedScreen = newPath.last ?? .listen
         }
+        .sheet(isPresented: $showsUnlockSheet) {
+            unlockSheet
+        }
     }
 
     private var phoneList: some View {
@@ -129,9 +143,7 @@ struct IOSAppRootView: View {
             }
             Section("Learn") {
                 ForEach(LearningModule.allCases) { module in
-                    NavigationLink(value: AppScreen.module(module)) {
-                        rowLabel(for: .module(module))
-                    }
+                    moduleRow(module)
                 }
             }
         }
@@ -150,6 +162,9 @@ struct IOSAppRootView: View {
             guard let newSelection else { return }
             appState.selectedScreen = newSelection
         }
+        .sheet(isPresented: $showsUnlockSheet) {
+            unlockSheet
+        }
     }
 
     private var padList: some View {
@@ -159,7 +174,19 @@ struct IOSAppRootView: View {
             }
             Section("Learn") {
                 ForEach(LearningModule.allCases) { module in
-                    rowLabel(for: .module(module)).tag(AppScreen.module(module))
+                    if UnlockCatalog.isFree(module) || unlockStore.isUnlocked {
+                        rowLabel(for: .module(module)).tag(AppScreen.module(module))
+                    } else {
+                        Button {
+                            unlockTarget = module
+                            showsUnlockSheet = true
+                        } label: {
+                            rowLabel(for: .module(module))
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+                        .accessibilityHint("Opens the unlock options")
+                    }
                 }
             }
         }
@@ -177,10 +204,61 @@ struct IOSAppRootView: View {
         }
     }
 
+    @ViewBuilder
+    private func moduleRow(_ module: LearningModule) -> some View {
+        if UnlockCatalog.isFree(module) || unlockStore.isUnlocked {
+            NavigationLink(value: AppScreen.module(module)) {
+                rowLabel(for: .module(module))
+            }
+        } else {
+            Button {
+                unlockTarget = module
+                showsUnlockSheet = true
+            } label: {
+                rowLabel(for: .module(module))
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityHint("Opens the unlock options")
+        }
+    }
+
+    private var unlockSheet: some View {
+        IOSUnlockSheet(store: unlockStore) {
+            completeUnlock()
+        }
+    }
+
+    private func completeUnlock() {
+        showsUnlockSheet = false
+        guard let module = unlockTarget else { return }
+        switch navigationKind {
+        case .stack:
+            path = [.module(module)]
+        case .split:
+            selection = .module(module)
+        }
+    }
+
+    /// D-21: once entitlements are known, a restored path/selection that ends
+    /// on a locked module the user does not own falls back to the list.
+    private func sanitizeForEntitlements() {
+        guard !IOSSnapshot.isActive else { return }
+        path = UnlockCatalog.sanitizedPath(path, isUnlocked: unlockStore.isUnlocked)
+        if let selection, case .module(let module) = selection,
+           !UnlockCatalog.isFree(module), !unlockStore.isUnlocked {
+            self.selection = .listen
+        }
+    }
+
     private func rowLabel(for screen: AppScreen) -> some View {
-        Label {
+        HStack(spacing: 12) {
+            Image(systemName: screen.symbol)
+                .frame(width: 28)
+                .foregroundStyle(NotePalette.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(screen.title)
+                    .foregroundStyle(.primary)
                 if case .module(let module) = screen {
                     Text(module.blurb)
                         .font(.caption)
@@ -188,8 +266,14 @@ struct IOSAppRootView: View {
                         .lineLimit(2)
                 }
             }
-        } icon: {
-            Image(systemName: screen.symbol)
+            Spacer(minLength: 8)
+            if case .module(let module) = screen,
+               !UnlockCatalog.isFree(module), !unlockStore.isUnlocked {
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Locked")
+            }
         }
     }
 }

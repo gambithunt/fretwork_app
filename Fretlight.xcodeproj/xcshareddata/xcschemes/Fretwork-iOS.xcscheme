@@ -61,6 +61,9 @@
             ReferencedContainer = "container:Fretlight.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <StoreKitConfigurationFileReference
+         identifier = "FretworkIOS/Store/Fretwork.storekit">
+      </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

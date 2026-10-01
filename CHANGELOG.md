@@ -4,8 +4,15 @@ All notable changes to Fretwork are recorded here, newest first. The Mac app
 and the iPhone/iPad app version independently; entries are labelled when they
 apply to only one platform.
 
-## 0.1.1 (iOS) — 2026-10-01
+## 0.2.0 (iOS) — 2026-10-01
 
+- Added the one-time iOS unlock (StoreKit 2, non-consumable
+  `org.fretwork.app.ios.unlock`). Listen and the Notes module stay free; the
+  other nine modules show a lock and open a native sheet with the App Store
+  Connect price (`Product.displayPrice`), one-time wording, and Restore
+  Purchases. Verified entitlements are checked at launch and kept current for
+  the app's lifetime; unverified transactions grant nothing. The Mac app is
+  unchanged and stays free.
 - Prepared the iOS app for App Store submission. The release bundle now ships a
   `PrivacyInfo.xcprivacy` declaring no tracking and no collected data (the only
   required-reason APIs are `UserDefaults` CA92.1 and system boot time 35F9.1),
