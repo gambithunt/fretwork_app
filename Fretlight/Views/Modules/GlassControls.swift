@@ -425,9 +425,13 @@ struct FretRangeToggle: View {
             )
             .font(.caption.weight(.medium))
         }
+        #if os(iOS)
+        .moduleSecondaryButton(tint: .secondary)
+        #else
         .buttonStyle(.bordered)
         .controlSize(.small)
         .tint(.secondary)
+        #endif
         .help(isExpanded ? "Show only up to fret \(defaultFrets), where this shape lives" : "Show the full 22-fret neck")
     }
 }

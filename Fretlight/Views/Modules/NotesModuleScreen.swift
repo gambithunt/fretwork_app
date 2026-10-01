@@ -105,21 +105,27 @@ struct NotesModuleScreen: View {
             }
             .moduleNotesCard()
 
-            HStack(spacing: 12) {
-                Button {
-                    model.playAll()
-                } label: {
-                    Label("Play all", systemImage: "play.fill")
+            ModuleControlCard(distribution: .spread) {
+                ModuleControlCell(caption: "PLAY") {
+                    ModulePrimaryAction(
+                        title: "Play all",
+                        disabled: model.placed.isEmpty,
+                        action: { model.playAll() },
+                        stopAction: { model.stop() }
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.placed.isEmpty)
 
-                Button("Stop") { model.stop() }
-                Button("Clear all") { model.clearAll() }
-                    .disabled(model.placed.isEmpty)
+                // Clear is destructive, so it sits alone at the far right,
+                // kept apart from Play/Stop by the empty middle (D-26 Notes).
+                ModuleControlCell(caption: "CLEAR", alignment: .trailing) {
+                    ModuleSecondaryAction(
+                        title: "Clear all",
+                        tint: .red,
+                        disabled: model.placed.isEmpty,
+                        action: { model.clearAll() }
+                    )
+                }
             }
-            .moduleOptionsCard()
         }
     }
 

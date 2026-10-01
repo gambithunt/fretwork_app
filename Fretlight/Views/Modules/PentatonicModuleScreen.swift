@@ -53,7 +53,7 @@ struct PentatonicModuleScreen: View {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
 
-            HStack(spacing: 16) {
+            ModuleControlCard {
                 Picker("Quality", selection: Binding(
                     get: { model.quality },
                     set: { model.selectQuality($0) }
@@ -61,7 +61,10 @@ struct PentatonicModuleScreen: View {
                     Text("Minor").tag(PentatonicQuality.minorPentatonic)
                     Text("Major").tag(PentatonicQuality.majorPentatonic)
                 }
+                .labelsHidden()
                 .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "QUALITY")
 
                 Picker("Show", selection: Binding(
                     get: { model.displayMode },
@@ -71,7 +74,10 @@ struct PentatonicModuleScreen: View {
                     Text("Pair").tag(PentatonicModuleModel.DisplayMode.pair)
                     Text("Path").tag(PentatonicModuleModel.DisplayMode.path)
                 }
+                .labelsHidden()
                 .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "SHOW")
 
                 Picker("Position", selection: Binding(
                     get: { model.position },
@@ -80,39 +86,43 @@ struct PentatonicModuleScreen: View {
                     // 0-based internally, 1-based on screen.
                     ForEach(0...4, id: \.self) { Text("Box \($0 + 1)").tag($0) }
                 }
+                .labelsHidden()
                 .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "POSITION")
 
                 FretboardLabelPicker(selection: $labelMode)
+                .moduleMenuPicker()
+                    .moduleControlCell(caption: "LABELS")
 
-                guidedControls(model)
-            }
-            .moduleOptionsCard()
-        }
-    }
-
-    private func guidedControls(_ model: PentatonicModuleModel) -> some View {
-        HStack(spacing: 12) {
-            if model.guidedSnapshot.status == .idle {
-                Button { model.startGuided() } label: { Label("Practise", systemImage: "play.fill") }
-                    .buttonStyle(.borderedProminent)
-                    .tint(NotePalette.accent)
-                    .disabled(model.box.isEmpty)
-            } else {
-                Button("Stop") { model.stopGuided() }
-                Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
-                Text("\(model.guidedSnapshot.tempoBpm) bpm")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Button { _ = model.faster() } label: { Image(systemName: "hare") }
-
-                if let beat = model.guidedSnapshot.countInBeat {
-                    Text("Count in… \(beat)")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(NotePalette.accent)
-                } else if let index = model.guidedSnapshot.currentIndex {
-                    Text("\(index + 1) / \(model.guidedSnapshot.total)")
-                        .font(.callout.monospacedDigit())
+                if model.guidedSnapshot.status != .idle {
+                    HStack(spacing: 8) {
+                        Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                            .moduleSecondaryButton()
+                        Text("\(model.guidedSnapshot.tempoBpm) bpm")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                        Button { _ = model.faster() } label: { Image(systemName: "hare") }
+                            .moduleSecondaryButton()
+                        if let beat = model.guidedSnapshot.countInBeat {
+                            Text("Count in… \(beat)")
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(NotePalette.accent)
+                        } else if let index = model.guidedSnapshot.currentIndex {
+                            Text("\(index + 1) / \(model.guidedSnapshot.total)")
+                                .font(.callout.monospacedDigit())
+                        }
+                    }
+                    .moduleControlCell(caption: "TEMPO")
                 }
+
+                ModulePrimaryAction(
+                    title: "Practise",
+                    disabled: model.box.isEmpty || model.guidedSnapshot.status != .idle,
+                    action: { model.startGuided() },
+                    stopAction: { model.stopGuided() }
+                )
+                .moduleControlCell(caption: "PLAY", alignment: .trailing)
             }
         }
     }

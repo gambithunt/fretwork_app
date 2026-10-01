@@ -53,56 +53,53 @@ struct HarmonizingModuleScreen: View {
             PitchClassPicker(title: "KEY", selection: model.keyRoot, onSelect: model.selectKeyRoot)
                 .moduleNotesCard()
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Picker("Mode", selection: Binding(
-                        get: { model.isMajor },
-                        set: { model.selectMajor($0) }
-                    )) {
-                        Text("Major").tag(true)
-                        Text("Minor").tag(false)
-                    }
-                    .fixedSize()
-
-                    FretboardLabelPicker(selection: $labelMode)
-
-                    Button {
-                        model.strum()
-                    } label: {
-                        Label("Play chord", systemImage: "play.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(NotePalette.accent)
-                    .disabled(model.voicing == nil)
-                    Button("Stop") { model.stop() }
+            ModuleControlCard {
+                Picker("Mode", selection: Binding(
+                    get: { model.isMajor },
+                    set: { model.selectMajor($0) }
+                )) {
+                    Text("Major").tag(true)
+                    Text("Minor").tag(false)
                 }
+                .labelsHidden()
+                .fixedSize()
+                .moduleMenuPicker()
+                .moduleControlCell(caption: "MODE")
+
+                FretboardLabelPicker(selection: $labelMode)
+                .moduleMenuPicker()
+                    .moduleControlCell(caption: "LABELS")
 
                 // The degree row: the whole key at a glance, which is the
                 // point of the module — you pick a degree and see what chord
-                // falls out.
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("DEGREE")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    ChipPicker(
-                        values: Array(model.chords.indices),
-                        selection: model.degree,
-                        tint: { _ in NotePalette.accent },
-                        onSelect: model.selectDegree,
-                        accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" }
-                    ) { index, isActive in
-                        VStack(spacing: 2) {
-                            Text(model.chords[index].roman)
-                                .font(.callout.weight(.semibold))
-                                .foregroundStyle(isActive ? .black : .primary)
-                            Text(model.chords[index].name)
-                                .font(.caption2)
-                                .foregroundStyle(isActive ? .black.opacity(0.65) : .secondary)
-                        }
+                // falls out. A labelled cell like every other control, so the
+                // card reads as one evenly-distributed panel.
+                ChipPicker(
+                    values: Array(model.chords.indices),
+                    selection: model.degree,
+                    tint: { _ in NotePalette.accent },
+                    onSelect: model.selectDegree,
+                    accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" }
+                ) { index, isActive in
+                    VStack(spacing: 2) {
+                        Text(model.chords[index].roman)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(isActive ? .black : .primary)
+                        Text(model.chords[index].name)
+                            .font(.caption2)
+                            .foregroundStyle(isActive ? .black.opacity(0.65) : .secondary)
                     }
                 }
+                .moduleControlCell(caption: "DEGREE")
+
+                ModulePrimaryAction(
+                    title: "Play chord",
+                    disabled: model.voicing == nil,
+                    action: { model.strum() },
+                    stopAction: { model.stop() }
+                )
+                .moduleControlCell(caption: "PLAY", alignment: .trailing)
             }
-            .moduleOptionsCard()
         }
     }
 

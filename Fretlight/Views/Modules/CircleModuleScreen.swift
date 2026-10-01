@@ -143,21 +143,33 @@ struct CircleModuleScreen: View {
     // that selector — so this is one options card rather than the
     // notes-card-plus-options-card split every other module uses.
     private func controls(_ model: CircleModuleModel) -> some View {
-        HStack(spacing: 12) {
+        ModuleControlCard {
             FretboardLabelPicker(selection: $labelMode)
-            Button { model.step(by: -1) } label: { Label("Anticlockwise", systemImage: "arrow.counterclockwise") }
-            Button { model.step(by: 1) } label: { Label("Clockwise", systemImage: "arrow.clockwise") }
-            Button {
-                model.strum()
-            } label: {
-                Label("Play tonic", systemImage: "play.fill")
+            .moduleMenuPicker()
+                .moduleControlCell(caption: "LABELS")
+
+            ModuleChipWrapLayout {
+                ModuleSecondaryAction(
+                    title: "Anticlockwise",
+                    systemImage: "arrow.counterclockwise",
+                    action: { model.step(by: -1) }
+                )
+                ModuleSecondaryAction(
+                    title: "Clockwise",
+                    systemImage: "arrow.clockwise",
+                    action: { model.step(by: 1) }
+                )
             }
-            .buttonStyle(.borderedProminent)
-            .tint(NotePalette.accent)
-            .disabled(model.dots.isEmpty)
-            Button("Stop") { model.stop() }
+            .moduleControlCell(caption: "ROTATE")
+
+            ModulePrimaryAction(
+                title: "Play tonic",
+                disabled: model.dots.isEmpty,
+                action: { model.strum() },
+                stopAction: { model.stop() }
+            )
+            .moduleControlCell(caption: "PLAY", alignment: .trailing)
         }
-        .moduleOptionsCard()
     }
 
     private func readout(_ model: CircleModuleModel) -> some View {

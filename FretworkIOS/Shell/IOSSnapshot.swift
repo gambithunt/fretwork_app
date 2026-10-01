@@ -85,6 +85,14 @@ enum IOSSnapshot {
         #endif
     }
 
+    static var collapsesSidebar: Bool {
+        #if DEBUG
+        IOSSnapshotHarness.collapsesSidebar
+        #else
+        false
+        #endif
+    }
+
     static var guidedRunActive: Bool {
         #if DEBUG
         IOSSnapshotHarness.guidedRunActive

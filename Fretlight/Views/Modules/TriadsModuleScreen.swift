@@ -62,11 +62,7 @@ struct TriadsModuleScreen: View {
             )
             .moduleNotesCard()
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    FretboardLabelPicker(selection: $labelMode)
-                    Spacer()
-                }
+            ModuleControlCard {
                 Picker("Exercise", selection: Binding(
                     get: { model.isPathMode },
                     set: { model.setPathMode($0) }
@@ -75,137 +71,148 @@ struct TriadsModuleScreen: View {
                     Text("Paths").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .fixedSize()
+                .tint(NotePalette.accent)
+                .moduleControlCell(caption: "EXERCISE")
+
+                FretboardLabelPicker(selection: $labelMode)
+                .moduleMenuPicker()
+                    .moduleControlCell(caption: "LABELS")
 
                 if model.isPathMode {
-                    pathControls(model)
+                    pathCells(model)
                 } else {
-                    shapeControls(model)
+                    shapeCells(model)
                 }
-            }
-            .moduleOptionsCard()
-        }
-    }
-
-    private func shapeControls(_ model: TriadsModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Picker("Triad", selection: Binding(
-                    get: { model.view == .doubleStops ? "doubleStops" : model.triad.short },
-                    set: { value in
-                        if value == "doubleStops" {
-                            model.selectDoubleStop(model.doubleStop)
-                        } else if let triad = Triads.all.first(where: { $0.short == value }) {
-                            model.selectTriad(triad)
-                        }
-                    }
-                )) {
-                    ForEach(Triads.all, id: \.short) { triad in
-                        Text(triad.name).tag(triad.short)
-                    }
-                    Text("Double stops").tag("doubleStops")
-                }
-                .fixedSize()
-
-                if model.view == .doubleStops {
-                    Picker("Pair", selection: Binding(
-                        get: { model.doubleStop.id },
-                        set: { id in
-                            if let pair = DoubleStops.all.first(where: { $0.id == id }) {
-                                model.selectDoubleStop(pair)
-                            }
-                        }
-                    )) {
-                        ForEach(DoubleStops.all, id: \.id) { pair in
-                            Text(pair.label).tag(pair.id)
-                        }
-                    }
-                    .fixedSize()
-                } else {
-                    Picker("Inversion", selection: Binding(
-                        get: { model.selectedInversion ?? TriadsModuleModel.inversionOrder[0] },
-                        set: { model.selectInversion($0) }
-                    )) {
-                        ForEach(model.availableInversions, id: \.self) { inversion in
-                            Text(inversion).tag(inversion)
-                        }
-                    }
-                    .fixedSize()
-                    .disabled(model.availableInversions.count < 2)
-                }
-            }
-
-            HStack(spacing: 12) {
-                Button {
-                    model.playVoicing()
-                } label: {
-                    Label("Play shape", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.activeVoicing == nil)
-                Button("Stop") { model.stop() }
             }
         }
     }
 
-    private func pathControls(_ model: TriadsModuleModel) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Picker("String set", selection: Binding(
-                    get: { model.pathStringSet },
-                    set: { model.selectPathStringSet($0) }
-                )) {
-                    ForEach(TriadPaths.stringSets, id: \.self) { set in
-                        Text(set.rawValue).tag(set)
+    @ViewBuilder
+    private func shapeCells(_ model: TriadsModuleModel) -> some View {
+        Picker("Triad", selection: Binding(
+            get: { model.view == .doubleStops ? "doubleStops" : model.triad.short },
+            set: { value in
+                if value == "doubleStops" {
+                    model.selectDoubleStop(model.doubleStop)
+                } else if let triad = Triads.all.first(where: { $0.short == value }) {
+                    model.selectTriad(triad)
+                }
+            }
+        )) {
+            ForEach(Triads.all, id: \.short) { triad in
+                Text(triad.name).tag(triad.short)
+            }
+            Text("Double stops").tag("doubleStops")
+        }
+        .labelsHidden()
+        .fixedSize()
+        .moduleMenuPicker()
+        .moduleControlCell(caption: "TRIAD")
+
+        if model.view == .doubleStops {
+            Picker("Pair", selection: Binding(
+                get: { model.doubleStop.id },
+                set: { id in
+                    if let pair = DoubleStops.all.first(where: { $0.id == id }) {
+                        model.selectDoubleStop(pair)
                     }
                 }
-                .fixedSize()
-
-                Picker("Key", selection: Binding(
-                    get: { model.pathIsMajor },
-                    set: { model.setPathMajor($0) }
-                )) {
-                    Text("Major").tag(true)
-                    Text("Minor").tag(false)
-                }
-                .fixedSize()
-            }
-
-            HStack(spacing: 12) {
-                Button {
-                    model.startProgression(loop: false)
-                } label: {
-                    Label("Play path", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(NotePalette.accent)
-                .disabled(model.pathSteps.isEmpty)
-
-                Button {
-                    model.startProgression(loop: true)
-                } label: {
-                    Label("Loop", systemImage: "repeat")
-                }
-                .disabled(model.pathSteps.isEmpty)
-
-                Button("Stop") { model.stopEverything() }
-
-                if model.progressionSnapshot.status != .idle {
-                    Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
-                    Text("\(model.progressionSnapshot.tempoBpm) bpm")
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    Button { _ = model.faster() } label: { Image(systemName: "hare") }
+            )) {
+                ForEach(DoubleStops.all, id: \.id) { pair in
+                    Text(pair.label).tag(pair.id)
                 }
             }
+            .labelsHidden()
+            .fixedSize()
+            .moduleMenuPicker()
+            .moduleControlCell(caption: "PAIR")
+        } else {
+            Picker("Inversion", selection: Binding(
+                get: { model.selectedInversion ?? TriadsModuleModel.inversionOrder[0] },
+                set: { model.selectInversion($0) }
+            )) {
+                ForEach(model.availableInversions, id: \.self) { inversion in
+                    Text(inversion).tag(inversion)
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .moduleMenuPicker()
+            .disabled(model.availableInversions.count < 2)
+            .moduleControlCell(caption: "INVERSION")
+        }
 
-            if let beat = model.progressionSnapshot.countInBeat {
-                Text("Count in… \(beat)")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(NotePalette.accent)
+        ModulePrimaryAction(
+            title: "Play shape",
+            disabled: model.activeVoicing == nil,
+            action: { model.playVoicing() },
+            stopAction: { model.stop() }
+        )
+        .moduleControlCell(caption: "PLAY", alignment: .trailing)
+    }
+
+    @ViewBuilder
+    private func pathCells(_ model: TriadsModuleModel) -> some View {
+        Picker("String set", selection: Binding(
+            get: { model.pathStringSet },
+            set: { model.selectPathStringSet($0) }
+        )) {
+            ForEach(TriadPaths.stringSets, id: \.self) { set in
+                Text(set.rawValue).tag(set)
             }
         }
+        .labelsHidden()
+        .fixedSize()
+        .moduleMenuPicker()
+        .moduleControlCell(caption: "STRING SET")
+
+        Picker("Key", selection: Binding(
+            get: { model.pathIsMajor },
+            set: { model.setPathMajor($0) }
+        )) {
+            Text("Major").tag(true)
+            Text("Minor").tag(false)
+        }
+        .labelsHidden()
+        .fixedSize()
+        .moduleMenuPicker()
+        .moduleControlCell(caption: "KEY")
+
+        ModuleSecondaryAction(
+            title: "Loop",
+            systemImage: "repeat",
+            disabled: model.pathSteps.isEmpty,
+            action: { model.startProgression(loop: true) }
+        )
+        .moduleControlCell(caption: "LOOP")
+
+        if model.progressionSnapshot.status != .idle {
+            HStack(spacing: 8) {
+                Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                    .moduleSecondaryButton()
+                Text("\(model.progressionSnapshot.tempoBpm) bpm")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button { _ = model.faster() } label: { Image(systemName: "hare") }
+                    .moduleSecondaryButton()
+                if let beat = model.progressionSnapshot.countInBeat {
+                    Text("Count in… \(beat)")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(NotePalette.accent)
+                }
+            }
+            .moduleControlCell(caption: "TEMPO")
+        }
+
+        ModulePrimaryAction(
+            title: "Play path",
+            disabled: model.pathSteps.isEmpty,
+            action: { model.startProgression(loop: false) },
+            stopAction: { model.stopEverything() }
+        )
+        .moduleControlCell(caption: "PLAY", alignment: .trailing)
     }
 
 

@@ -47,6 +47,31 @@ apply to only one platform.
   the App Store build declares none. Store copy, privacy policy and support
   page are drafted under `docs/app-store/`.
 
+## 0.5.9 — 2026-10-01
+
+- Rebuilt the learning modules' control row as one shared labelled-cell card
+  (`ModuleControlCard` in `ModuleLayout.swift`) instead of ten near-identical
+  hand-rolled rows. Each control now sits in a cell with a small caps caption
+  (the ROOT caption style), the cells share the card width evenly and wrap to
+  balanced extra rows when they do not fit — never squashed, never bunched
+  left. The primary action (Play/Strum/Practise/…) and its Stop now form one
+  fixed unit in the last cell at one size in every module, instead of changing
+  size and position between modules. Triads' four stacked lines became one row;
+  Note association's four ragged sections became two balanced rows; Notes'
+  Play/Stop and Clear all were split apart (Clear is destructive and stays far
+  right).
+- iPad landscape (which hosts these Mac screens unchanged) now styles the
+  controls with Liquid Glass: the primary action is a tinted glass capsule with
+  a faint accent wash and accent text/icon (contrast ≥ 4.5:1 on the dark
+  backdrop), and every menu picker and secondary action is a plain glass
+  capsule. The Mac keeps its existing button and picker look. One
+  platform-conditional style in `ModuleLayout.swift`, so iPhone's scaffold
+  screens stay pixel-identical.
+- Added a `ModuleScreenSnapshotTests` harness that renders all ten screens at
+  the Mac's minimum detail width and a wide window, and a
+  `-IOSSnapshotSidebarClosed` launch argument so iPad landscape can be captured
+  with the sidebar open and closed.
+
 ## 0.5.8 — 2026-10-01
 
 - Fixed the Circle of Fifths spelling every flat-side key as sharps. The ring,

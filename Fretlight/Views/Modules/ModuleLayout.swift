@@ -16,6 +16,7 @@ struct FretboardLabelPicker: View {
             Text("Notes").tag(FretboardLabelMode.notes)
             Text("Numbers").tag(FretboardLabelMode.degrees)
         }
+        .labelsHidden()
         .fixedSize()
         .help("Show note names or the degrees used by this lesson")
     }
@@ -271,6 +272,431 @@ struct ModulePicker<Value: Hashable, Label: View>: View {
 }
 
 /// One figure with its caption — the web's `.stat-grid` cell.
+// MARK: - Control card
+
+/// One labelled cell in a module's control card: a small caps caption above
+/// the control, in the same style the ROOT/KEY picker captions already use.
+///
+/// This is the owner-driven fix for controls that used to bunch on the left:
+/// every control — menu pickers, toggle chips, the primary action — is now a
+/// cell with its own caption, and the cells share the card width evenly
+/// instead of huddling shrink-wrapped at the leading edge.
+struct ModuleControlCell<Content: View>: View {
+    let caption: String
+    var alignment: HorizontalAlignment = .leading
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: alignment, spacing: 7) {
+            Text(caption.uppercased())
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .top))
+    }
+}
+
+extension View {
+    /// Wraps a control in a labelled cell so call sites read as one line each.
+    func moduleControlCell(caption: String, alignment: HorizontalAlignment = .leading) -> some View {
+        ModuleControlCell(caption: caption, alignment: alignment) { self }
+    }
+}
+
+/// The one primary action a module owns (Play/Strum/Practise/Play interval/…).
+///
+/// It always sits in the *last* cell, at the card's trailing edge, at one
+/// consistent size — the owner noticed it changing size and position between
+/// modules. Its Stop sits right beside it in the same cell, so the two are one
+/// fixed unit rather than two buttons that drift apart.
+struct ModulePrimaryAction: View {
+    let title: String
+    var systemImage: String = "play.fill"
+    var disabled: Bool = false
+    let action: () -> Void
+    let stopAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: action) {
+                Label(title, systemImage: systemImage)
+                    .frame(minWidth: 132)
+            }
+            .modulePrimaryButton()
+            .disabled(disabled)
+
+            Button(action: stopAction) {
+                Label("Stop", systemImage: "stop.fill")
+            }
+            .moduleSecondaryButton()
+        }
+    }
+}
+
+/// A secondary action — Stop, Loop, Strum chord, Anticlockwise/Clockwise,
+/// Full neck — rendered as a plain glass capsule on iPad, the native bezel on
+/// the Mac.
+struct ModuleSecondaryAction: View {
+    let title: String
+    var systemImage: String? = nil
+    var tint: Color = .primary
+    var disabled: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let systemImage {
+                    Label(title, systemImage: systemImage)
+                } else {
+                    Text(title)
+                }
+            }
+            .moduleSecondaryButton(tint: tint)
+        }
+        .disabled(disabled)
+    }
+}
+
+/// The card shell every module's labelled control cells live in. Cells flow
+/// left-to-right into rows that each fill the card width (one row where they
+/// fit, wrapping to evenly-spaced extra rows where they do not, by each cell's
+/// measured ideal width); a `.moduleControlFullWidth()` cell spans a whole row.
+/// The `.spread` distribution keeps Notes' action row — Play/Stop leading,
+/// Clear all trailing, the middle empty — as its own deliberate exception.
+struct ModuleControlCard<Content: View>: View {
+    enum Distribution {
+        case balanced
+        case spread
+    }
+
+    var distribution: Distribution = .balanced
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        Group {
+            switch distribution {
+            case .balanced:
+                ModuleControlFlowLayout { content }
+            case .spread:
+                ModuleSpreadLayout { content }
+            }
+        }
+        .moduleOptionsCard()
+    }
+}
+
+/// Marks a cell as spanning its own full-width row (Note Association's chord
+/// chip row), instead of sharing a row with its neighbours.
+private struct ModuleFullWidthKey: LayoutValueKey {
+    static let defaultValue = false
+}
+
+extension View {
+    func moduleControlFullWidth() -> some View {
+        layoutValue(key: ModuleFullWidthKey.self, value: true)
+    }
+}
+
+/// Balanced flow: pack as many cells onto each row as fit by their measured
+/// ideal widths (full-width cells force a row break), then hand each row's
+/// cells the leftover space evenly, so every row fills the card without
+/// squashing anything and without bunching left.
+struct ModuleControlFlowLayout: Layout {
+    var hSpacing: CGFloat = 14
+    var vSpacing: CGFloat = 14
+
+    struct Cache {
+        var rows: [[Int]]
+        var rowWidths: [[CGFloat]]
+        var rowHeights: [CGFloat]
+        var totalHeight: CGFloat
+    }
+
+    func makeCache(subviews: Subviews) -> Cache {
+        compute(subviews: subviews, width: nil)
+    }
+
+    private func idealWidth(_ subview: LayoutSubview) -> CGFloat {
+        max(1, subview.sizeThatFits(.unspecified).width)
+    }
+
+    private func compute(subviews: Subviews, width: CGFloat?) -> Cache {
+        guard !subviews.isEmpty else {
+            return Cache(rows: [], rowWidths: [], rowHeights: [], totalHeight: 0)
+        }
+        let available = width ?? .infinity
+
+        // Greedy row packing by ideal widths; a full-width cell ends the row
+        // and gets a row to itself.
+        var rows: [[Int]] = []
+        var current: [Int] = []
+        var currentWidth: CGFloat = 0
+        for (index, subview) in subviews.enumerated() {
+            if subview[ModuleFullWidthKey.self] {
+                if !current.isEmpty { rows.append(current); current = []; currentWidth = 0 }
+                rows.append([index])
+                continue
+            }
+            let ideal = idealWidth(subview)
+            let added = ideal + (current.isEmpty ? 0 : hSpacing)
+            if available.isFinite, !current.isEmpty, currentWidth + added > available {
+                rows.append(current)
+                current = []
+                currentWidth = 0
+            }
+            current.append(index)
+            currentWidth += (current.count == 1 ? ideal : ideal + hSpacing)
+        }
+        if !current.isEmpty { rows.append(current) }
+
+        var rowWidths: [[CGFloat]] = []
+        var rowHeights: [CGFloat] = []
+        var totalHeight: CGFloat = 0
+        for row in rows {
+            let isFullWidthRow = row.count == 1 && subviews[row[0]][ModuleFullWidthKey.self]
+            var widths: [CGFloat] = []
+            var height: CGFloat = 0
+
+            if isFullWidthRow {
+                let w = available.isFinite ? available : idealWidth(subviews[row[0]])
+                widths = [w]
+                height = subviews[row[0]].sizeThatFits(ProposedViewSize(width: w, height: nil)).height
+            } else {
+                let ideals = row.map { idealWidth(subviews[$0]) }
+                let used = ideals.reduce(0, +) + hSpacing * CGFloat(row.count - 1)
+                let extra = available.isFinite ? max(0, available - used) / CGFloat(row.count) : 0
+                for (position, index) in row.enumerated() {
+                    let w = available.isFinite ? ideals[position] + extra : ideals[position]
+                    widths.append(w)
+                    height = max(height, subviews[index].sizeThatFits(ProposedViewSize(width: w, height: nil)).height)
+                }
+            }
+            rowWidths.append(widths)
+            rowHeights.append(height)
+            totalHeight += height
+        }
+        totalHeight += vSpacing * CGFloat(max(0, rows.count - 1))
+
+        return Cache(rows: rows, rowWidths: rowWidths, rowHeights: rowHeights, totalHeight: totalHeight)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        let computed = compute(subviews: subviews, width: proposal.width)
+        cache = computed
+        let width = proposal.width ?? computed.rowWidths.flatMap { $0 }.reduce(0, +)
+            + CGFloat(max(0, subviews.count - 1)) * hSpacing
+        return CGSize(width: width, height: computed.totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let computed = compute(subviews: subviews, width: bounds.width)
+        cache = computed
+        var y = bounds.minY
+        for (rowIndex, row) in computed.rows.enumerated() {
+            var x = bounds.minX
+            for (position, index) in row.enumerated() {
+                let cellWidth = computed.rowWidths[rowIndex][position]
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(width: cellWidth, height: computed.rowHeights[rowIndex])
+                )
+                x += cellWidth + hSpacing
+            }
+            y += computed.rowHeights[rowIndex] + vSpacing
+        }
+    }
+}
+
+/// Space-between flow for Notes' action row: the first cell leading, the last
+/// cell trailing, anything between distributed across the gap.
+struct ModuleSpreadLayout: Layout {
+    var hSpacing: CGFloat = 14
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let width = (proposal.width ?? 0).isFinite && (proposal.width ?? 0) > 0
+            ? proposal.width!
+            : sizes.reduce(0) { $0 + $1.width } + CGFloat(max(0, subviews.count - 1)) * hSpacing
+        let height = sizes.map(\.height).max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let height = sizes.map(\.height).max() ?? 0
+
+        if subviews.count == 1 {
+            subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.minY), anchor: .topLeading,
+                              proposal: ProposedViewSize(width: sizes[0].width, height: height))
+            return
+        }
+
+        subviews[0].place(at: CGPoint(x: bounds.minX, y: bounds.minY), anchor: .topLeading,
+                          proposal: ProposedViewSize(width: sizes[0].width, height: height))
+        let last = subviews.count - 1
+        subviews[last].place(at: CGPoint(x: bounds.maxX - sizes[last].width, y: bounds.minY), anchor: .topLeading,
+                             proposal: ProposedViewSize(width: sizes[last].width, height: height))
+
+        if subviews.count > 2 {
+            let firstRight = bounds.minX + sizes[0].width
+            let lastLeft = bounds.maxX - sizes[last].width
+            let slot = (lastLeft - firstRight) / CGFloat(subviews.count - 1)
+            for i in 1..<last {
+                let x = firstRight + slot * CGFloat(i) - sizes[i].width / 2
+                subviews[i].place(at: CGPoint(x: x, y: bounds.minY), anchor: .topLeading,
+                                  proposal: ProposedViewSize(width: sizes[i].width, height: height))
+            }
+        }
+    }
+}
+
+/// Wraps fixed-size chips (layer toggles) at their natural widths inside a
+/// control cell, so they never hyphenate or overflow when the cell is narrower
+/// than the row they'd form at full width.
+struct ModuleChipWrapLayout: Layout {
+    var hSpacing: CGFloat = 8
+    var vSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        // Report the widest single chip as the ideal, so a wrapping cell never
+        // inflates the control card's minimum column width — the chips wrap
+        // inside whatever width the card actually gives them.
+        let ideal = subviews.reduce(CGSize.zero) { acc, subview in
+            let size = subview.sizeThatFits(.unspecified)
+            return CGSize(width: max(acc.width, size.width), height: max(acc.height, size.height))
+        }
+        guard let width = proposal.width, width.isFinite else {
+            return ideal
+        }
+        return arrange(subviews: subviews, width: width).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(subviews: subviews, width: bounds.width)
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(x: bounds.minX + result.origins[index].x, y: bounds.minY + result.origins[index].y),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: result.sizes[index].width, height: result.sizes[index].height)
+            )
+        }
+    }
+
+    private func arrange(subviews: Subviews, width: CGFloat) -> (size: CGSize, origins: [CGPoint], sizes: [CGSize]) {
+        var origins: [CGPoint] = []
+        var sizes: [CGSize] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + vSpacing
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            sizes.append(size)
+            x += size.width + hSpacing
+            rowHeight = max(rowHeight, size.height)
+            totalWidth = max(totalWidth, x - hSpacing)
+        }
+        return (CGSize(width: totalWidth, height: y + rowHeight), origins, sizes)
+    }
+}
+
+// MARK: - Platform control styles
+
+/// The one place a module control decides its platform look.
+///
+/// The Mac keeps its `.borderedProminent` primary and native bezel/popup for
+/// everything else — the owner likes the current Mac look. iPad landscape
+/// hosts these same Mac screens unchanged (`IOSModuleScreen.usesMacLayout`),
+/// so *only there* do the controls need Liquid Glass (D-23): a tinted glass
+/// capsule for the primary action, a plain glass capsule for menu pickers and
+/// secondary actions. iPhone never instantiates these views (it uses the iOS
+/// scaffold), so `#if os(iOS)` is exactly "iPad" in practice.
+extension View {
+    /// The primary action as a tinted Liquid Glass capsule on iPad, the
+    /// established prominent button on the Mac.
+    @ViewBuilder
+    func modulePrimaryButton() -> some View {
+        #if os(iOS)
+        self.buttonStyle(ModuleGlassPrimaryButtonStyle())
+        #else
+        self.buttonStyle(.borderedProminent).tint(NotePalette.accent)
+        #endif
+    }
+
+    /// A secondary action as a plain glass capsule on iPad; identity on the
+    /// Mac, which already draws a native bezel for an unstyled `Button`.
+    @ViewBuilder
+    func moduleSecondaryButton(tint: Color = .primary) -> some View {
+        #if os(iOS)
+        self.buttonStyle(ModuleGlassSecondaryButtonStyle(tint: tint))
+        #else
+        self
+        #endif
+    }
+
+    /// A menu picker as a plain glass capsule on iPad; identity on the Mac,
+    /// which already draws a native popup.
+    @ViewBuilder
+    func moduleMenuPicker() -> some View {
+        #if os(iOS)
+        self
+            .tint(.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .glassEffect(in: .capsule)
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(iOS)
+/// Tinted Liquid Glass capsule for the primary action: a faint accent wash
+/// under a glass capsule with accent icon/text. `NotePalette.accent` on the
+/// dark backdrop is ~7.7:1 contrast, comfortably past the 4.5:1 floor, and it
+/// replaces `.glassProminent`'s full mint fill which overpowered every screen.
+struct ModuleGlassPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(NotePalette.accent)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(NotePalette.accent.opacity(0.12), in: Capsule())
+            .glassEffect(in: .capsule)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(FretworkMotion.press, value: configuration.isPressed)
+    }
+}
+
+/// Plain Liquid Glass capsule for secondary actions.
+struct ModuleGlassSecondaryButtonStyle: ButtonStyle {
+    var tint: Color = .primary
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.callout.weight(.medium))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .glassEffect(in: .capsule)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(FretworkMotion.press, value: configuration.isPressed)
+    }
+}
+#endif
+
 struct ModuleStat: View {
     let label: String
     let value: String

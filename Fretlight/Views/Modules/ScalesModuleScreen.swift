@@ -56,7 +56,7 @@ struct ScalesModuleScreen: View {
     }
 
     private func options(_ model: ScalesModuleModel) -> some View {
-        HStack(spacing: 16) {
+        ModuleControlCard {
             Picker("Scale", selection: Binding(
                 get: { model.quality },
                 set: { model.selectQuality($0) }
@@ -64,7 +64,10 @@ struct ScalesModuleScreen: View {
                 Text("Major").tag(OneOctaveScaleQuality.major)
                 Text("Natural minor").tag(OneOctaveScaleQuality.naturalMinor)
             }
+            .labelsHidden()
             .fixedSize()
+            .moduleMenuPicker()
+            .moduleControlCell(caption: "SCALE")
 
             Picker("Labels", selection: Binding(
                 get: { model.labelMode },
@@ -73,7 +76,10 @@ struct ScalesModuleScreen: View {
                 Text("Notes").tag(ScalesModuleModel.LabelMode.notes)
                 Text("Numbers").tag(ScalesModuleModel.LabelMode.degrees)
             }
+            .labelsHidden()
             .fixedSize()
+            .moduleMenuPicker()
+            .moduleControlCell(caption: "LABELS")
 
             Picker("Direction", selection: Binding(
                 get: { model.direction },
@@ -82,22 +88,20 @@ struct ScalesModuleScreen: View {
                 Text("Ascending").tag(ScalesModuleModel.Direction.ascending)
                 Text("Up and down").tag(ScalesModuleModel.Direction.upDown)
             }
+            .labelsHidden()
             .fixedSize()
+            .moduleMenuPicker()
+            .moduleControlCell(caption: "DIRECTION")
 
-            HStack(spacing: 12) {
-                if model.guidedSnapshot.status == .idle {
-                    Button { model.startGuided() } label: { Label("Practise", systemImage: "play.fill") }
-                        .buttonStyle(.borderedProminent)
-                        .tint(NotePalette.accent)
-                        .disabled(model.sequence.isEmpty)
-                } else {
-                    Button("Stop") { model.stopGuided() }
+            if model.guidedSnapshot.status != .idle {
+                HStack(spacing: 8) {
                     Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                        .moduleSecondaryButton()
                     Text("\(model.guidedSnapshot.tempoBpm) bpm")
                         .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
                     Button { _ = model.faster() } label: { Image(systemName: "hare") }
-
+                        .moduleSecondaryButton()
                     if let beat = model.guidedSnapshot.countInBeat {
                         Text("Count in… \(beat)")
                             .font(.callout.weight(.medium))
@@ -107,7 +111,16 @@ struct ScalesModuleScreen: View {
                             .font(.callout.monospacedDigit())
                     }
                 }
+                .moduleControlCell(caption: "TEMPO")
             }
+
+            ModulePrimaryAction(
+                title: "Practise",
+                disabled: model.sequence.isEmpty || model.guidedSnapshot.status != .idle,
+                action: { model.startGuided() },
+                stopAction: { model.stopGuided() }
+            )
+            .moduleControlCell(caption: "PLAY", alignment: .trailing)
         }
     }
 
