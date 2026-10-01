@@ -473,15 +473,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 2752L3B5JB;
 				ENABLE_STRICT_CONCURRENCY = complete;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info-iOS.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Delon Misic. MIT licensed.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar input to identify notes.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar to show the notes you play. Audio is analysed on this device and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -492,7 +493,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.app.ios;
 				PRODUCT_NAME = Fretwork;
 				SDKROOT = iphoneos;
@@ -510,15 +511,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 2752L3B5JB;
 				ENABLE_STRICT_CONCURRENCY = complete;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info-iOS.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fretwork;
 				INFOPLIST_KEY_CFBundleName = Fretwork;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Delon Misic. MIT licensed.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar input to identify notes.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Fretwork listens to your guitar to show the notes you play. Audio is analysed on this device and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -529,7 +531,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = org.fretwork.app.ios;
 				PRODUCT_NAME = Fretwork;
 				SDKROOT = iphoneos;

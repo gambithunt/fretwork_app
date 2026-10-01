@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import Observation
 
@@ -199,3 +200,5 @@ final class Phase1HarnessModel {
         rawCallbackCount = 0
     }
 }
+
+#endif

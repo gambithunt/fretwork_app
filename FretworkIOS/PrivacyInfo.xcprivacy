@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Shipped in the iOS bundle only: FretworkIOS/ is a synchronized root
+	     group on the iOS target, so this file never joins the Mac app. The
+	     declaration matches the listing: nothing is tracked and nothing is
+	     collected off-device. Audio is analysed on-device and discarded. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- PracticeStateStore and the module/settings restore path persist
+		     preferences with UserDefaults.standard. CA92.1: the app only
+		     reads and writes its own defaults. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<!-- CaptureSink times the capture callback with mach_absolute_time()
+		     and IOSAudioController measures the playback gate with
+		     ProcessInfo.systemUptime. Both are elapsed-time measurements
+		     only. 35F9.1: access system boot time to measure elapsed time. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- iOS-only partial Info.plist. `GENERATE_INFOPLIST_FILE = YES` merges
+	     the INFOPLIST_KEY_* build settings into this, exactly as the Mac's
+	     Config/Info.plist does for Sparkle. Keep the Mac file separate: its
+	     SU* keys must never reach the iOS bundle. -->
+	<!-- Fretwork uses no encryption beyond HTTPS, so the annual export-
+	     compliance question is answered once here rather than in App Store
+	     Connect. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>

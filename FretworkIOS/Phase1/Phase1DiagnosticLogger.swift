@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import os
 
@@ -121,3 +122,5 @@ final class Phase1DiagnosticLogger: @unchecked Sendable {
         FileHandle.standardError.write(Data((line + "\n").utf8))
     }
 }
+
+#endif

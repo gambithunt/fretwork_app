@@ -1,3 +1,4 @@
+#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -462,3 +463,5 @@ private final class BleedProbeRunner {
         FileHandle.standardError.write(Data((line + "\n").utf8))
     }
 }
+
+#endif

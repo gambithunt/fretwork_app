@@ -1,3 +1,4 @@
+#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -146,3 +147,5 @@ private struct Phase1TelemetrySection: View {
 #Preview {
     Phase1HarnessView()
 }
+
+#endif

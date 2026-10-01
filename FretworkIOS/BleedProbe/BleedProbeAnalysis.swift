@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Pure, hardware-free computations for the Phase 7 speaker-bleed probe.
@@ -218,3 +219,5 @@ enum BleedProbeAnalysis {
         return total
     }
 }
+
+#endif
