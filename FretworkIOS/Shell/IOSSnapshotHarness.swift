@@ -145,6 +145,15 @@ enum IOSSnapshotHarness {
         }
     }
 
+    /// The split view's initial selection (iPad), which the iPhone's push path
+    /// does not use. Module scenarios force their module so a locked module
+    /// still renders (the unlock gate lives in the list, not the detail);
+    /// everything else keeps the default Listen selection.
+    static var initialSelection: AppScreen? {
+        if let module = moduleScenario { return .module(module) }
+        return nil
+    }
+
     static var showsSettingsSheet: Bool { scenario == .settings }
     static var showsUnlockSheet: Bool {
         scenario == .unlockSheet || scenario == .unlockSheetLight
@@ -191,13 +200,17 @@ enum IOSSnapshotHarness {
         return forcedStatus
     }
 
-    static func requestLandscapeIfNeeded() {
-        guard forcesLandscape,
-              let scene = UIApplication.shared.connectedScenes
+    /// Requests the orientation the scenario needs. Landscape scenarios force
+    /// `.landscapeRight`; everything else forces `.portrait` so a previous
+    /// landscape run cannot leak into a portrait capture (the iPad simulator
+    /// keeps its orientation across app relaunches, unlike the phone's default).
+    static func requestOrientationIfNeeded() {
+        let mask: UIInterfaceOrientationMask = forcesLandscape ? .landscapeRight : .portrait
+        guard let scene = UIApplication.shared.connectedScenes
                   .compactMap({ $0 as? UIWindowScene })
                   .first
         else { return }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
     }
 }
 #endif

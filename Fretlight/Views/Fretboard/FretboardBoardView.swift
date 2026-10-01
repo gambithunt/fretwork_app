@@ -25,6 +25,11 @@ struct FretboardBoardView: View {
     var onHit: ((FretboardHit) -> Void)?
     var onLongPress: ((FretboardHit) -> Void)?
 
+    /// Grows every marker (dots, labels, gutter, grid dots, annotations) with
+    /// the board. `1` everywhere except an iPad neck that has grown past the
+    /// phone size; the iOS module scaffold sets it via the environment.
+    @Environment(\.fretworkFretboardScale) private var scale
+
     /// Long enough not to fire on a slow tap, short enough that removing a
     /// note does not feel like waiting.
     private static let longPressDuration = 0.45
@@ -56,8 +61,10 @@ struct FretboardBoardView: View {
     /// produced.
     private static let motion = Animation.spring(duration: 0.3, bounce: 0)
 
+    private var scaledMargins: BoardGeometry.Margins { margins.scaled(by: scale) }
+
     var body: some View {
-        BoardCanvas(frets: frets, tuning: tuning, flipped: flipped, margins: margins, showsLabels: showsLabels)
+        BoardCanvas(frets: frets, tuning: tuning, flipped: flipped, margins: scaledMargins, showsLabels: showsLabels, scale: scale)
             .overlay {
                 GeometryReader { proxy in
                     let geometry = BoardGeometry(
@@ -65,10 +72,10 @@ struct FretboardBoardView: View {
                         frets: frets,
                         strings: tuning.openMIDINotes.count,
                         flipped: flipped,
-                        margins: margins
+                        margins: scaledMargins
                     )
                     ZStack {
-                        OverlayLayer(overlays: overlays, dots: dots, geometry: geometry)
+                        OverlayLayer(overlays: overlays, dots: dots, geometry: geometry, scale: scale)
                         ForEach(dots) { dot in
                             let point = geometry.point(dot.position)
                             // Scale and opacity only now — no positional
@@ -81,7 +88,7 @@ struct FretboardBoardView: View {
                             // simultaneously was adding visual noise on top
                             // of what was mostly a rendering-cost problem
                             // (see `.drawingGroup()` below).
-                            FretboardDotView(dot: dot, pulse: pulses[dot.id] ?? 0)
+                            FretboardDotView(dot: dot.scaled(by: scale), pulse: pulses[dot.id] ?? 0)
                                 // Positioned by the transition's identity
                                 // state, not by a separate `.position` on top
                                 // of it — applying both places the dot twice
@@ -127,7 +134,7 @@ struct FretboardBoardView: View {
                     frets: frets,
                     strings: tuning.openMIDINotes.count,
                     flipped: flipped,
-                    margins: margins
+                    margins: scaledMargins
                 )
                 Color.clear
                     .contentShape(Rectangle())
@@ -183,6 +190,7 @@ private struct OverlayLayer: View {
     let overlays: [FretboardOverlay]
     let dots: [FretboardDot]
     let geometry: BoardGeometry
+    var scale: CGFloat = 1
 
     var body: some View {
         Canvas { context, _ in
@@ -192,14 +200,14 @@ private struct OverlayLayer: View {
                 switch overlay.kind {
                 case .group:
                     context.stroke(
-                        Path(roundedRect: boundingBox(of: points).insetBy(dx: -16, dy: -12), cornerRadius: 10),
+                        Path(roundedRect: boundingBox(of: points).insetBy(dx: -16 * scale, dy: -12 * scale), cornerRadius: 10 * scale),
                         with: .color(overlay.color),
-                        lineWidth: 1.5
+                        lineWidth: 1.5 * scale
                     )
                 case .sequence:
                     var path = Path()
                     path.addLines(points)
-                    context.stroke(path, with: .color(overlay.color), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    context.stroke(path, with: .color(overlay.color), style: StrokeStyle(lineWidth: 2 * scale, lineCap: .round, lineJoin: .round))
                 }
             }
         }

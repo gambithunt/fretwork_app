@@ -50,4 +50,14 @@ struct FretboardDot: Identifiable, Equatable {
         guard tuning.openMIDINotes.indices.contains(position.string) else { return nil }
         return PitchClass(tuning.openMIDINotes[position.string] + position.fret)
     }
+
+    /// The same dot at a different radius, for a board whose whole scale has
+    /// grown (an iPad neck filling a desk-sized pane). The label scales with
+    /// the radius through `FretboardDotView`, so scaling the dot scales the
+    /// whole marker.
+    func scaled(by factor: CGFloat) -> FretboardDot {
+        var copy = self
+        copy.radius = radius * factor
+        return copy
+    }
 }

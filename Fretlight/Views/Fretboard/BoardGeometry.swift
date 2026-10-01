@@ -24,6 +24,16 @@ struct BoardGeometry: Equatable {
         /// For a board that draws no labels of its own and can use its whole
         /// bounds — a compact chord diagram, say.
         static let none = Margins(leading: 0, trailing: 0, top: 0, bottom: 0)
+
+        /// The same margins grown by a board scale factor (an iPad neck).
+        func scaled(by factor: CGFloat) -> Margins {
+            Margins(
+                leading: leading * factor,
+                trailing: trailing * factor,
+                top: top * factor,
+                bottom: bottom * factor
+            )
+        }
     }
 
     let board: CGRect

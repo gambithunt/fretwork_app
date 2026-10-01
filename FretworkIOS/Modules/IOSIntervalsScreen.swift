@@ -33,6 +33,11 @@ private struct IOSIntervalsStage: View {
     let model: IntervalsModuleModel
     @State private var labelMode: FretboardLabelMode = .degrees
 
+    /// iPad draws the full 22-fret neck; the phone keeps the module's range.
+    private var boardFrets: Int {
+        IOSModuleBoard.frets(idiom: UIDevice.current.userInterfaceIdiom, moduleFrets: model.highestFret)
+    }
+
     private var dots: [FretboardDot] {
         labelMode == .notes
             ? model.dots.showingNoteNames(in: model.tuning)
@@ -64,7 +69,7 @@ private struct IOSIntervalsStage: View {
             neck: {
                 FretboardBoardView(
                     dots: dots,
-                    frets: model.highestFret,
+                    frets: boardFrets,
                     tuning: model.tuning,
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses,
@@ -94,8 +99,8 @@ private struct IOSIntervalsStage: View {
             isRunActive: false,
             guidedRunStepText: "",
             onTuningChange: { model.retune(to: $0) },
-            frets: model.highestFret,
-            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)
+            frets: boardFrets,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: boardFrets)
         )
         .onDisappear { model.stop() }
     }

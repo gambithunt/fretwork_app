@@ -32,6 +32,11 @@ private struct IOSOctavesStage: View {
     let model: OctavesModuleModel
     @State private var labelMode: FretboardLabelMode = .notes
 
+    /// iPad draws the full 22-fret neck; the phone keeps the module's range.
+    private var boardFrets: Int {
+        IOSModuleBoard.frets(idiom: UIDevice.current.userInterfaceIdiom, moduleFrets: model.highestFret)
+    }
+
     private var dots: [FretboardDot] {
         labelMode == .notes ? model.dots : model.dots.map { dot in
             var numbered = dot
@@ -62,7 +67,7 @@ private struct IOSOctavesStage: View {
             neck: {
                 FretboardBoardView(
                     dots: dots,
-                    frets: model.highestFret,
+                    frets: boardFrets,
                     tuning: model.tuning,
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses,
@@ -98,8 +103,8 @@ private struct IOSOctavesStage: View {
             isRunActive: false,
             guidedRunStepText: "",
             onTuningChange: { model.retune(to: $0) },
-            frets: model.highestFret,
-            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)
+            frets: boardFrets,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: boardFrets)
         )
         .onDisappear {
             model.stopRecall()

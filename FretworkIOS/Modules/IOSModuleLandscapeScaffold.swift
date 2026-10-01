@@ -220,6 +220,35 @@ enum IOSModulePortraitStrip {
     }
 }
 
+/// The fret count a module's neck draws. iPhone keeps the module's natural
+/// range (12/15/22) so a shape never sits past its own board (D-06); iPad
+/// shows the full 22-fret neck because its pane has room the phone does not.
+/// The module's models still place shapes within their own `highestFret` —
+/// only the *drawn* neck widens, matching the Mac's full-neck toggle.
+enum IOSModuleBoard {
+    static func frets(idiom: UIUserInterfaceIdiom, moduleFrets: Int) -> Int {
+        idiom == .pad ? 22 : moduleFrets
+    }
+}
+
+/// How much an iPad neck scales its dots, labels and gutter as it grows past
+/// the phone size. Driven by the tighter of the two dimensions so a marker can
+/// never outgrow its fret or string cell, and capped so it stays a sane size
+/// however large the pane gets.
+enum IOSBoardScale {
+    /// The iPhone-landscape 22-fret board, the size the neck's default
+    /// marker/gutter sizes were tuned to.
+    static let referenceWidth: CGFloat = 750   // 23 columns at ~32.6 pt
+    static let referenceHeight: CGFloat = 260  // the portrait strip height
+    static let cap: CGFloat = 1.75
+
+    static func scale(neckWidth: CGFloat, neckHeight: CGFloat, idiom: UIUserInterfaceIdiom) -> CGFloat {
+        guard idiom == .pad else { return 1 }
+        let growth = min(neckWidth / referenceWidth, neckHeight / referenceHeight)
+        return min(max(growth, 1), cap)
+    }
+}
+
 // MARK: - The primitive
 
 /// The one module layout for both orientations (D-11/D-18): a shared top row
@@ -270,11 +299,9 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     let focusFret: Int
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.fretworkIsLandscape) private var isLandscape
     @State private var showsDrawer = IOSSnapshot.showsModuleDrawer
     @State private var stripPosition = ScrollPosition(x: 0)
-
-    private var isLandscape: Bool { verticalSizeClass == .compact }
 
     init(
         title: String,
@@ -346,8 +373,19 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
             topRow
             HStack(alignment: .center, spacing: 20) {
                 companion
-                neck
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                GeometryReader { proxy in
+                    neck
+                        .environment(
+                            \.fretworkFretboardScale,
+                            IOSBoardScale.scale(
+                                neckWidth: proxy.size.width,
+                                neckHeight: proxy.size.height,
+                                idiom: UIDevice.current.userInterfaceIdiom
+                            )
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             bottomBand

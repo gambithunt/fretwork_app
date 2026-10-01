@@ -37,6 +37,11 @@ private struct IOSScalesStage: View {
     let state: AppState
     let model: ScalesModuleModel
 
+    /// iPad draws the full 22-fret neck; the phone keeps the module's range.
+    private var boardFrets: Int {
+        IOSModuleBoard.frets(idiom: UIDevice.current.userInterfaceIdiom, moduleFrets: model.highestFret)
+    }
+
     private var isRunActive: Bool {
         model.guidedSnapshot.status != .idle
     }
@@ -62,7 +67,7 @@ private struct IOSScalesStage: View {
             neck: {
                 FretboardBoardView(
                     dots: model.dots,
-                    frets: model.highestFret,
+                    frets: boardFrets,
                     tuning: model.tuning,
                     flipped: state.isFretboardFlipped
                 )
@@ -87,8 +92,8 @@ private struct IOSScalesStage: View {
             isRunActive: isRunActive,
             guidedRunStepText: guidedStepText,
             onTuningChange: { model.retune(to: $0) },
-            frets: model.highestFret,
-            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
+            frets: boardFrets,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: boardFrets)
         )
         .onDisappear { model.stopGuided() }
     }
