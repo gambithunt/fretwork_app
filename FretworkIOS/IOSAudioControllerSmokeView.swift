@@ -1,3 +1,4 @@
+#if DEBUG
 import Darwin
 import SwiftUI
 
@@ -131,3 +132,5 @@ private struct SmokeDetectionReadout: View {
             }
     }
 }
+
+#endif

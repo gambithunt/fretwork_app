@@ -1,12 +1,14 @@
 import SwiftUI
 
 /// iOS Settings (D-07): the instrument-and-room preferences that apply to
-/// every screen — sensitivity, tuning, board orientation, live-note and
-/// highlight toggles, and the usage-data opt-in.
+/// every screen — sensitivity, tuning, board orientation, and the live-note
+/// and highlight toggles.
 ///
 /// Deliberately absent (never disabled, just not here): device pickers,
-/// monitoring, rescan, and any device-path summary — none of those exist on
-/// iOS (D-07).
+/// monitoring, rescan, any device-path summary (D-07), and the anonymous
+/// usage-data opt-in. The App Store build declares "Data Not Collected", so
+/// the iOS app must not be able to reach the telemetry endpoint; the Mac
+/// keeps that opt-in because it is not distributed through the store.
 ///
 /// A native grouped `Form`. **No audio-rate reads here** — every bound value
 /// changes only when the person changes it (D-08).
@@ -57,14 +59,6 @@ struct IOSSettingsSheet: View {
                     Text("Learning")
                 } footer: {
                     Text("Show the detected note while using a lesson.")
-                }
-
-                Section {
-                    Toggle("Share anonymous usage data", isOn: $state.sharesAnonymousUsageData)
-                } header: {
-                    Text("Privacy")
-                } footer: {
-                    Text("At most once a day: app version and approximate country. Never audio, notes, devices, or identity.")
                 }
             }
             .navigationTitle("Settings")

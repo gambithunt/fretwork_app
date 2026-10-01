@@ -1,6 +1,24 @@
 # Changelog
 
-All notable changes to Fretwork are recorded here, newest first.
+All notable changes to Fretwork are recorded here, newest first. The Mac app
+and the iPhone/iPad app version independently; entries are labelled when they
+apply to only one platform.
+
+## 0.1.1 (iOS) — 2026-10-01
+
+- Prepared the iOS app for App Store submission. The release bundle now ships a
+  `PrivacyInfo.xcprivacy` declaring no tracking and no collected data (the only
+  required-reason APIs are `UserDefaults` CA92.1 and system boot time 35F9.1),
+  `Info.plist` answers the export-compliance question once
+  (`ITSAppUsesNonExemptEncryption = false`), and the microphone usage string
+  says plainly that audio is analysed on this device and never recorded or
+  sent. The DEBUG-only harnesses (Phase 1 capture, Phase 3 smoke, speaker-bleed
+  probe) are compiled out of Release, so a release archive carries no harness
+  symbols and no launch-argument surface; a stray developer `README.md` no
+  longer ships in the bundle. Removed the anonymous usage-data opt-in from the
+  iOS app: opt-in analytics is still data collection under Apple's rules, and
+  the App Store build declares none. Store copy, privacy policy and support
+  page are drafted under `docs/app-store/`.
 
 ## 0.5.8 — 2026-10-01
 

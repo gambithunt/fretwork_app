@@ -1,3 +1,4 @@
+#if DEBUG
 import Darwin
 import Foundation
 
@@ -73,3 +74,5 @@ final class Phase1SyntheticFeeder: @unchecked Sendable {
         nextFrame += UInt64(frameCount)
     }
 }
+
+#endif

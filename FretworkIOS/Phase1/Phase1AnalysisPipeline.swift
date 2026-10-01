@@ -1,3 +1,4 @@
+#if DEBUG
 import Darwin
 import Foundation
 
@@ -183,3 +184,5 @@ final class Phase1AnalysisPipeline: @unchecked Sendable {
         onUpdate?(current)
     }
 }
+
+#endif

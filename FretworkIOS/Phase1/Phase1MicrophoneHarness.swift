@@ -1,3 +1,4 @@
+#if DEBUG
 import AVFoundation
 import Darwin
 import Foundation
@@ -152,3 +153,5 @@ final class Phase1MicrophoneHarness: Phase1ManualCaptureSource {
         }
     }
 }
+
+#endif

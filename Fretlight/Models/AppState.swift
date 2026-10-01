@@ -137,7 +137,9 @@ final class AppState {
         didSet {
             guard sharesAnonymousUsageData != oldValue else { return }
             practiceState.update { $0.settings.sharesAnonymousUsageData = sharesAnonymousUsageData }
+            #if os(macOS)
             usageTelemetry.recordActiveDayIfEnabled(sharesAnonymousUsageData)
+            #endif
         }
     }
 
@@ -213,7 +215,12 @@ final class AppState {
     /// nothing playing.
     private static let signalPresenceFloorDB: Double = -50
     private static func decibels(_ level: Float) -> Double { 20 * log10(max(Double(level), 0.000_001)) }
+    /// Mac only. The iOS App Store build ships a PrivacyInfo manifest that
+    /// declares no collected data, so the iOS app must not reach the telemetry
+    /// endpoint at all — even from a restored opt-in from an earlier build.
+    #if os(macOS)
     private let usageTelemetry = UsageTelemetry()
+    #endif
     /// Which screen the shell is showing. Plain view state that happens to
     /// live on the one `@Observable` owner, per `CLAUDE.md` — not persisted:
     /// the web app deliberately always opens on home rather than restoring the
@@ -328,7 +335,9 @@ final class AppState {
         applySensitivity()
         // Property observers do not run for assignments during `init`, so an
         // existing opt-in needs its one daily pulse requested explicitly.
+        #if os(macOS)
         usageTelemetry.recordActiveDayIfEnabled(sharesAnonymousUsageData)
+        #endif
     }
 
     /// Builds the Notes module's model, wired to this app's persisted state and

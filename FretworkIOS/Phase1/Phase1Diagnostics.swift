@@ -1,3 +1,4 @@
+#if DEBUG
 import Darwin
 import Foundation
 
@@ -138,3 +139,5 @@ enum Phase1ProcessMetrics {
         return Phase1DiagnosticFormatter.cpuPercent(scaledUsage: totalScaledUsage)
     }
 }
+
+#endif
