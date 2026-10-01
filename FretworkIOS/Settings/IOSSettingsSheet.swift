@@ -80,6 +80,19 @@ struct IOSSettingsSheet: View {
                 } footer: {
                     Text(unlockStore.statusMessage ?? "Restore the one-time unlock if you already bought it.")
                 }
+
+                #if DEBUG
+                Section {
+                    Toggle("Unlock all modules", isOn: Binding(
+                        get: { unlockStore.developerUnlockAll },
+                        set: { unlockStore.developerUnlockAll = $0 }
+                    ))
+                } header: {
+                    Text("Developer")
+                } footer: {
+                    Text("Debug builds only. Not present in the App Store build.")
+                }
+                #endif
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

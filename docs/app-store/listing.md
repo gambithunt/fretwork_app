@@ -21,10 +21,10 @@ Length: 30.
 ## Promotional text (≤ 170)
 
 ```
-Point your phone at your guitar and watch every note land on the fretboard. Ten bite-sized lessons explain why. Analysed on your device — no account, no subscription.
+Point your phone at your guitar and watch every note land on the fretboard. Ten bite-sized lessons explain why. On-device, no account. Pay once, yours forever.
 ```
 
-Length: 166 of 170.
+Length: 159 of 170.
 
 ## Description (≤ 4000)
 
@@ -44,7 +44,7 @@ WHAT YOU GET FOR FREE
   position-aware fretboard.
 • Notes on the fretboard — the foundation lesson: where every note lives.
 
-ONE-TIME UNLOCK
+ONE-TIME UNLOCK — PAY ONCE, YOURS FOREVER
 A single one-time purchase opens the other nine learning modules. There is no
 subscription and nothing renews.
 
@@ -129,7 +129,7 @@ Apple ID, forever.
   Unlock the nine advanced guitar lessons
   ```
 
-- **Price:** Tier for **US$6.99**.
+- **Price:** Tier for **US$19.99**.
 
 The free tier is Listen and Notes; the paid unlock is the other nine. Restore
 Purchases must be reachable from the paywall and from Settings.

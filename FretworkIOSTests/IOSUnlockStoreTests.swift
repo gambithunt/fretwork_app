@@ -43,7 +43,7 @@ final class IOSUnlockStoreTests: XCTestCase {
         let gateway = FakeUnlockGateway()
         let store = IOSUnlockStore(gateway: gateway)
         await store.loadProduct()
-        XCTAssertEqual(store.displayPrice, "$6.99")
+        XCTAssertEqual(store.displayPrice, "$19.99")
 
         await store.purchase()
         XCTAssertTrue(store.isUnlocked)
@@ -130,7 +130,7 @@ final class IOSUnlockStoreTests: XCTestCase {
 private final class FakeUnlockGateway: IOSUnlockStoreGateway {
     var display: IOSUnlockProductDisplay? = IOSUnlockProductDisplay(
         displayName: "Fretwork Unlock",
-        displayPrice: "$6.99"
+        displayPrice: "$19.99"
     )
     var entitledIDs: [String] = []
     var purchaseResult: Result<IOSUnlockPurchaseResult, Error> = .success(.success)

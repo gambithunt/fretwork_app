@@ -82,7 +82,34 @@ final class IOSUnlockStore {
 
     init(gateway: any IOSUnlockStoreGateway = IOSStoreKitGateway()) {
         self.gateway = gateway
+        #if DEBUG
+        // Applied explicitly: a property observer does not fire for a value
+        // assigned during init (CLAUDE.md), so restoring the override would
+        // otherwise leave the app locked until the switch was toggled.
+        if developerUnlockAll { isUnlocked = true }
+        #endif
     }
+
+    #if DEBUG
+    /// Developer-only override that unlocks every module without a purchase,
+    /// for builds installed outside Xcode's Run action, where the StoreKit
+    /// configuration file is not in play and the product may not exist in App
+    /// Store Connect yet. Compiled out of Release entirely.
+    var developerUnlockAll: Bool = UserDefaults.standard.bool(forKey: IOSUnlockStore.developerUnlockKey) {
+        didSet {
+            guard developerUnlockAll != oldValue else { return }
+            UserDefaults.standard.set(developerUnlockAll, forKey: Self.developerUnlockKey)
+            if developerUnlockAll {
+                isUnlocked = true
+            } else {
+                isUnlocked = false
+                Task { await refreshEntitlements() }
+            }
+        }
+    }
+
+    private static let developerUnlockKey = "debug.developerUnlockAll"
+    #endif
 
     /// Starts the lifetime transaction listener. Call once at app launch.
     func start() {
