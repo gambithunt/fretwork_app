@@ -2,17 +2,27 @@
 
 ## Scope
 
-Fretwork: a macOS SwiftUI app (not iOS) that captures guitar input, monitors it
-live to chosen output speakers/headphones, and shows detected notes on a
-22-fret fretboard. Swift 6, strict concurrency enabled, macOS 14+ only.
+Fretwork: two native SwiftUI apps built from one repository — a macOS app that
+captures guitar input, monitors it live to chosen output speakers/headphones,
+and shows detected notes on a 22-fret fretboard, and a universal iPhone/iPad
+app (iOS/iPadOS 26+) that captures the built-in microphone, analyses on device,
+and shows the same board and the same learning modules. Swift 6, strict
+concurrency enabled, macOS 14+.
 
-Naming note: the Xcode project/target/scheme are still named `Fretlight`
-(original name); the product/display name and Swift module are `Fretwork`
-(renamed later). `@testable import Fretwork` in tests, not `Fretlight`.
+Naming note: the Xcode project, its Mac target and Mac scheme are still named
+`Fretlight` (original name); the product/display name and Swift module are
+`Fretwork` (renamed later). The iOS target/scheme are `Fretwork-iOS` (bundle
+`org.fretwork.app.ios`). `@testable import Fretwork` in tests, not `Fretlight`.
 
 Layout:
 - `Fretlight/Audio/` — Core Audio plumbing: dual-engine capture/playback,
   ring buffers, device enumeration/watching, sensitivity mapping.
+- `FretworkIOS/` — the iOS-only target. `Audio/` is `AVAudioSession`/`AVAudioEngine`
+  capture + sample playback; `Listen/`, `Modules/`, `Shell/` are the phone UI.
+  `BleedProbe/`, `Debug/`, `Phase1/` and the snapshot harness are `#if DEBUG`
+  and must stay that way — a Release archive must contain none of their symbols.
+  Synchronized root group, so `.md`/`.xcprivacy` files there land **flat** in
+  the iOS bundle; ship nothing but resources that belong in the app.
 - `Fretlight/Pitch/` — pure DSP/logic, no Core Audio: YIN pitch detection,
   frequency→note mapping, fretboard-position resolution.
 - `Fretlight/Theory/` — music theory, ported from the web app at
@@ -32,17 +42,24 @@ Layout:
    processes first — a leftover `Fretwork.app`/`Fretlight.app` process from a
    previous run can hang the test-host launch with no clear error:
    `pkill -9 -f "Fretwork.app/Contents/MacOS|Fretlight.app/Contents/MacOS"`
-3. **Smoke-test a runtime/audio change**: launch the built binary directly in
+3. **iOS build/test**: `xcodebuild -project Fretlight.xcodeproj -scheme
+   Fretwork-iOS -destination 'platform=iOS Simulator,name=iPhone 17' build` (or
+   `test`). A Release archive-audit build is `-configuration Release
+   -destination 'generic/platform=iOS' build`. Install on a trusted,
+   Developer-Mode device with `xcrun devicectl device install app --device
+   <UDID> <path>/Fretwork.app`, then `xcrun devicectl device process launch
+   --device <UDID> --console org.fretwork.app.ios`.
+4. **Smoke-test a runtime/audio change**: launch the built binary directly in
    the background, sample `ps -p <pid> -o pid,pcpu,time` twice a few seconds
    apart (CPU should be stable, not climbing — a pegged core signals a
    busy-spin bug), and check its stdout/stderr for `-10877` or other
    `kAudioUnitErr_*`/Core Audio errors. Always `pkill` the process when done;
    check `ps aux | grep Fretwork` first since old runs accumulate.
-4. **Measuring SwiftUI layout without a real display**: write a throwaway
+5. **Measuring SwiftUI layout without a real display**: write a throwaway
    `swiftc` harness that builds `NSHostingView(rootView:)` around the view in
    question and reads `.fittingSize`. This is how every `minWidth`/`minHeight`
    in `FretworkApp.swift` was derived — measured, never guessed.
-5. **Seeing a transient on screen** (a jolt at launch, a janky animation):
+6. **Seeing a transient on screen** (a jolt at launch, a janky animation):
    screen recording is not granted here, so `screencapture`/`CGWindowList`
    return "could not create image from display". Capture the app from *inside*
    the process instead: a `#if DEBUG` task that walks `NSApp.windows` for the
@@ -60,7 +77,7 @@ Layout:
    the mouse-up to the gesture, so a `LongPressGesture` fires 450ms later and
    undoes what the tap did. Post a `Notification` the screen listens for in
    DEBUG and wrap the call in the same `withAnimation` the gesture uses.
-6. **Isolating a Core Audio error from a single console-log line**: don't
+7. **Isolating a Core Audio error from a single console-log line**: don't
    trust one snapshot — `-10877` and friends can come from several unrelated
    layers (device HAL, an unowned playback graph, plain CPU starvation).
    Reproduce it in isolation first: an offline/manual-rendering
@@ -98,6 +115,12 @@ Layout:
 | Placing a view that also carries a `.transition(.modifier(...))` | Let the transition's identity state position it, and nothing else | Adding `.position` on top. Both apply, the dot lands where neither asked, and it is invisible in a static reading of the code |
 | Aligning recorded samples on their attack | Re-measure the onset from the audio at build time (`scripts/build-sample-library.sh`) | Trusting the mark the recorder wrote. A noise-floor-derived threshold fires late on a soft attack, so a fixed rewind lands *inside* the transient — measured across 138 real takes, onsets ranged 0–43 ms against a nominal 15 |
 | Choosing a lossy codec for sampled audio | Decode both builds back to PCM, correlate to find the offset, and check it is 0 before comparing anything else | Judging on bitrate or on an SNR figure alone. Encoder priming shifting the attack is what disqualifies a codec for a sampled instrument, and an SNR computed at the wrong offset hides it |
+| The iOS capture primitive | `AVAudioSinkNode` (`CaptureSink`), whose receiver block is built in a `nonisolated` init | `installTap` — measured on an iPhone 14 Pro Max it delivers fixed ~100 ms chunks (~10/s) regardless of the requested buffer size, while the sink delivers ~23 ms (~44/s); and a block written in an isolated context carries an executor check and traps on the first realtime callback |
+| The iOS session while listening | `.playAndRecord` / `.measurement` / `[.defaultToSpeaker]`, activated around the capture run | Leaving the category at `.playback`; and never opening a capture session merely to play a lesson sample — `IOSAudioGraphLeg.outputOnly` exists so a module needs no mic grant |
+| Audible monitoring on iOS | None. Analysis does not need it | Routing the mic to the phone speaker — it recaptures itself and feeds back (unlike the Mac's chosen output) |
+| Sample playback on iOS, whose output the same mic hears | Gate detection from a sample's start until 150 ms past its nominal end (`IOSAudioController`) | Gating on a fixed multi-second hold, which would mute the player's next note; re-measure if the detector window or playback changes |
+| A Release iOS bundle | A separate partial `Config/Info-iOS.plist` (`ITSAppUsesNonExemptEncryption=NO`) and a `FretworkIOS/PrivacyInfo.xcprivacy` declaring no tracking and no collected data | Reusing the Mac's `Config/Info.plist`, which carries Sparkle's `SU*` keys, or shipping the DEBUG launch-argument views. Prove it with `strings`/`nm` over the built binary, not by reading the switch |
+| The iOS App Store build and anonymous usage telemetry | The iOS target cannot reach the telemetry endpoint: the opt-in is Mac-only and the `AppState` calls are `#if os(macOS)` | Shipping the opt-in on iOS while declaring "Data Not Collected" — opt-in anonymous analytics is still data collection under Apple's rules |
 
 ## Patterns
 
