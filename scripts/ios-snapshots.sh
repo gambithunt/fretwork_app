@@ -33,8 +33,10 @@ for SCEN in "${SCENARIOS[@]}"; do
   # launch arguments, so a re-launch never carries a previous run's state.
   xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
   xcrun simctl launch "$UDID" "$BUNDLE" "$SCEN" >/dev/null
-  # The harness pops back / requests landscape at ~2s; give it 4 to settle.
-  sleep 4
+  # The harness pops back / requests landscape at ~2s, and module scenarios
+  # await sample-playback readiness (the 138-note decode + output-only graph)
+  # before settling; give it 8s so the primary action renders enabled.
+  sleep 8
   xcrun simctl io "$UDID" screenshot "$OUT/${NAME}.png" >/dev/null
 done
 xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true

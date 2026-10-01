@@ -83,6 +83,14 @@ private struct IOSNoteAssociationStage: View {
                 disabled: isRunActive || model.focusedDegree == 6,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectDegree(model.focusedDegree + 1) } }
             ),
+            primaryAction: .runToggle(
+                title: "Play progression",
+                accessibilityLabel: "Play progression",
+                isRunActive: isRunActive,
+                disabled: !isRunActive && (model.progressionChords.isEmpty || !state.isSamplePlaybackReady),
+                start: { model.startProgression() },
+                stop: { model.stopEverything() }
+            ),
             drawerTitle: "Key & layers",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -226,28 +234,15 @@ private struct IOSNoteAssociationDrawer: View {
 
             IOSModulePlaybackNotice(state: state)
 
-            HStack(spacing: 12) {
-                Button {
-                    if isRunActive { model.stopEverything() } else { model.startProgression() }
-                } label: {
-                    Label(isRunActive ? "Stop" : "Play progression", systemImage: isRunActive ? "stop.fill" : "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.glassProminent)
-                .tint(isRunActive ? .red : NotePalette.accent)
-                .disabled(!isRunActive && (model.progressionChords.isEmpty || !state.isSamplePlaybackReady))
-
-                Button {
-                    model.strumChord()
-                } label: {
-                    Label("Strum chord", systemImage: "guitars")
-                }
-                .buttonStyle(.glass)
-                .disabled(isRunActive || model.chord == nil || !state.isSamplePlaybackReady)
-
-                Button("Stop") { model.stopEverything() }
-                    .buttonStyle(.glass)
+            // The band's ▶ Play progression / ■ Stop is the primary action;
+            // strumming the current chord stays here as a secondary control.
+            Button {
+                model.strumChord()
+            } label: {
+                Label("Strum chord", systemImage: "guitars")
             }
+            .buttonStyle(.glass)
+            .disabled(isRunActive || model.chord == nil || !state.isSamplePlaybackReady)
         }
     }
 

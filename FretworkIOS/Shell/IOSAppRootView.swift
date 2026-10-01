@@ -24,6 +24,10 @@ struct IOSAppRootView: View {
     @State private var unlockStore: IOSUnlockStore
     @State private var unlockTarget: LearningModule?
     @State private var showsUnlockSheet = IOSSnapshot.showsUnlockSheet
+    /// The iPad split view's sidebar state; the snapshot harness collapses it
+    /// for the sidebar-closed capture. `.automatic` everywhere else.
+    @State private var columnVisibility: NavigationSplitViewVisibility =
+        IOSSnapshot.collapsesSidebar ? .detailOnly : .automatic
     #if DEBUG
     @State private var sessionLogger: SessionLogger?
     #endif
@@ -82,6 +86,10 @@ struct IOSAppRootView: View {
                     // its setting was on; mirror that so iPad module shots
                     // exercise the same capsule.
                     appState.showsLiveNoteOnModules = true
+                    // A module snapshot must show its primary action enabled:
+                    // wait until sample playback is actually ready before the
+                    // capture settles (the module screens request it lazily).
+                    await IOSSnapshot.awaitSamplePlaybackReady(appState)
                 }
                 #endif
                 await unlockStore.refreshEntitlements()

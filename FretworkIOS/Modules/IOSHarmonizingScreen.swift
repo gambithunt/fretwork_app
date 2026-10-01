@@ -78,6 +78,12 @@ private struct IOSHarmonizingStage: View {
                 disabled: model.degree == 6,
                 action: { withAnimation(FretworkMotion.gravity) { model.selectDegree(model.degree + 1) } }
             ),
+            primaryAction: .primary(
+                title: "Play chord",
+                accessibilityLabel: "Play chord",
+                disabled: model.voicing == nil || !state.isSamplePlaybackReady,
+                action: { model.strum() }
+            ),
             drawerTitle: "Key & chord",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -125,21 +131,6 @@ private struct IOSHarmonizingDrawer: View {
 
                 StandardTuningNotice(tuning: state.tuning, what: "These voicings")
                 IOSModulePlaybackNotice(state: state)
-
-                HStack(spacing: 12) {
-                    Button {
-                        model.strum()
-                    } label: {
-                        Label("Play chord", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(NotePalette.accent)
-                    .disabled(model.voicing == nil || !state.isSamplePlaybackReady)
-
-                    Button("Stop") { model.stop() }
-                        .buttonStyle(.glass)
-                }
 
                 explanation
             }

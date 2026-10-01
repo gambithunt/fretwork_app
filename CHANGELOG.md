@@ -4,6 +4,26 @@ All notable changes to Fretwork are recorded here, newest first. The Mac app
 and the iPhone/iPad app version independently; entries are labelled when they
 apply to only one platform.
 
+## 0.3.0 (iOS) — 2026-10-01
+
+- iPad landscape Listen follows the Mac Listen: the note readout + cents gauge
+  at the top, the neck at Mac proportions (the same ~43pt string spacing and
+  scale-1 dots as the Mac and the hosted module screens — a fixed 260pt neck
+  instead of stretching six strings across ~1000pt), and the input meter at
+  the bottom. The landscape top bar drops the back chevron (Listen is a
+  top-level sidebar destination) and the duplicate live-note capsule.
+- One primary action on the iOS scaffold: every module's Play/Strum/Practise
+  lives in the trailing corner of the bottom band, one size (44pt tall,
+  min 132pt wide, `.body` semibold), rendered through the shared
+  `IOSModulePrimaryAction` tinted-glass capsule (accent wash, accent text,
+  contrast ~9.8:1) instead of a bright filled button. Stop lands in the same
+  place via the in-place D-27 toggle. Applies to iPhone in both orientations
+  and iPad portrait.
+- Removed the iPad-only height-driven board scaling (`IOSBoardScale`): iPad
+  landscape now hosts the Mac screens (scale 1), so nothing else needed it.
+- iPad scenes declare `UIRequiresFullScreen` so a full-screen tuner app can
+  honour programmatic orientation.
+
 ## 0.2.1 (iOS) — 2026-10-01
 
 - iPad landscape now hosts the shared Mac module screens unchanged, so a

@@ -4,9 +4,16 @@ import SwiftUI
 /// The iOS Listen screen.
 ///
 /// Portrait is a pure tuner (D-16): no fretboard — just the note/chord
-/// readout, cents·Hz, input level, history and a quiet rotate hint. Landscape
-/// is a single native chrome row (back, Listening pill, live-note pill,
-/// segmented, gear) over the full 22-fret neck (D-17, D-22).
+/// readout, cents·Hz, input level, history and a quiet rotate hint.
+///
+/// Landscape follows the Mac Listen (reference only): the note readout +
+/// cents gauge, then the neck at Mac proportions (the same string spacing and
+/// dot size as the Mac and the hosted module screens — a fixed 260pt height,
+/// never stretched to fill the pane), then the input meter — one top-aligned
+/// stack with consistent spacing, no bottom pinning. The top bar is a single
+/// chrome row: Listening pill, detection segmented, gear — no back chevron
+/// (Listen is a top-level sidebar destination on iPad) and no duplicate
+/// live-note capsule (the readout below shows the same thing).
 ///
 /// **Audio-rate reads live only in the small leaf views below.** The parent
 /// body reads `detectionMode` (changes on tap), orientation and the
@@ -18,7 +25,6 @@ struct IOSListenScreen: View {
 
     @Environment(\.fretworkIsLandscape) private var isLandscape
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -88,17 +94,34 @@ struct IOSListenScreen: View {
     // MARK: - Landscape
 
     private var landscape: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 12) {
             landscapeTopBar
             statusBanner
             startListeningControl
+            // Mac Listen's order: readout + cents gauge up top, the neck at
+            // Mac proportions in the middle, the input meter at the bottom.
+            IOSLandscapeTunerSection(state: state)
             IOSBoardLeaf(state: state)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity)
+                .frame(height: IOSListenBoard.height)
+            IOSLandscapeLevelSection(state: state)
         }
         .ignoresSafeArea(.container, edges: .top)
         .padding(.top, 12)
         .padding(.horizontal, 16)
         .padding(.bottom, 12)
+        // Fill the window and pin the stack to the top, so the backdrop covers
+        // the whole pane and the content sits under the top bar instead of
+        // floating vertically centred with black bands above and below.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The neck's fixed landscape height: the same 260pt floor the Mac Listen
+    /// and the hosted module screens use, so six strings keep the Mac's
+    /// ~43pt spacing and the dots stay scale-1 — never stretched to fill the
+    /// tall iPad pane (the "too fat vertically" fix).
+    private enum IOSListenBoard {
+        static let height: CGFloat = 260
     }
 
     /// The single landscape chrome row, drawn as content (not toolbar items).
@@ -107,27 +130,12 @@ struct IOSListenScreen: View {
     private var landscapeTopBar: some View {
         GlassEffectContainer(spacing: 12) {
             HStack(spacing: 12) {
-                landscapeBackButton
                 IOSLandscapeListeningPill(state: state)
-                Spacer(minLength: 0)
-                liveNotePill
                 Spacer(minLength: 0)
                 detectionModePicker
                 landscapeGearButton
             }
         }
-    }
-
-    private var landscapeBackButton: some View {
-        Button {
-            dismiss()
-        } label: {
-            Image(systemName: "chevron.left")
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .controlSize(.large)
-        .accessibilityLabel("Back")
     }
 
     private var landscapeGearButton: some View {
@@ -140,15 +148,6 @@ struct IOSListenScreen: View {
         .buttonBorderShape(.circle)
         .controlSize(.large)
         .accessibilityLabel("Settings")
-    }
-
-    @ViewBuilder
-    private var liveNotePill: some View {
-        if state.detectionMode == .notes {
-            IOSLandscapeNotePill(state: state)
-        } else {
-            IOSLandscapeChordPill(state: state)
-        }
     }
 
     private var headerRow: some View {
@@ -367,73 +366,24 @@ private struct IOSLandscapeListeningPill: View {
     }
 }
 
-/// Centred live-note pill for the landscape nav bar (Notes mode): note name +
-/// octave in a pitch-class-tinted capsule with cents inline — green when
-/// |cents| ≤ 5, neutral otherwise, an em-dash when silent. Owns the `display`
-/// read.
-private struct IOSLandscapeNotePill: View {
+/// Landscape readout leaf: the Mac's exact `TunerPanel` (note readout + cents
+/// gauge), owning the audio-rate `display`/`chordDisplay` reads so the
+/// landscape body stays inert (D-08).
+private struct IOSLandscapeTunerSection: View {
     let state: AppState
 
     var body: some View {
-        let note = state.display.note
-        let tint = note.map { NotePalette.color(for: $0.name) } ?? Color.white.opacity(0.14)
-        let centsColor: Color = IOSReadoutFormat.centsTint(note?.cents) == .inTune ? .green : .secondary
-
-        HStack(spacing: 6) {
-            if note != nil {
-                Text(IOSReadoutFormat.noteLabel(note))
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Text(IOSReadoutFormat.centsText(note?.cents))
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(centsColor)
-            } else {
-                Text("—")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(tint.opacity(0.28)))
-        .overlay(Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 1))
-        .contentTransition(.numericText())
-        .animation(.easeInOut(duration: 0.2), value: note?.midiNote)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(note.map { "Live note \($0.name)\($0.octave)" } ?? "Listening for a note")
+        TunerPanel(mode: state.detectionMode, display: state.display, chord: state.chordDisplay)
     }
 }
 
-/// Centred live-note pill for the landscape nav bar (Chords mode): the chord
-/// name in a root-tinted capsule, an em-dash when silent. Owns the
-/// `chordDisplay` read.
-private struct IOSLandscapeChordPill: View {
+/// Landscape input-meter leaf: the Mac's exact `InputLevelPanel`, owning the
+/// level read for the active mode.
+private struct IOSLandscapeLevelSection: View {
     let state: AppState
 
     var body: some View {
-        let chord = state.chordDisplay.chord
-        let tint = chord.map { NotePalette.color(for: $0.root) } ?? Color.white.opacity(0.14)
-
-        HStack(spacing: 6) {
-            if chord != nil {
-                Text(IOSReadoutFormat.chordLabel(chord))
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            } else {
-                Text("—")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(tint.opacity(0.28)))
-        .overlay(Capsule().strokeBorder(tint.opacity(0.4), lineWidth: 1))
-        .animation(.easeInOut(duration: 0.2), value: chord?.name)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(chord.map { "Live chord \($0.name)" } ?? "Listening for a chord")
+        InputLevelPanel(level: state.detectionMode == .notes ? state.display.level : state.chordDisplay.level)
     }
 }
 

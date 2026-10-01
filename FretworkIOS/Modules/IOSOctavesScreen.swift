@@ -95,6 +95,12 @@ private struct IOSOctavesStage: View {
                 disabled: isNavDisabled,
                 action: { withAnimation(FretworkMotion.gravity) { model.moveAnchor(by: 1) } }
             ),
+            primaryAction: .primary(
+                title: "Hear octave",
+                accessibilityLabel: "Hear octave",
+                disabled: model.currentShape == nil || !state.isSamplePlaybackReady,
+                action: { model.hearOctave() }
+            ),
             drawerTitle: "Root & recall",
             drawerSystemImage: "slider.horizontal.3",
             drawer: {
@@ -140,20 +146,7 @@ private struct IOSOctavesDrawer: View {
                     FretboardLabelPicker(selection: $labelMode)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Play")
-                        .font(.headline)
-                    Button {
-                        model.hearOctave()
-                    } label: {
-                        Label("Hear octave", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .tint(NotePalette.accent)
-                    .disabled(model.currentShape == nil || !state.isSamplePlaybackReady)
-                    IOSModulePlaybackNotice(state: state)
-                }
+                IOSModulePlaybackNotice(state: state)
 
                 recallChallenge
 

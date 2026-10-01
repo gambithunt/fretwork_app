@@ -18,12 +18,18 @@ enum IOSModuleRunDecision {
 
 /// One corner control of the bottom band.
 ///
-/// A `nil` `title` renders the icon-only glass circle the ‹ › step arrows and
-/// the icon actions use (Notes' Clear/Play all, Triads Paths' play/stop); a
-/// non-nil `title` renders a labelled prominent button (Scales' ▶ Practise).
-/// `nil` corner slots are simply not drawn (Scales has no trailing control).
-/// During a run the module disables the non-start corners and turns the start
-/// corner into ■ Stop — the scaffold renders whatever it is given, unchanged.
+/// One corner control of the bottom band.
+///
+/// - `step` is the icon-only glass circle (the ‹ › arrows, Notes' Clear).
+/// - `runToggle` is a labelled start action that becomes ■ Stop in place
+///   while a run is active (D-27 revised) — the primary action for run
+///   modules (Scales, Triads Paths, Pentatonic, Note association).
+/// - `primary` is a labelled play-once action (Strum, Play all, Play chord…)
+///   with no run, rendered at the same size as every other primary action.
+///
+/// All labelled actions render through `IOSModulePrimaryAction`, so every
+/// module's Play/Strum/Practise is one size and one placement (the trailing
+/// corner), never sized by the module itself.
 struct IOSModuleBandAction {
     let title: String?
     let systemImage: String
@@ -50,6 +56,24 @@ extension IOSModuleBandAction {
         )
     }
 
+    /// A labelled play-once primary action (Strum, Play all, Play chord…)
+    /// with no run to stop — the sound ends on its own.
+    static func primary(
+        title: String,
+        accessibilityLabel: String,
+        disabled: Bool,
+        systemImage: String = "play.fill",
+        action: @escaping () -> Void
+    ) -> IOSModuleBandAction {
+        IOSModuleBandAction(
+            title: title,
+            systemImage: systemImage,
+            accessibilityLabel: accessibilityLabel,
+            disabled: disabled,
+            action: action
+        )
+    }
+
     /// A labelled corner whose text/icon flip between a start action and the
     /// ■ Stop that replaces it in place while a run is active (D-27 revised).
     static func runToggle(
@@ -67,6 +91,46 @@ extension IOSModuleBandAction {
             disabled: disabled,
             action: isRunActive ? stop : start
         )
+    }
+}
+
+/// The one primary action (Play/Strum/Practise) every module renders through,
+/// so its size, weight and material are identical wherever it appears — the
+/// owner's "always consistent and in the same place no matter what tab you are
+/// on". It is a tinted glass capsule (a faint accent wash, accent text, a
+/// hairline accent border) rather than a bright filled button, matching the
+/// iPad module screens' glass treatment. Accent text on the dark backdrop
+/// measures ~9.8:1, well above the 4.5:1 floor.
+struct IOSModulePrimaryAction: View {
+    let title: String
+    let systemImage: String
+    let accessibilityLabel: String
+    let disabled: Bool
+    let action: () -> Void
+
+    /// ONE size, decided here rather than by any module.
+    static let height: CGFloat = 44
+    static let minWidth: CGFloat = 132
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.body.weight(.semibold))
+                .padding(.horizontal, 16)
+                .frame(minWidth: Self.minWidth)
+                .frame(height: Self.height)
+                .background {
+                    Capsule().fill(NotePalette.accent.opacity(0.16))
+                }
+                .overlay {
+                    Capsule().strokeBorder(NotePalette.accent.opacity(0.5), lineWidth: 1)
+                }
+                .foregroundStyle(NotePalette.accent)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .iosRunDimmed(disabled)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -231,24 +295,6 @@ enum IOSModuleBoard {
     }
 }
 
-/// How much an iPad neck scales its dots, labels and gutter as it grows past
-/// the phone size. Driven by the tighter of the two dimensions so a marker can
-/// never outgrow its fret or string cell, and capped so it stays a sane size
-/// however large the pane gets.
-enum IOSBoardScale {
-    /// The iPhone-landscape 22-fret board, the size the neck's default
-    /// marker/gutter sizes were tuned to.
-    static let referenceWidth: CGFloat = 750   // 23 columns at ~32.6 pt
-    static let referenceHeight: CGFloat = 260  // the portrait strip height
-    static let cap: CGFloat = 1.75
-
-    static func scale(neckWidth: CGFloat, neckHeight: CGFloat, idiom: UIUserInterfaceIdiom) -> CGFloat {
-        guard idiom == .pad else { return 1 }
-        let growth = min(neckWidth / referenceWidth, neckHeight / referenceHeight)
-        return min(max(growth, 1), cap)
-    }
-}
-
 // MARK: - The primitive
 
 /// The one module layout for both orientations (D-11/D-18): a shared top row
@@ -258,9 +304,11 @@ enum IOSBoardScale {
 ///
 /// Modules supply their own `neck` (almost always `FretboardBoardView`),
 /// `drawer` (the sheet/page content), two optional `leadingAction`/
-/// `trailingAction` corners and an optional `companion` (Circle's ring, drawn
-/// leading of the board in landscape and above the strip in portrait). The
-/// chrome, spacing and band behaviour live here once.
+/// `trailingAction` step/secondary corners, the one `primaryAction` (always
+/// the trailing corner, always `IOSModulePrimaryAction`'s size) and an
+/// optional `companion` (Circle's ring, drawn leading of the board in
+/// landscape and above the strip in portrait). The chrome, spacing and band
+/// behaviour live here once.
 struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     let title: String
     let subtitle: String
@@ -278,6 +326,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
     let companion: Companion
     let leadingAction: IOSModuleBandAction?
     let trailingAction: IOSModuleBandAction?
+    let primaryAction: IOSModuleBandAction?
     let drawerTitle: String
     let drawerSystemImage: String
     let drawer: Drawer
@@ -314,6 +363,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
         @ViewBuilder companion: () -> Companion = { EmptyView() },
         leadingAction: IOSModuleBandAction?,
         trailingAction: IOSModuleBandAction?,
+        primaryAction: IOSModuleBandAction?,
         drawerTitle: String,
         drawerSystemImage: String,
         @ViewBuilder drawer: () -> Drawer,
@@ -333,6 +383,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
         self.companion = companion()
         self.leadingAction = leadingAction
         self.trailingAction = trailingAction
+        self.primaryAction = primaryAction
         self.drawerTitle = drawerTitle
         self.drawerSystemImage = drawerSystemImage
         self.drawer = drawer()
@@ -373,19 +424,8 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
             topRow
             HStack(alignment: .center, spacing: 20) {
                 companion
-                GeometryReader { proxy in
-                    neck
-                        .environment(
-                            \.fretworkFretboardScale,
-                            IOSBoardScale.scale(
-                                neckWidth: proxy.size.width,
-                                neckHeight: proxy.size.height,
-                                idiom: UIDevice.current.userInterfaceIdiom
-                            )
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                neck
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             bottomBand
@@ -514,47 +554,54 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
 
     // MARK: Bottom band
 
-    /// The band never changes shape for a run (D-27 revised): the corners the
-    /// module supplied stay where they are — the start corner becomes ■ Stop
-    /// and the others are disabled, both decided by the module.
+    /// The band never changes shape for a run (D-27 revised): the step/
+    /// secondary corners the module supplied stay where they are, the drawer
+    /// handle stays centred, and the primary action — always the trailing
+    /// corner, always one size — becomes ■ Stop in place for a run, decided by
+    /// the module (via `runToggle`).
     private var bottomBand: some View {
         HStack(spacing: 12) {
             if let leadingAction {
                 bandActionButton(leadingAction)
+            }
+            if let trailingAction {
+                bandActionButton(trailingAction)
             }
             Spacer(minLength: 0)
             if isLandscape {
                 drawerHandle
             }
             Spacer(minLength: 0)
-            if let trailingAction {
-                bandActionButton(trailingAction)
+            if let primaryAction {
+                primaryButton(primaryAction)
             }
         }
         .padding(.horizontal, 4)
         .frame(height: 48)
     }
 
-    @ViewBuilder
+    /// The step/secondary corners: icon-only glass circles (D-22).
     private func bandActionButton(_ action: IOSModuleBandAction) -> some View {
-        if let title = action.title {
-            Button(action: action.action) {
-                Label(title, systemImage: action.systemImage)
-            }
-            .buttonStyle(.glassProminent)
-            .tint(NotePalette.accent)
-            .disabled(action.disabled)
-            .accessibilityLabel(action.accessibilityLabel)
-        } else {
-            Button(action: action.action) {
-                Image(systemName: action.systemImage)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .controlSize(.large)
-            .disabled(action.disabled)
-            .accessibilityLabel(action.accessibilityLabel)
+        Button(action: action.action) {
+            Image(systemName: action.systemImage)
         }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .disabled(action.disabled)
+        .accessibilityLabel(action.accessibilityLabel)
+    }
+
+    /// The primary action, rendered by `IOSModulePrimaryAction` so no module
+    /// sizes its own Play/Strum/Practise and Stop lands in the same place.
+    private func primaryButton(_ action: IOSModuleBandAction) -> some View {
+        IOSModulePrimaryAction(
+            title: action.title ?? "",
+            systemImage: action.systemImage,
+            accessibilityLabel: action.accessibilityLabel,
+            disabled: action.disabled,
+            action: action.action
+        )
     }
 
     private var drawerHandle: some View {
