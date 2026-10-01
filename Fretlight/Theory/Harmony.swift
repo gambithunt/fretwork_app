@@ -16,7 +16,10 @@ enum Harmony: Sendable {
     static let minorQualities = ["min", "dim", "maj", "min", "min", "maj", "maj"]
     static let majorRomans = ["I", "ii", "iii", "IV", "V", "vi", "vii°"]
     static let minorRomans = ["i", "ii°", "III", "iv", "v", "VI", "VII"]
-    static let circleOfFifths = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5].map(PitchClass.init)
+    /// Clockwise from C, each step a perfect fifth up. Derived from
+    /// `Keys.circleOfFifths` so the ring's order and its spellings cannot drift
+    /// apart.
+    static let circleOfFifths = Keys.circleOfFifths.map(\.tonic)
 
     static func diatonicChords(root: PitchClass, major: Bool) -> [DiatonicChord] {
         let scale = major ? Scales.major : Scales.naturalMinor

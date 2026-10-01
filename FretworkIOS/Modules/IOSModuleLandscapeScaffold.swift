@@ -135,8 +135,8 @@ enum IOSModuleLandscapeFormat {
     }
 
     /// "G major" — the selected key.
-    static func circleSubtitle(_ key: PitchClass) -> String {
-        "\(key.name()) major"
+    static func circleSubtitle(_ key: Key) -> String {
+        "\(key.name) major"
     }
 
     /// "C major · Ascending" — the scale and the direction a Practise run

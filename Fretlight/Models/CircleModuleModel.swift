@@ -37,7 +37,24 @@ final class CircleModuleModel {
     /// The twelve keys in fifths order, starting at C at the top.
     var keys: [PitchClass] { Harmony.circleOfFifths }
 
+    /// The same twelve keys with their conventional spellings, aligned
+    /// index-for-index with `keys`. The ring is where the enharmonic choice
+    /// matters, so display names come from here rather than from
+    /// `PitchClass.name()`, which defaults to sharps and would label E♭ as D♯.
+    var keySpellings: [Key] { Keys.circleOfFifths }
+
     var selectedIndex: Int { keys.firstIndex(of: selected) ?? 0 }
+
+    /// The selected key, with the spelling its position on the ring implies.
+    var selectedKey: Key { keySpellings[selectedIndex] }
+
+    var selectedKeyName: String { selectedKey.name }
+    var relativeMinorKeyName: String { selectedKey.relativeMinorName }
+
+    /// The neighbour and opposite keys, spelled as the ring spells them.
+    var dominantKeyName: String { keySpellings[(selectedIndex + 1) % 12].name }
+    var subdominantKeyName: String { keySpellings[(selectedIndex + 11) % 12].name }
+    var oppositeKeyName: String { keySpellings[(selectedIndex + 6) % 12].name }
 
     /// A fifth up — clockwise. The chord that pulls hardest back to the tonic.
     var dominant: PitchClass { keys[(selectedIndex + 1) % 12] }
@@ -93,7 +110,7 @@ final class CircleModuleModel {
             FretboardDot(
                 id: "circle-\(entry.position.string):\(entry.position.fret)",
                 position: entry.position,
-                label: entry.pitchClass.name(),
+                label: selectedKey.majorScaleName(of: entry.pitchClass) ?? entry.pitchClass.name(),
                 color: NotePalette.color(for: entry.pitchClass),
                 ring: entry.pitchClass == selected ? .white : nil,
                 outline: true

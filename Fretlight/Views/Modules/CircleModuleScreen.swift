@@ -75,7 +75,7 @@ struct CircleModuleScreen: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
                 .frame(width: majorRadius * 2 + 44, height: majorRadius * 2 + 44)
 
-            ForEach(Array(model.keys.enumerated()), id: \.offset) { index, key in
+            ForEach(Array(model.keySpellings.enumerated()), id: \.offset) { index, key in
                 let role = model.role(at: index)
                 let angle = Angle(degrees: CircleModuleModel.angle(forIndex: index))
 
@@ -88,7 +88,7 @@ struct CircleModuleScreen: View {
 
                 // Its relative minor, inner ring — the same seven notes with a
                 // different home, which is why they sit on the same spoke.
-                Text(key.transposed(by: 9).name().lowercased() + "m")
+                Text(key.relativeMinorName.lowercased() + "m")
                     .font(.caption2)
                     .foregroundStyle(role == .tonic ? NotePalette.color(for: .root) : .secondary)
                     .offset(
@@ -100,16 +100,16 @@ struct CircleModuleScreen: View {
         .frame(width: size, height: size)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: model.selected)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Circle of fifths, \(model.selected.name()) selected")
+        .accessibilityLabel("Circle of fifths, \(model.selectedKeyName) selected")
     }
 
-    private func keyButton(_ model: CircleModuleModel, key: PitchClass, role: CircleModuleModel.Role, isMinor: Bool) -> some View {
+    private func keyButton(_ model: CircleModuleModel, key: Key, role: CircleModuleModel.Role, isMinor: Bool) -> some View {
         let isTonic = role == .tonic
         let fill = model.color(for: role)
         return Button {
-            withAnimation(FretworkMotion.gravity) { model.select(key) }
+            withAnimation(FretworkMotion.gravity) { model.select(key.tonic) }
         } label: {
-            Text(key.name())
+            Text(key.name)
                 .font(.callout.weight(role == .none ? .regular : .semibold))
                 .foregroundStyle(role == .none ? Color.white.opacity(0.75) : .black)
                 .frame(width: 44, height: 44)
@@ -125,7 +125,7 @@ struct CircleModuleScreen: View {
                 .scaleEffect(isTonic ? 1.06 : 1)
         }
         .buttonStyle(ElasticPressStyle())
-        .accessibilityLabel("\(key.name()) major")
+        .accessibilityLabel("\(key.name) major")
         .accessibilityValue(roleName(role))
         .accessibilityAddTraits(isTonic ? [.isSelected] : [])
     }
@@ -163,12 +163,12 @@ struct CircleModuleScreen: View {
     private func readout(_ model: CircleModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 28) {
-                ModuleStat(label: "Key", value: "\(model.selected.name()) major",
+                ModuleStat(label: "Key", value: "\(model.selectedKeyName) major",
                            tint: NotePalette.color(for: .root))
-                ModuleStat(label: "Relative minor", value: "\(model.relativeMinor.name()) minor")
-                ModuleStat(label: "A fifth up", value: model.dominant.name(),
+                ModuleStat(label: "Relative minor", value: "\(model.relativeMinorKeyName) minor")
+                ModuleStat(label: "A fifth up", value: model.dominantKeyName,
                            tint: NotePalette.color(for: .fifth))
-                ModuleStat(label: "A fifth down", value: model.subdominant.name(),
+                ModuleStat(label: "A fifth down", value: model.subdominantKeyName,
                            tint: NotePalette.color(for: .degree))
             }
             ModuleProse(paragraphs: prose(model))
@@ -179,9 +179,9 @@ struct CircleModuleScreen: View {
         let shared = model.sharedNoteCount(with: model.dominant)
         let opposite = model.keys[(model.selectedIndex + 6) % 12]
         return [
-            "Each step clockwise is a fifth up. That is not a filing system — it is why the keys beside yours are the ones you can move to freely: \(model.selected.name()) and \(model.dominant.name()) share \(shared) of their seven notes, so only one note has to change.",
-            "\(model.subdominant.name()) and \(model.dominant.name()) sitting either side of \(model.selected.name()) is the same fact that makes I–IV–V the backbone of so many songs. The three chords are neighbours on this ring.",
-            "Directly opposite is \(opposite.name()), sharing only \(model.sharedNoteCount(with: opposite)) notes with \(model.selected.name()) — the furthest you can get from home. The inner ring shows each key's relative minor: the same seven notes, started somewhere else."
+            "Each step clockwise is a fifth up. That is not a filing system — it is why the keys beside yours are the ones you can move to freely: \(model.selectedKeyName) and \(model.dominantKeyName) share \(shared) of their seven notes, so only one note has to change.",
+            "\(model.subdominantKeyName) and \(model.dominantKeyName) sitting either side of \(model.selectedKeyName) is the same fact that makes I–IV–V the backbone of so many songs. The three chords are neighbours on this ring.",
+            "Directly opposite is \(model.oppositeKeyName), sharing only \(model.sharedNoteCount(with: opposite)) notes with \(model.selectedKeyName) — the furthest you can get from home. The inner ring shows each key's relative minor: the same seven notes, started somewhere else."
         ]
     }
 }
