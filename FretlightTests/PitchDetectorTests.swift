@@ -39,6 +39,27 @@ final class PitchDetectorTests: XCTestCase {
         }
     }
 
+    /// A mid-pitch note with a weak fundamental and strong harmonics must
+    /// resolve to the fundamental (G3/B3), never the octave below (G2/B2),
+    /// even though the relaxed low-frequency cutoff makes the octave-below
+    /// period easier to admit.
+    func testMidNoteDoesNotResolveOctaveBelow() {
+        for frequency in [196.0, 246.94] {
+            var samples = [Float](repeating: 0, count: 2048)
+            for i in 0..<2048 {
+                var v = 0.15 * sin(2 * .pi * frequency * Double(i) / sampleRate)
+                v += 1.0 * sin(2 * .pi * 2 * frequency * Double(i) / sampleRate)
+                v += 0.7 * sin(2 * .pi * 3 * frequency * Double(i) / sampleRate)
+                v += 0.4 * sin(2 * .pi * 4 * frequency * Double(i) / sampleRate)
+                samples[i] = Float(v)
+            }
+            let result = PitchDetector().detect(samples: samples, sampleRate: sampleRate, threshold: 0.12)
+            XCTAssertNotNil(result, "\(frequency) Hz")
+            let cents = 1200 * log2(result!.frequency / frequency)
+            XCTAssertLessThanOrEqual(abs(cents), 5.0, "\(frequency) Hz measured \(result!.frequency)")
+        }
+    }
+
     /// The low-frequency cutoff boost: a real low string decays fast and its
     /// CMNDF at the true period sits above the fixed 0.12 cutoff (measured
     /// ≈0.15 on an unplugged electric E2), so the fixed cutoff produced no

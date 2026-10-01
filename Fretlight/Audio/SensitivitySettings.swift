@@ -34,11 +34,14 @@ final class SensitivitySettings: @unchecked Sendable {
 
     /// The dB margin a detection's level must clear above the running noise
     /// floor before it can be displayed (compared in AudioAnalysisWorker).
-    /// 14 dB at sensitivity 0 (strict — only notes clearly above room noise
-    /// show), 8 dB at sensitivity 1 (lenient — very quiet notes show, at the
+    /// 13 dB at sensitivity 0 (strict — only notes clearly above room noise
+    /// show), 7 dB at sensitivity 1 (lenient — very quiet notes show, at the
     /// cost of more room noise). Folded into the same dial as the confidence
-    /// and YIN knobs, so there is still one user control.
-    var floorMarginDb: Double { 14 - 6 * value }
+    /// and YIN knobs, so there is still one user control. The margin sits a
+    /// little lower than a pure level cut because the pitch-stability rule
+    /// already rejects gliding room noise, letting weak but steady strings
+    /// through.
+    var floorMarginDb: Double { 13 - 6 * value }
 
     /// The confidence a *continuation* frame needs while the same note is
     /// already confirmed. Lower than `confidenceThreshold`, so a decaying

@@ -4,14 +4,14 @@ All notable changes to Fretwork are recorded here, newest first.
 
 ## 0.5.7 — 2026-10-01
 
-- Added a noise-floor-relative gate and a sustain hold to note detection, and
-  relaxed the YIN cutoff at low frequencies. Pitched room noise (TV, voices,
-  mains hum) that previously confirmed as phantom notes is now rejected unless
-  it clears the running noise floor plus a sensitivity-folded margin, and a
-  confirmed note is held while the same pitch continues at lower confidence
-  instead of blinking out as it decays. Weak low strings (e.g. an unplugged
-  electric low E) now produce a candidate, where the fixed YIN cutoff produced
-  none.
+- Added a noise-floor-relative gate, a pitch-stability gate for new notes, and
+  a sustain hold to note detection, and relaxed the YIN cutoff at low
+  frequencies. Pitched room noise (TV, voices, mains hum) that previously
+  confirmed as phantom notes is now rejected unless it clears the running noise
+  floor plus a sensitivity-folded margin and holds a steady pitch, a confirmed
+  note is held while the same pitch continues at lower confidence instead of
+  blinking out as it decays, and weak low strings (e.g. an unplugged electric
+  low E) now produce a candidate, where the fixed YIN cutoff produced none.
 
 ## 0.5.6 — 2026-09-23
 
