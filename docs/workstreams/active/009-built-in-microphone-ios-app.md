@@ -1365,6 +1365,18 @@ capture rate (`660e936`).
 ms after nominal end; on a tuned acoustic, median pitch error ≤ 8 cents,
 onset→note median ≤ 0.1 s with p90 ≤ 0.6 s, and ≤ 6 octave flips in a session.
 
+**Follow-up resolved 2026-10-01 (branch `detection-quality`, v0.5.7, shared with the Mac).**
+Both findings below were fixed and tuned on raw iPhone captures through
+`scripts/offline-replay`. Fixes: a noise-floor-relative level gate folded into the
+sensitivity dial; a pitch-stability rule for new notes (about one extra publish);
+a sustain hold for a confirmed note; and a YIN cutoff that relaxes for low-string
+periods. The relaxation was needed because the unplugged electric's low E/A sat at
+CMNDF ≈ 0.15–0.16 against a fixed 0.12, so no candidate ever existed. At the
+default sensitivity, TV-only phantoms went from 11 to 2 per 20 s, and TV plus
+acoustic gave all six strings with 0 phantoms. On device, E2 and A2 on the
+unplugged electric confirm for the first time. No octave-down errors were
+introduced; a test pins this.
+
 **Findings carried forward (not Phase 7 defects):**
 - *Pitched room noise* (TV, voices) produces phantom notes with no one playing:
   13 in ~25 s, each ~0.2 s, median −54 dB. They overlap soft real playing
