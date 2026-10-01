@@ -118,12 +118,18 @@ private struct ModuleLiveNoteReadout: View {
     var body: some View {
         let display = state.display
         let noteColor = display.note.map { NotePalette.color(for: $0.name) }
+        // iOS playback gate: while a sample the app itself is playing would
+        // otherwise be re-captured by the mic, detection is suppressed and the
+        // caption swaps to PLAYING. Always false on Mac (input and output are
+        // separate devices), so the Mac capsule stays pixel-identical.
+        let playing = state.audio.isSuppressingForPlayback
 
         VStack(spacing: 4) {
-            Text("LISTENING")
+            Text(playing ? "PLAYING" : "LISTENING")
                 .font(.caption2.weight(.bold))
                 .tracking(1)
                 .foregroundStyle(.secondary)
+                .contentTransition(.numericText())
 
             Text(display.note.map { "\($0.name)\($0.octave)" } ?? "—")
                 .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
@@ -142,6 +148,7 @@ private struct ModuleLiveNoteReadout: View {
                 }
         }
         .animation(.easeInOut(duration: 0.2), value: display.note?.midiNote)
+        .animation(.easeInOut(duration: 0.2), value: playing)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(display.note.map { "Live note \($0.name)\($0.octave)" } ?? "Listening for a note")
     }
@@ -303,6 +310,19 @@ struct ModuleProse: View {
     }
 }
 
+/// Platform wording for the "samples not ready" notice. iOS has no device
+/// picker, so its message names the real readiness signal (the sample library
+/// and a running graph) instead of an audio device.
+enum ModuleAudioNoticeWording {
+    static let notReady: String = {
+        #if os(iOS)
+        "Notes will not sound until audio is ready."
+        #else
+        "Notes will not sound until an audio device is connected — choose one in Settings."
+        #endif
+    }()
+}
+
 /// Shown on a module when a tap would produce no sound.
 ///
 /// Exists because the first two modules shipped silently broken: every tap
@@ -323,7 +343,7 @@ struct ModuleAudioNotice: View {
             )
         } else if !isReady {
             notice(
-                "Notes will not sound until an audio device is connected — choose one in Settings.",
+                ModuleAudioNoticeWording.notReady,
                 systemImage: "speaker.slash.fill",
                 tint: .secondary
             )

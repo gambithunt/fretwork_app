@@ -323,6 +323,13 @@ scattered across call sites.
   the performance, not a defect in the library. Don't re-record on the flag
   alone — check whether the thing it measures survives normalisation.
 
+- **Never tag an iOS version bump `v*`.** A pushed `v*` tag starts the **Mac**
+  release pipeline (see `docs/releasing.md`), and `v0.2.0` already exists on
+  `origin` from the Mac's history. The iOS release path is App Store Connect,
+  not a git tag; bump the iOS target's `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`
+  and add the CHANGELOG entry, but leave tagging (and pushing) to the Mac
+  release workstream.
+
 ## Versioning
 
 Two separate fields, both in the `Fretlight` target's build settings

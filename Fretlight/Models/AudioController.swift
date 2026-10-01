@@ -58,7 +58,19 @@ protocol AudioControlling: AnyObject {
     /// running — lets tests assert the library was *asked for* without hardware.
     var isSampleLibraryLoaded: Bool { get }
 
+    /// True while the controller suppresses detection because a sample it is
+    /// playing would otherwise be re-captured by the microphone (the iOS
+    /// playback gate). Always false on Mac, where input and output are
+    /// separate devices — hence the default, so Mac conformers needn't change.
+    var isSuppressingForPlayback: Bool { get }
+
     /// Sounds one position in `tuning`. No-op until `prepareSamplePlayback` has
     /// completed and a graph is running.
     func playSample(string: Int, fret: Int, tuning: Tuning)
+}
+
+extension AudioControlling {
+    /// Mac and test fakes never suppress detection for playback, so the
+    /// default keeps every non-iOS conformer unchanged.
+    var isSuppressingForPlayback: Bool { false }
 }

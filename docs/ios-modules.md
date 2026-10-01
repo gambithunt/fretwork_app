@@ -89,8 +89,16 @@ the **one** primitive for both orientations, not ten one-offs:
 
 Then register the screen in `IOSModuleScreen.swift` — add the `content` switch
 case (and, if it ever stops being exhaustive, the `hasScaffold` case). All ten
-modules now have a screen; the Mac screens are no longer used on iOS and the
-"coming soon" placeholder is unused.
+modules now have a screen; the "coming soon" placeholder is unused.
+
+**iPad landscape** hosts the shared Mac screens unchanged (`IOSModuleScreen`'s
+`usesMacLayout` → the `Fretlight/Views/Modules/*ModuleScreen.swift` switch), so
+a landscape iPad module matches the Mac layout — title/blurb/live-note header,
+inline controls, a scale-1 board with the Full-neck toggle, and the readout
+below. The Mac screens already compile into the iOS target and already carry
+the live-note capsule, `StandardTuningNotice`, the retune hook and D-27's
+in-place run behaviour, so nothing is forked. iPhone (both orientations) and
+iPad portrait keep the iOS scaffold.
 
 ## Rules that must not be re-litigated
 
