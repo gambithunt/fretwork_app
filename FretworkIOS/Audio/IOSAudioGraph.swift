@@ -48,7 +48,8 @@ protocol IOSAudioGraphBuilding: Sendable {
     func build(leg: IOSAudioGraphLeg,
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
-               chordRing: RingBuffer) throws -> IOSAudioGraphHandling
+               chordRing: RingBuffer,
+               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling
 }
 
 /// Production builder. Stateless, so it is trivially `Sendable` without an
@@ -57,12 +58,14 @@ struct SystemIOSAudioGraphBuilder: IOSAudioGraphBuilding {
     func build(leg: IOSAudioGraphLeg,
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
-               chordRing: RingBuffer) throws -> IOSAudioGraphHandling {
+               chordRing: RingBuffer,
+               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling {
         try SystemIOSAudioGraph(
             leg: leg,
             sessionSampleRate: sessionSampleRate,
             analysisRing: analysisRing,
-            chordRing: chordRing
+            chordRing: chordRing,
+            recordingRing: recordingRing
         )
     }
 }
@@ -110,17 +113,19 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     init(leg: IOSAudioGraphLeg,
          sessionSampleRate: Double,
          analysisRing: RingBuffer,
-         chordRing: RingBuffer) throws {
+         chordRing: RingBuffer,
+         recordingRing: RingBuffer?) throws {
         self.leg = leg
         self.sampleRate = sessionSampleRate
         guard let mono = AVAudioFormat(standardFormatWithSampleRate: sessionSampleRate, channels: 1) else {
             throw IOSAudioGraphError.unsupportedFormat(sampleRate: sessionSampleRate)
         }
         self.graphFormat = mono
-        // No monitor ring and no recording ring: iOS has no live monitoring
-        // (C-03) and no sample-capture tool.
+        // No monitor ring: iOS has no live monitoring (C-03). `recordingRing`
+        // is nil in production and only fed in DEBUG by the -FretworkCaptureDump
+        // diagnostic, whose writer is its single consumer.
         self.sink = leg == .captureAndOutput
-            ? CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: nil)
+            ? CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: recordingRing)
             : nil
     }
 

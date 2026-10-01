@@ -12,12 +12,27 @@ enum SessionLogFormat {
         20 * log10(max(Double(level), 0.000_001))
     }
 
-    static func noteLine(t: Double, note: MappedNote?, confidence: Float, level: Float) -> String {
+    static func noteLine(t: Double, note: MappedNote?, frequency: Double?, sampleRate: Double?, confidence: Float, level: Float) -> String {
         let name = note.map { "\($0.name)\($0.octave)" } ?? "none"
         let cents = note.map { String(format: "%.1f", $0.cents) } ?? "-"
+        let hz = frequency.map { String(format: "%.2f", $0) } ?? "-"
+        let period: String
+        if let frequency, frequency > 0, let sampleRate, sampleRate > 0 {
+            period = String(format: "%.1f", sampleRate / frequency)
+        } else {
+            period = "-"
+        }
         return "SESSION t=\(seconds(t)) note=\(name) cents=\(cents)"
             + " conf=\(String(format: "%.3f", confidence))"
             + " level=\(String(format: "%.1f", decibels(level)))"
+            + " hz=\(hz) period=\(period)"
+    }
+
+    static func ratesLine(sessionSampleRate: Double, captureSampleRate: Double?, ioBufferDuration: TimeInterval) -> String {
+        let capture = captureSampleRate.map { String(Int($0.rounded())) } ?? "-"
+        return "SESSION rates sessionRate=\(Int(sessionSampleRate.rounded()))"
+            + " captureRate=\(capture)"
+            + " ioBufferMs=\(String(format: "%.2f", ioBufferDuration * 1000))"
     }
 
     static func chordLine(t: Double, chord: String?) -> String {
@@ -163,6 +178,13 @@ final class SessionLogger {
         if let status = appState.iosAudio?.status, status != lastStatus {
             lastStatus = status
             write(SessionLogFormat.statusLine(t: t, status: status))
+            if status == .listening {
+                write(SessionLogFormat.ratesLine(
+                    sessionSampleRate: appState.iosAudio?.sessionSampleRate ?? 0,
+                    captureSampleRate: appState.iosAudio?.captureSampleRate,
+                    ioBufferDuration: appState.iosAudio?.sessionIOBufferDuration ?? 0
+                ))
+            }
         }
         if let gate = appState.iosAudio?.isSuppressingForPlayback, gate != lastGate {
             lastGate = gate
@@ -177,6 +199,8 @@ final class SessionLogger {
             write(SessionLogFormat.noteLine(
                 t: t,
                 note: note,
+                frequency: appState.display.frequency,
+                sampleRate: appState.iosAudio?.captureSampleRate,
                 confidence: appState.display.confidence,
                 level: appState.display.level
             ))

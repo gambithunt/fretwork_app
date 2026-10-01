@@ -9,15 +9,26 @@ final class SessionLogFormatTests: XCTestCase {
     func testNoteLineWithANote() {
         let note = MappedNote(name: "E", octave: 2, midiNote: 40, cents: 3.2)
         XCTAssertEqual(
-            SessionLogFormat.noteLine(t: 12.345, note: note, confidence: 0.95, level: 0.008),
-            "SESSION t=12.345 note=E2 cents=3.2 conf=0.950 level=-41.9"
+            SessionLogFormat.noteLine(t: 12.345, note: note, frequency: 82.41, sampleRate: 48_000, confidence: 0.95, level: 0.008),
+            "SESSION t=12.345 note=E2 cents=3.2 conf=0.950 level=-41.9 hz=82.41 period=582.5"
         )
     }
 
     func testNoteLineWithNoNote() {
         XCTAssertEqual(
-            SessionLogFormat.noteLine(t: 0.0, note: nil, confidence: 0, level: 0.0005),
-            "SESSION t=0.000 note=none cents=- conf=0.000 level=-66.0"
+            SessionLogFormat.noteLine(t: 0.0, note: nil, frequency: nil, sampleRate: 48_000, confidence: 0, level: 0.0005),
+            "SESSION t=0.000 note=none cents=- conf=0.000 level=-66.0 hz=- period=-"
+        )
+    }
+
+    func testRatesLine() {
+        XCTAssertEqual(
+            SessionLogFormat.ratesLine(sessionSampleRate: 48_000, captureSampleRate: 44_100, ioBufferDuration: 0.023),
+            "SESSION rates sessionRate=48000 captureRate=44100 ioBufferMs=23.00"
+        )
+        XCTAssertEqual(
+            SessionLogFormat.ratesLine(sessionSampleRate: 48_000, captureSampleRate: nil, ioBufferDuration: 0.023),
+            "SESSION rates sessionRate=48000 captureRate=- ioBufferMs=23.00"
         )
     }
 

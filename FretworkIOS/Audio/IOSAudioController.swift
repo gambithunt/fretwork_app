@@ -82,6 +82,11 @@ final class IOSAudioController: AudioControlling {
     var sessionInputChannelCount: Int { session.inputChannelCount }
     var sessionInputLatency: TimeInterval { session.inputLatency }
     var sessionIOBufferDuration: TimeInterval { session.ioBufferDuration }
+    /// The rate the capture sink actually delivers — the engine input node's
+    /// format rate once the graph is up. This is what the pitch/chord workers
+    /// are told; a session log that disagrees with `sessionSampleRate` is the
+    /// smoking gun for a frequency-scale error.
+    var captureSampleRate: Double? { run?.graph.captureSampleRate }
 
     // MARK: - Seams (injected; fakes in the default suite satisfy C-11)
 
@@ -128,6 +133,14 @@ final class IOSAudioController: AudioControlling {
     /// teardown.
     @ObservationIgnored
     private var gateLiftTask: Task<Void, Never>?
+    #if DEBUG
+    /// The `-FretworkCaptureDump` writer and its 60 s flush timer. Only ever
+    /// non-nil in DEBUG when the launch argument is present.
+    @ObservationIgnored
+    private var captureDumpWriter: CaptureDumpWriter?
+    @ObservationIgnored
+    private var captureDumpFlushTask: Task<Void, Never>?
+    #endif
 
     private struct IOSAudioRun {
         let leg: IOSAudioGraphLeg
@@ -305,6 +318,9 @@ final class IOSAudioController: AudioControlling {
 
     func setForegroundActive(_ active: Bool) {
         foregroundActive = active
+        #if DEBUG
+        if !active { flushCaptureDump() }
+        #endif
         updateAudioNeed()
     }
 
@@ -398,6 +414,14 @@ final class IOSAudioController: AudioControlling {
 
         let analysisRing = RingBuffer(capacity: 65_536)
         let chordRing = RingBuffer(capacity: 65_536)
+        #if DEBUG
+        // -FretworkCaptureDump: give the dump its own ring fed by the same
+        // CaptureSink (never a second reader on an existing ring).
+        let dumpEnabled = CommandLine.arguments.contains("-FretworkCaptureDump")
+        let recordingRing = dumpEnabled ? RingBuffer(capacity: 65_536) : nil
+        #else
+        let recordingRing: RingBuffer? = nil
+        #endif
         let analysisWorker = AudioAnalysisWorker(ring: analysisRing, sensitivity: sensitivity)
         let chordWorker = ChordAnalysisWorker(ring: chordRing)
         analysisWorker.onUpdate = { [weak self] display, _ in
@@ -421,7 +445,8 @@ final class IOSAudioController: AudioControlling {
                     leg: leg,
                     sampleRate: sampleRate,
                     analysisRing: analysisRing,
-                    chordRing: chordRing
+                    chordRing: chordRing,
+                    recordingRing: recordingRing
                 )
                 // A newer transition superseded this build while it was off the
                 // main actor; discard the dead engine instead of leaking it.
@@ -460,6 +485,18 @@ final class IOSAudioController: AudioControlling {
                 chordWorker.start(sampleRate: workerRate)
                 self.status = .listening
                 if notifyRecovered { self.onEvent?(.recovered) }
+                #if DEBUG
+                if let recordingRing {
+                    let writer = CaptureDumpWriter(ring: recordingRing)
+                    self.captureDumpWriter = writer
+                    writer.start()
+                    self.captureDumpFlushTask = Task { @MainActor [weak self] in
+                        try? await Task.sleep(for: .seconds(60))
+                        self?.flushCaptureDump()
+                    }
+                    FileHandle.standardError.write(Data("capture-dump recording\n".utf8))
+                }
+                #endif
             } catch {
                 if self.sessionActive {
                     try? self.session.setActive(false)
@@ -616,6 +653,32 @@ final class IOSAudioController: AudioControlling {
         }
     }
 
+    #if DEBUG
+    /// Writes the raw capture dump (the last ≤20 s at the real capture rate)
+    /// to a Float32 WAV in Documents and logs its path. Idempotent; fired on
+    /// background or after 60 s, whichever comes first.
+    private func flushCaptureDump() {
+        guard let writer = captureDumpWriter else { return }
+        captureDumpWriter = nil
+        captureDumpFlushTask?.cancel()
+        captureDumpFlushTask = nil
+
+        let frames = writer.stopAndTake()
+        let rate = run?.graph.captureSampleRate ?? 48_000
+        let keepFrames = min(frames.count, Int(rate) * 20)
+        let trimmed = frames.suffix(keepFrames)
+        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let url = directory.appendingPathComponent(
+            "fretwork-capture-\(Int(Date().timeIntervalSince1970)).wav")
+        do {
+            try CaptureDumpWriter.writeWAV(Array(trimmed), sampleRate: rate, to: url)
+            FileHandle.standardError.write(Data("capture-dump path=\(url.path) frames=\(trimmed.count) rate=\(Int(rate))\n".utf8))
+        } catch {
+            FileHandle.standardError.write(Data("capture-dump error=\(error)\n".utf8))
+        }
+    }
+    #endif
+
     // MARK: - Transitions
 
     /// Chains one unit of graph/session work behind the previous one. The work
@@ -655,13 +718,15 @@ final class IOSAudioController: AudioControlling {
         leg: IOSAudioGraphLeg,
         sampleRate: Double,
         analysisRing: RingBuffer,
-        chordRing: RingBuffer
+        chordRing: RingBuffer,
+        recordingRing: RingBuffer?
     ) async throws -> IOSAudioGraphHandling {
         let graph = try builder.build(
             leg: leg,
             sessionSampleRate: sampleRate,
             analysisRing: analysisRing,
-            chordRing: chordRing
+            chordRing: chordRing,
+            recordingRing: recordingRing
         )
         do {
             try graph.start()

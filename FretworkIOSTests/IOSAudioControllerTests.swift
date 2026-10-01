@@ -171,7 +171,8 @@ final class FakeIOSAudioGraphBuilder: IOSAudioGraphBuilding, @unchecked Sendable
     func build(leg: IOSAudioGraphLeg,
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
-               chordRing: RingBuffer) throws -> IOSAudioGraphHandling {
+               chordRing: RingBuffer,
+               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling {
         lock.lock()
         let error = buildError
         let startError = self.startError
