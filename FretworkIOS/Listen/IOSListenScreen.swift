@@ -16,12 +16,10 @@ struct IOSListenScreen: View {
     @Bindable var state: AppState
     @Binding var isShowingSettings: Bool
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.fretworkIsLandscape) private var isLandscape
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-
-    private var isLandscape: Bool { verticalSizeClass == .compact }
 
     var body: some View {
         Group {
@@ -202,7 +200,9 @@ struct IOSListenScreen: View {
     private var rotateHint: some View {
         HStack(spacing: 9) {
             Image(systemName: "rotate.right")
-            Text("Turn your phone to see it on the neck")
+            Text(UIDevice.current.userInterfaceIdiom == .pad
+                 ? "Turn to landscape to see it on the neck"
+                 : "Turn your phone to see it on the neck")
         }
         .font(.footnote)
         .foregroundStyle(.secondary)

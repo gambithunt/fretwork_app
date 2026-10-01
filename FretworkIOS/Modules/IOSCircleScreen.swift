@@ -33,6 +33,11 @@ private struct IOSCircleStage: View {
     let model: CircleModuleModel
     @State private var labelMode: FretboardLabelMode = .notes
 
+    /// iPad draws the full 22-fret neck; the phone keeps the module's 12.
+    private var boardFrets: Int {
+        IOSModuleBoard.frets(idiom: UIDevice.current.userInterfaceIdiom, moduleFrets: 12)
+    }
+
     private var dots: [FretboardDot] {
         let triadDegrees = [
             model.selected: "1",
@@ -61,7 +66,7 @@ private struct IOSCircleStage: View {
             neck: {
                 FretboardBoardView(
                     dots: dots,
-                    frets: 12,
+                    frets: boardFrets,
                     tuning: model.tuning,
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses
@@ -96,8 +101,8 @@ private struct IOSCircleStage: View {
             isRunActive: false,
             guidedRunStepText: "",
             onTuningChange: { model.retune(to: $0) },
-            frets: 12,
-            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: 12)
+            frets: boardFrets,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: boardFrets)
         )
         .onDisappear { model.stop() }
     }

@@ -18,7 +18,7 @@ import UIKit
 struct IOSAppRootView: View {
     @State private var appState = AppState()
     @State private var path: [AppScreen] = IOSSnapshot.initialPath
-    @State private var selection: AppScreen? = .listen
+    @State private var selection: AppScreen? = IOSSnapshot.initialSelection ?? .listen
     @State private var isShowingSettings = IOSSnapshot.showsSettingsSheet
     @State private var unlockStore: IOSUnlockStore
     @State private var unlockTarget: LearningModule?
@@ -44,52 +44,63 @@ struct IOSAppRootView: View {
     private var isPhoneLandscape: Bool { verticalSizeClass == .compact }
 
     var body: some View {
-        Group {
-            switch navigationKind {
-            case .stack: phoneShell
-            case .split: padShell
+        GeometryReader { proxy in
+            Group {
+                switch navigationKind {
+                case .stack: phoneShell
+                case .split: padShell
+                }
             }
-        }
-        .sheet(isPresented: $isShowingSettings) {
-            IOSSettingsSheet(state: appState, unlockStore: unlockStore)
-        }
-        .tint(NotePalette.accent)
-        .preferredColorScheme(IOSSnapshot.preferredColorScheme)
-        .task {
-            unlockStore.start()
-            IOSSnapshot.requestLandscapeIfNeeded()
-            await unlockStore.refreshEntitlements()
-            await unlockStore.loadProduct()
-            sanitizeForEntitlements()
-            if IOSSnapshot.schedulesPopBack {
-                try? await Task.sleep(for: .seconds(2))
-                NotificationCenter.default.post(name: IOSSnapshot.popBackNotificationName, object: nil)
+            .environment(
+                \.fretworkIsLandscape,
+                IOSOrientation.isLandscape(
+                    idiom: UIDevice.current.userInterfaceIdiom,
+                    verticalSizeClass: verticalSizeClass,
+                    viewportWidth: proxy.size.width,
+                    viewportHeight: proxy.size.height
+                )
+            )
+            .sheet(isPresented: $isShowingSettings) {
+                IOSSettingsSheet(state: appState, unlockStore: unlockStore)
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: IOSSnapshot.popBackNotificationName)) { _ in
-            path = []
-        }
-        // The readout resets to neutral whenever the controller is actually
-        // stopped (foreground/background, an interruption) rather than holding
-        // the last note forever (D-15). Fires once per status transition, not
-        // per detector frame.
-        .onChange(of: appState.iosAudio?.status) { _, newStatus in
-            if newStatus == .idle {
-                appState.display = PitchDisplayState()
-                appState.chordDisplay = ChordDisplayState()
+            .tint(NotePalette.accent)
+            .preferredColorScheme(IOSSnapshot.preferredColorScheme)
+            .task {
+                unlockStore.start()
+                IOSSnapshot.requestOrientationIfNeeded()
+                await unlockStore.refreshEntitlements()
+                await unlockStore.loadProduct()
+                sanitizeForEntitlements()
+                if IOSSnapshot.schedulesPopBack {
+                    try? await Task.sleep(for: .seconds(2))
+                    NotificationCenter.default.post(name: IOSSnapshot.popBackNotificationName, object: nil)
+                }
             }
-        }
-        // Single observer for the keep-screen-on setting/status/scene decision.
-        .fretworkKeepsScreenOn(state: appState)
-        #if DEBUG
-        .task {
-            if CommandLine.arguments.contains("-FretworkSessionLog") {
-                let logger = SessionLogger(appState: appState)
-                sessionLogger = logger
-                logger.start()
+            .onReceive(NotificationCenter.default.publisher(for: IOSSnapshot.popBackNotificationName)) { _ in
+                path = []
             }
+            // The readout resets to neutral whenever the controller is actually
+            // stopped (foreground/background, an interruption) rather than holding
+            // the last note forever (D-15). Fires once per status transition, not
+            // per detector frame.
+            .onChange(of: appState.iosAudio?.status) { _, newStatus in
+                if newStatus == .idle {
+                    appState.display = PitchDisplayState()
+                    appState.chordDisplay = ChordDisplayState()
+                }
+            }
+            // Single observer for the keep-screen-on setting/status/scene decision.
+            .fretworkKeepsScreenOn(state: appState)
+            #if DEBUG
+            .task {
+                if CommandLine.arguments.contains("-FretworkSessionLog") {
+                    let logger = SessionLogger(appState: appState)
+                    sessionLogger = logger
+                    logger.start()
+                }
+            }
+            #endif
         }
-        #endif
     }
 
     // MARK: - iPhone (push)
@@ -263,7 +274,7 @@ struct IOSAppRootView: View {
                     Text(module.blurb)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 8)

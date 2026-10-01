@@ -44,9 +44,9 @@ enum IOSSnapshot {
         #endif
     }
 
-    static func requestLandscapeIfNeeded() {
+    static func requestOrientationIfNeeded() {
         #if DEBUG
-        IOSSnapshotHarness.requestLandscapeIfNeeded()
+        IOSSnapshotHarness.requestOrientationIfNeeded()
         #endif
     }
 
@@ -55,6 +55,16 @@ enum IOSSnapshot {
         IOSSnapshotHarness.initialPath
         #else
         [.listen]
+        #endif
+    }
+
+    /// The split view's initial selection (iPad). `nil` leaves the default
+    /// Listen selection; only module scenarios need to force a different one.
+    static var initialSelection: AppScreen? {
+        #if DEBUG
+        IOSSnapshotHarness.initialSelection
+        #else
+        nil
         #endif
     }
 

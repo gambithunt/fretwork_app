@@ -30,7 +30,9 @@ struct IOSNotesScreen: View {
 private struct IOSNotesStage: View {
     let state: AppState
     let model: NotesModuleModel
-    @State private var showsFullNeck = false
+    /// The phone starts on the module's natural 12 frets and widens on
+    /// request; the iPad opens full-neck because its pane has the room.
+    @State private var showsFullNeck = UIDevice.current.userInterfaceIdiom == .pad
 
     private var canPlay: Bool { !model.placed.isEmpty && state.isSamplePlaybackReady }
 
@@ -95,6 +97,12 @@ private struct IOSNotesStage: View {
             // A tap past fret 12 has to resolve to a real cell, so widening
             // the drawn board widens the model's floor too.
             model.highestFret = expanded ? 22 : LearningModule.notes.highestFret
+        }
+        .onAppear {
+            // The initial state never fires `onChange`, so the iPad's
+            // default full neck has to widen the model here too — otherwise
+            // the board would draw 22 frets while taps past 12 refuse.
+            model.highestFret = showsFullNeck ? 22 : LearningModule.notes.highestFret
         }
         .onDisappear { model.stop() }
     }

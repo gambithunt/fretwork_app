@@ -40,6 +40,11 @@ private struct IOSPentatonicStage: View {
     let state: AppState
     let model: PentatonicModuleModel
 
+    /// iPad draws the full 22-fret neck; the phone keeps the module's range.
+    private var boardFrets: Int {
+        IOSModuleBoard.frets(idiom: UIDevice.current.userInterfaceIdiom, moduleFrets: model.highestFret)
+    }
+
     private var subtitle: String {
         IOSModuleLandscapeFormat.pentatonicSubtitle(
             root: model.rootPitchClass,
@@ -68,7 +73,7 @@ private struct IOSPentatonicStage: View {
             neck: {
                 FretboardBoardView(
                     dots: model.dots,
-                    frets: model.highestFret,
+                    frets: boardFrets,
                     tuning: Tunings.standard,
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses
@@ -93,8 +98,8 @@ private struct IOSPentatonicStage: View {
             },
             isRunActive: isRunActive,
             guidedRunStepText: guidedStepText,
-            frets: model.highestFret,
-            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: model.highestFret)
+            frets: boardFrets,
+            focusFret: IOSModulePortraitStrip.focusFret(for: model.dots, highestFret: boardFrets)
         )
         .onDisappear { model.stop() }
     }

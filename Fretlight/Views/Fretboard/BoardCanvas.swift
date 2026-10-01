@@ -25,6 +25,10 @@ struct BoardCanvas: View {
     /// Whether to draw the fret numbers and string names. A compact diagram
     /// has no room for them and passes `.none` margins alongside.
     var showsLabels: Bool = true
+    /// Grows the gutter, labels and grid dots with the board (1 = the
+    /// phone/Mac size). The margins passed in are already scaled by the same
+    /// factor; this drives the label fonts and the background grid dots.
+    var scale: CGFloat = 1
 
     var body: some View {
         Canvas { context, size in
@@ -101,11 +105,17 @@ struct BoardCanvas: View {
     private func drawFretNumbers(in context: GraphicsContext, geometry: BoardGeometry) {
         for fret in 0...frets {
             let marked = Self.inlayFrets.contains(fret)
+            // Keep the exact text style at scale 1 (the phone/Mac rasterisation
+            // is what every snapshot was built from); only a genuinely grown
+            // board leaves the text style for a scaled system font.
+            let font: Font = scale == 1
+                ? .caption2.monospacedDigit().weight(marked ? .bold : .regular)
+                : .system(size: 11 * scale, weight: marked ? .bold : .regular).monospacedDigit()
             context.draw(
                 Text("\(fret)")
-                    .font(.caption2.monospacedDigit().weight(marked ? .bold : .regular))
+                    .font(font)
                     .foregroundColor(.white.opacity(marked ? 0.75 : 0.34)),
-                at: CGPoint(x: geometry.x(fret: fret), y: 13)
+                at: CGPoint(x: geometry.x(fret: fret), y: 13 * scale)
             )
         }
     }
@@ -115,9 +125,9 @@ struct BoardCanvas: View {
         for string in 0..<geometry.strings where string < names.count {
             context.draw(
                 Text(names[string].uppercased())
-                    .font(.system(size: 9, weight: .bold)).tracking(1.1)
+                    .font(.system(size: 9 * scale, weight: .bold)).tracking(1.1)
                     .foregroundColor(.white.opacity(0.55)),
-                at: CGPoint(x: 30, y: geometry.y(string: string))
+                at: CGPoint(x: 30 * scale, y: geometry.y(string: string))
             )
         }
     }
@@ -128,7 +138,8 @@ struct BoardCanvas: View {
         for fret in 0...frets {
             let x = geometry.x(fret: fret)
             for string in 0..<geometry.strings {
-                let dot = CGRect(x: x - 2.5, y: geometry.y(string: string) - 2.5, width: 5, height: 5)
+                let r = 2.5 * scale
+                let dot = CGRect(x: x - r, y: geometry.y(string: string) - r, width: r * 2, height: r * 2)
                 context.fill(Path(ellipseIn: dot), with: .color(.white.opacity(0.16)))
             }
         }

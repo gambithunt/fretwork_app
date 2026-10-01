@@ -33,6 +33,11 @@ private struct IOSHarmonizingStage: View {
     let model: HarmonizingModuleModel
     @State private var labelMode: FretboardLabelMode = .degrees
 
+    /// iPad draws the full 22-fret neck; the phone keeps the module's range.
+    private var boardFrets: Int {
+        IOSModuleBoard.frets(idiom: UIDevice.current.userInterfaceIdiom, moduleFrets: model.highestFret)
+    }
+
     private var dots: [FretboardDot] {
         labelMode == .notes
             ? model.dots.showingNoteNames(in: Tunings.standard)
@@ -55,7 +60,7 @@ private struct IOSHarmonizingStage: View {
             neck: {
                 FretboardBoardView(
                     dots: dots,
-                    frets: model.highestFret,
+                    frets: boardFrets,
                     tuning: Tunings.standard,
                     flipped: state.isFretboardFlipped,
                     pulses: model.pulses
@@ -80,8 +85,8 @@ private struct IOSHarmonizingStage: View {
             },
             isRunActive: false,
             guidedRunStepText: "",
-            frets: model.highestFret,
-            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: model.highestFret)
+            frets: boardFrets,
+            focusFret: IOSModulePortraitStrip.focusFret(for: dots, highestFret: boardFrets)
         )
         .onDisappear { model.stop() }
     }

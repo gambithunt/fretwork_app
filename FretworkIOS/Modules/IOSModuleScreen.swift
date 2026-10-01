@@ -34,9 +34,7 @@ struct IOSModuleScreen: View {
     @Bindable var state: AppState
     @Binding var isShowingSettings: Bool
 
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-
-    private var isLandscape: Bool { verticalSizeClass == .compact }
+    @Environment(\.fretworkIsLandscape) private var isLandscape
 
     /// True for every module now that all ten have a scaffold screen.
     private var hasScaffold: Bool {
