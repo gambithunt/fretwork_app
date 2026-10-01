@@ -2,6 +2,16 @@
 
 All notable changes to Fretwork are recorded here, newest first.
 
+## 0.2.0 (iOS) — 2026-10-01
+
+- Added the one-time iOS unlock (StoreKit 2, non-consumable
+  `org.fretwork.app.ios.unlock`). Listen and the Notes module stay free; the
+  other nine modules show a lock and open a native sheet with the App Store
+  Connect price (`Product.displayPrice`), one-time wording, and Restore
+  Purchases. Verified entitlements are checked at launch and kept current for
+  the app's lifetime; unverified transactions grant nothing. The Mac app is
+  unchanged and stays free.
+
 ## 0.5.8 — 2026-10-01
 
 - Fixed the Circle of Fifths spelling every flat-side key as sharps. The ring,

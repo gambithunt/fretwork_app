@@ -1,9 +1,33 @@
+import SwiftUI
 import UIKit
 
 /// Non-DEBUG-safe facade over the `#if DEBUG` snapshot harness, so production
 /// views never need their own `#if DEBUG` for capture hooks. In Release these
 /// are inert constants.
 enum IOSSnapshot {
+    static var isActive: Bool {
+        #if DEBUG
+        IOSSnapshotHarness.isActive
+        #else
+        false
+        #endif
+    }
+
+    static var showsUnlockSheet: Bool {
+        #if DEBUG
+        IOSSnapshotHarness.showsUnlockSheet
+        #else
+        false
+        #endif
+    }
+
+    static var preferredColorScheme: ColorScheme {
+        #if DEBUG
+        IOSSnapshotHarness.preferredColorScheme
+        #else
+        .dark
+        #endif
+    }
     static var shouldSkipAudioSession: Bool {
         #if DEBUG
         IOSSnapshotHarness.shouldSkipAudioSession

@@ -1,4 +1,5 @@
 #if DEBUG
+import SwiftUI
 import UIKit
 
 /// DEBUG-only deterministic screenshot harness.
@@ -54,6 +55,10 @@ enum IOSSnapshotHarness {
         case circlePortrait = "-IOSSnapshotCirclePortrait"
         case settings = "-IOSSnapshotSettings"
         case permissionDenied = "-IOSSnapshotPermissionDenied"
+        case lockedList = "-IOSSnapshotLockedList"
+        case lockedListLight = "-IOSSnapshotLockedListLight"
+        case unlockSheet = "-IOSSnapshotUnlockSheet"
+        case unlockSheetLight = "-IOSSnapshotUnlockSheetLight"
     }
 
     static var scenario: Scenario? {
@@ -135,12 +140,25 @@ enum IOSSnapshotHarness {
             return [.module(module)]
         }
         switch scenario {
-        case .list: return []
+        case .list, .lockedList, .lockedListLight, .unlockSheet, .unlockSheetLight: return []
         default: return [.listen]
         }
     }
 
     static var showsSettingsSheet: Bool { scenario == .settings }
+    static var showsUnlockSheet: Bool {
+        scenario == .unlockSheet || scenario == .unlockSheetLight
+    }
+
+    /// The lock/unlock surfaces follow the app's usual dark scheme; the light
+    /// variants flip it so both appearances can be captured.
+    static var preferredColorScheme: ColorScheme {
+        switch scenario {
+        case .lockedListLight, .unlockSheetLight: return .light
+        default: return .dark
+        }
+    }
+
     static var showsModuleDrawer: Bool {
         switch scenario {
         case .chordsDrawer, .intervalsDrawer, .notesDrawer, .octavesDrawer,

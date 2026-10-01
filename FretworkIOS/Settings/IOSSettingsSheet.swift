@@ -12,6 +12,7 @@ import SwiftUI
 /// changes only when the person changes it (D-08).
 struct IOSSettingsSheet: View {
     @Bindable var state: AppState
+    let unlockStore: IOSUnlockStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -57,6 +58,25 @@ struct IOSSettingsSheet: View {
                     Text("Learning")
                 } footer: {
                     Text("Show the detected note while using a lesson.")
+                }
+
+                Section {
+                    Button {
+                        Task { await unlockStore.restore() }
+                    } label: {
+                        HStack {
+                            Text("Restore Purchases")
+                            if unlockStore.isPurchasing {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(unlockStore.isPurchasing)
+                } header: {
+                    Text("Unlock")
+                } footer: {
+                    Text(unlockStore.statusMessage ?? "Restore the one-time unlock if you already bought it.")
                 }
 
                 Section {
