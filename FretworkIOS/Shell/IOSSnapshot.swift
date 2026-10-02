@@ -129,5 +129,14 @@ enum IOSSnapshot {
         #endif
     }
 
+    /// DEBUG snapshot runs inject fixed detected content (Listen's live-note
+    /// shot) through `AppState`. A no-op in Release.
+    @MainActor
+    static func applyScenarioState(_ state: AppState) {
+        #if DEBUG
+        IOSSnapshotHarness.applyScenarioState(state)
+        #endif
+    }
+
     static let popBackNotificationName = Notification.Name("FretworkIOSSnapshotPopBack")
 }

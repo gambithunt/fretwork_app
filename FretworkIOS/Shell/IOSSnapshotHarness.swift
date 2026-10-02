@@ -14,6 +14,8 @@ enum IOSSnapshotHarness {
         case listenLandscape = "-IOSSnapshotListenLandscape"
         case listenLandscapeSidebarClosed = "-IOSSnapshotListenLandscapeSidebarClosed"
         case listenIdle = "-IOSSnapshotListenIdle"
+        case listenLiveNoteLandscape = "-IOSSnapshotListenLiveNoteLandscape"
+        case listenLiveNotePortrait = "-IOSSnapshotListenLiveNotePortrait"
         case popBack = "-IOSSnapshotPopBack"
         case list = "-IOSSnapshotList"
         case chordsLandscape = "-IOSSnapshotChordsLandscape"
@@ -112,7 +114,8 @@ enum IOSSnapshotHarness {
 
     static var forcesLandscape: Bool {
         switch scenario {
-        case .listenLandscape, .listenLandscapeSidebarClosed, .popBack, .list,
+        case .listenLandscape, .listenLandscapeSidebarClosed, .listenLiveNoteLandscape,
+             .popBack, .list,
              .chordsLandscape, .chordsDrawer,
              .notesLandscape, .notesDrawer,
              .intervalsLandscape, .intervalsDrawer,
@@ -145,6 +148,23 @@ enum IOSSnapshotHarness {
     static func awaitSamplePlaybackReady(_ state: AppState) async {
         guard moduleScenario != nil else { return }
         state.snapshotMarkSamplePlaybackReady()
+    }
+
+    /// Fixed detected content for scenarios whose surface must look alive.
+    /// The Listen live-note shots inject A2 (in tune, MIDI 45, 110 Hz) plus an
+    /// A-major chord so both readouts are populated for whichever detection
+    /// mode is on screen. DEBUG-only; Release never reaches this code.
+    @MainActor
+    static func applyScenarioState(_ state: AppState) {
+        switch scenario {
+        case .listenLiveNoteLandscape, .listenLiveNotePortrait:
+            state.snapshotInjectListenState(
+                note: MappedNote(name: "A", octave: 2, midiNote: 45, cents: 0),
+                chord: ChordMatch(root: "A", quality: .major, confidence: 0.85)
+            )
+        default:
+            break
+        }
     }
 
     /// The navigation stack's initial path.

@@ -305,6 +305,37 @@ final class AppState {
         samplePlaybackError = nil
         isSamplePlaybackReady = true
     }
+
+    /// Snapshot capture only: inject a fixed detected note and chord with
+    /// resolved board positions and one history entry each, so the Listen
+    /// screen renders a live-looking readout without any audio. Compiled out
+    /// of Release entirely (verified with `strings` on the archived binary).
+    func snapshotInjectListenState(note: MappedNote?, chord: ChordMatch?, level: Float = 0.42) {
+        let frequency = note.map { 440 * pow(2, (Double($0.midiNote) - 69) / 12) }
+        display = PitchDisplayState(
+            frequency: frequency,
+            confidence: note == nil ? 0 : 1,
+            level: level,
+            latencyMilliseconds: 0,
+            bufferSize: 0,
+            isDirectMonitoring: false,
+            note: note
+        )
+        chordDisplay = ChordDisplayState(chord: chord, level: level)
+        if let note {
+            resolvedMIDI = note.midiNote
+            fretPositions = resolver.resolve(midiNote: note.midiNote)
+            appendToNoteHistory(note, positions: fretPositions)
+        } else {
+            fretPositions = []
+            resolvedMIDI = nil
+        }
+        if let chord {
+            appendToHistory(chord)
+        }
+        unclearSignalMessage = nil
+        unclearSignalSince = nil
+    }
     #endif
 
     private let resolver = FretPositionResolver()
