@@ -24,11 +24,18 @@ struct IOSAppRootView: View {
     @State private var unlockTarget: LearningModule?
     @State private var showsUnlockSheet = IOSSnapshot.showsUnlockSheet
     /// The iPad split view's sidebar state; the snapshot harness collapses it
-    /// for the sidebar-closed capture. `.automatic` everywhere else.
-    @State private var columnVisibility: NavigationSplitViewVisibility =
-        IOSSnapshot.collapsesSidebar ? .detailOnly : .automatic
+    /// for the sidebar-closed capture. `.automatic` everywhere else. The glide
+    /// capture forces `.all` from the first render so the sidebar column is
+    /// guaranteed visible (`.automatic` can restore a collapsed icon rail).
+    @State private var columnVisibility: NavigationSplitViewVisibility = {
+        #if DEBUG
+        if IOSSidebarGlideCapture.isActive { return .all }
+        #endif
+        return IOSSnapshot.collapsesSidebar ? .detailOnly : .automatic
+    }()
     #if DEBUG
     @State private var sessionLogger: SessionLogger?
+    @State private var glideCaptureRunning = false
     #endif
 
     init(unlockStore: IOSUnlockStore = IOSUnlockStore()) {
@@ -36,6 +43,11 @@ struct IOSAppRootView: View {
     }
 
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    /// Namespace for the one sidebar selection highlight that slides between
+    /// rows (`matchedGeometryEffect`) instead of jumping.
+    @Namespace private var sidebarHighlightNamespace
 
     private var navigationKind: IOSNavigationKind {
         IOSNavigation.kind(for: UIDevice.current.userInterfaceIdiom)
@@ -102,6 +114,26 @@ struct IOSAppRootView: View {
             .onReceive(NotificationCenter.default.publisher(for: IOSSnapshot.popBackNotificationName)) { _ in
                 path = []
             }
+            #if DEBUG
+            // Selection-highlight glide capture: the notification is posted by
+            // the `-IOSSidebarGlideCapture` task below, never by a synthetic
+            // tap (CLAUDE.md workflow 6 — they don't drive SwiftUI selection).
+            .onReceive(NotificationCenter.default.publisher(for: IOSSidebarGlideCapture.notification)) { _ in
+                guard !glideCaptureRunning else { return }
+                glideCaptureRunning = true
+                // Capture a few resting frames first (Listen selected), then
+                // trigger the slide inside the recorder, so the recording shows
+                // the detail pane change together with the highlight's slide.
+                Task { @MainActor in
+                    await IOSSidebarGlideCapture.record(seconds: 2.6, preFrames: 5) {
+                        withAnimation(FretworkMotion.gravity) {
+                            selection = IOSSidebarGlideCapture.target
+                        }
+                    }
+                    glideCaptureRunning = false
+                }
+            }
+            #endif
             // The readout resets to neutral whenever the controller is actually
             // stopped (foreground/background, an interruption) rather than holding
             // the last note forever (D-15). Fires once per status transition, not
@@ -120,6 +152,19 @@ struct IOSAppRootView: View {
                     let logger = SessionLogger(appState: appState)
                     sessionLogger = logger
                     logger.start()
+                }
+                if IOSSidebarGlideCapture.isActive {
+                    // Force landscape so the sidebar column is visible (it
+                    // collapses in portrait). The split is already forced to
+                    // `.all` by the columnVisibility initialiser above.
+                    IOSSidebarGlideCapture.requestLandscape()
+                    // Settle so the opening frame shows the highlight at rest on
+                    // Listen — no slide-in on first appearance — before posting
+                    // the trigger once. The landscape rotation request above
+                    // retries over ~6 s and then needs a moment to land, so give
+                    // it a full 10 s.
+                    try? await Task.sleep(for: .seconds(10))
+                    NotificationCenter.default.post(name: IOSSidebarGlideCapture.notification, object: nil)
                 }
             }
             #endif
@@ -202,28 +247,96 @@ struct IOSAppRootView: View {
     }
 
     private var padList: some View {
-        List(selection: $selection) {
-            Section {
-                rowLabel(for: .listen).tag(AppScreen.listen)
-            }
-            Section("Learn") {
+        // A ScrollView + VStack rather than `List(selection:)`: the List renders
+        // rows through the table view's cell path, which does not re-parent a
+        // matchedGeometryEffect row background when the selection changes, so the
+        // highlight never moved. The VStack is small (eleven static rows) and
+        // re-parents the one background normally. Selection semantics are manual:
+        // each row is a Button, and the selected one carries `.isSelected`.
+        ScrollView {
+            VStack(spacing: 0) {
+                sidebarRow(for: .listen)
+                sidebarSectionHeader("Learn")
                 ForEach(LearningModule.allCases) { module in
                     if UnlockCatalog.isFree(module) || unlockStore.isUnlocked {
-                        rowLabel(for: .module(module)).tag(AppScreen.module(module))
+                        sidebarRow(for: .module(module))
                     } else {
-                        Button {
-                            unlockTarget = module
-                            showsUnlockSheet = true
-                        } label: {
-                            rowLabel(for: .module(module))
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Rectangle())
-                        .accessibilityHint("Opens the unlock options")
+                        lockedSidebarRow(module)
                     }
                 }
             }
+            // Symmetric capsule insets. The sidebar column adds ~10 pt on the
+            // leading edge of its own, so compensate with an extra ~10 pt on
+            // the trailing edge to keep the capsule centred.
+            .padding(.leading, 6)
+            .padding(.trailing, 16)
         }
+        .background {
+            // Adaptive: the exact dark the system sidebar drew, or the light
+            // grouped background in light mode (the snapshot's light variants).
+            colorScheme == .dark
+                ? Color(red: 0.075, green: 0.078, blue: 0.082)
+                : Color(uiColor: .secondarySystemGroupedBackground)
+        }
+        // The slide and the text/icon colour change happen in this one
+        // transaction, under the same gravity spring as every module control.
+        // Reduce Motion turns the slide into an instant move.
+        .animation(reduceMotion ? nil : FretworkMotion.gravity, value: selection)
+    }
+
+    /// A selectable sidebar row. Its background carries the one sliding
+    /// highlight (re-parented with `matchedGeometryEffect`), and the selected
+    /// row reports `.isSelected` for VoiceOver. Locked rows never reach this
+    /// path — their tap opens the unlock sheet and the highlight must not move.
+    private func sidebarRow(for screen: AppScreen) -> some View {
+        let isSelected = selection == screen
+        return Button {
+            selection = screen
+        } label: {
+            rowLabel(for: screen, isSelected: isSelected)
+                .padding(.leading, 22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .padding(.vertical, 11)
+        .background {
+            if isSelected {
+                SidebarSelectionHighlight()
+                    .matchedGeometryEffect(id: "sidebar-selection", in: sidebarHighlightNamespace)
+            }
+        }
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    /// A locked module row: the same layout as a selectable row, but the tap
+    /// opens the unlock sheet and never changes the selection (so the highlight
+    /// never moves to a locked row).
+    private func lockedSidebarRow(_ module: LearningModule) -> some View {
+        Button {
+            unlockTarget = module
+            showsUnlockSheet = true
+        } label: {
+            rowLabel(for: .module(module))
+                .padding(.leading, 22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .padding(.vertical, 11)
+        .accessibilityHint("Opens the unlock options")
+    }
+
+    /// The "Learn" section heading, aligned with the rows' icon.
+    private func sidebarSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+            .padding(.leading, 22)
+            .padding(.top, 18)
+            .padding(.bottom, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Shared
@@ -285,17 +398,19 @@ struct IOSAppRootView: View {
         }
     }
 
-    private func rowLabel(for screen: AppScreen) -> some View {
+    private func rowLabel(for screen: AppScreen, isSelected: Bool = false) -> some View {
         HStack(spacing: 12) {
             Image(systemName: screen.symbol)
                 .frame(width: 28)
                 .foregroundStyle(NotePalette.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(screen.title)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(isSelected ? NotePalette.accent : Color.primary)
                 if case .module(let module) = screen {
                     Text(module.blurb)
                         .font(.caption)
+                        // Semantic secondary — adapts to light and dark. The
+                        // capsule behind the selected row lifts it slightly.
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
