@@ -110,10 +110,10 @@ apply to only one platform.
   the Mac's minimum detail width and a wide window, and a
   `-IOSSnapshotSidebarClosed` launch argument so iPad landscape can be captured
   with the sidebar open and closed.
-
 - Note association keeps Progression, Loop and the play buttons together as
   one group: beside the chord chips when there is room, otherwise on their own
   row at the right, never split across rows.
+
 ## 0.5.8 — 2026-10-01
 
 - Fixed the Circle of Fifths spelling every flat-side key as sharps. The ring,
