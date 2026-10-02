@@ -4,6 +4,12 @@ All notable changes to Fretwork are recorded here, newest first. The Mac app
 and the iPhone/iPad app version independently; entries are labelled when they
 apply to only one platform.
 
+## 1.0.0 (iOS) — 2026-10-02
+
+- First App Store version of Fretwork for iPhone and iPad. Listen and Notes
+  are free; a one-time purchase unlocks the other nine learning modules.
+  Includes everything in the 0.x iOS entries below.
+
 ## 0.3.0 (iOS) — 2026-10-01
 
 - iPad landscape Listen follows the Mac Listen: the note readout + cents gauge
