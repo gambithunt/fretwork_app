@@ -72,14 +72,16 @@ struct HarmonizingModuleScreen: View {
 
                 // The degree row: the whole key at a glance, which is the
                 // point of the module — you pick a degree and see what chord
-                // falls out. A labelled cell like every other control, so the
-                // card reads as one evenly-distributed panel.
+                // falls out. All seven chips stay on one line inside their
+                // cell, and the cell starts its own row (Mode · Labels sit
+                // above, Play chord shares the row on the right).
                 ChipPicker(
                     values: Array(model.chords.indices),
                     selection: model.degree,
                     tint: { _ in NotePalette.accent },
                     onSelect: model.selectDegree,
-                    accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" }
+                    accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" },
+                    singleLine: true
                 ) { index, isActive in
                     VStack(spacing: 2) {
                         Text(model.chords[index].roman)
@@ -91,6 +93,7 @@ struct HarmonizingModuleScreen: View {
                     }
                 }
                 .moduleControlCell(caption: "DEGREE")
+                .moduleControlRowBreak()
 
                 ModulePrimaryAction(
                     title: "Play chord",

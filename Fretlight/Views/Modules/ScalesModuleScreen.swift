@@ -51,7 +51,6 @@ struct ScalesModuleScreen: View {
                 .moduleNotesCard()
 
             options(model)
-                .moduleOptionsCard()
         }
     }
 
