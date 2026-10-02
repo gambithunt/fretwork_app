@@ -26,6 +26,13 @@ final class FretworkIOSScaffoldTests: XCTestCase {
         XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "ITSAppUsesNonExemptEncryption") as? Bool, false)
     }
 
+    /// iPad multitasking (Split View, Stage Manager) must stay available. The
+    /// key has twice come back only so a screenshot harness could rotate a
+    /// simulator; product behaviour does not bend for a debug tool.
+    func testHostedBundleDoesNotRequireFullScreen() {
+        XCTAssertNotEqual(Bundle.main.object(forInfoDictionaryKey: "UIRequiresFullScreen") as? Bool, true)
+    }
+
     func testHostedBundleHasNoSparkleKeys() {
         let forbiddenKeys = ["SUFeedURL", "SUPublicEDKey", "SUEnableInstallerLauncherService"]
         for key in forbiddenKeys {
