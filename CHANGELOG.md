@@ -73,7 +73,7 @@ apply to only one platform.
   the App Store build declares none. Store copy, privacy policy and support
   page are drafted under `docs/app-store/`.
 
-## 0.5.9 — 2026-10-01
+## 0.5.9 — 2026-10-02
 
 - Rebuilt the learning modules' control row as one shared labelled-cell card
   (`ModuleControlCard` in `ModuleLayout.swift`) instead of ten near-identical
