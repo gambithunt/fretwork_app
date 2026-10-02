@@ -21,8 +21,14 @@ apply to only one platform.
   and iPad portrait.
 - Removed the iPad-only height-driven board scaling (`IOSBoardScale`): iPad
   landscape now hosts the Mac screens (scale 1), so nothing else needed it.
-- iPad scenes declare `UIRequiresFullScreen` so a full-screen tuner app can
-  honour programmatic orientation.
+
+- The iPad sidebar's selection highlight now slides between rows with the
+  app's gravity spring instead of jumping; Reduce Motion moves it instantly.
+- iPad module buttons never wrap their label onto two lines ("Play
+  progression"); the action group moves to a new row instead.
+- Removed `UIRequiresFullScreen` again. It had been added back only so a
+  screenshot harness could rotate the simulator, which cost iPad users Split
+  View and Stage Manager.
 
 ## 0.2.1 (iOS) — 2026-10-01
 

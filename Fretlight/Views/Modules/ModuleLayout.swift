@@ -701,6 +701,10 @@ struct ModuleGlassPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.callout.weight(.semibold))
+            // A button label is one line at its full width, whichever module
+            // built the button; the flow layout moves the group instead.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(NotePalette.accent)
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
@@ -718,6 +722,10 @@ struct ModuleGlassSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.callout.weight(.medium))
+            // A button label is one line at its full width, whichever module
+            // built the button; the flow layout moves the group instead.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(tint)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
