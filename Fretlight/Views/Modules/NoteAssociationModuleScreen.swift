@@ -114,7 +114,7 @@ struct NoteAssociationModuleScreen: View {
                 // The chord degree row keeps all seven chips on one line; the
                 // flow layout measures that line as the cell's natural width.
                 // It starts its own row (Mode · Labels · Layers sit above) and
-                // shares it with Progression and the actions on the right.
+                // shares it with the progression-and-play group when that fits.
                 ChipPicker(
                     values: Array(model.chords.indices),
                     selection: model.focusedDegree,
@@ -136,58 +136,67 @@ struct NoteAssociationModuleScreen: View {
                 .moduleControlCell(caption: "CHORD")
                 .moduleControlRowBreak()
 
-                HStack(spacing: 8) {
-                    Picker("Progression", selection: Binding(
-                        get: { model.progressionID },
-                        set: { model.selectProgression($0) }
-                    )) {
-                        ForEach(model.progressions, id: \.id) { progression in
-                            Text(progression.name).tag(progression.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .fixedSize()
-                    .moduleMenuPicker()
-                    .disabled(model.progressions.isEmpty)
-
-                    ToggleChip(
-                        title: "Loop",
-                        isOn: model.loop,
-                        tint: NotePalette.accent,
-                        onTap: { model.setLoop(!model.loop) }
-                    )
-                }
-                .moduleControlCell(caption: "PROGRESSION")
-
-                // The actions stay together in the last cell: the primary
-                // action, its Stop, and Strum chord — a secondary action that
-                // belongs with the others rather than a lonely cell of its own.
-                VStack(alignment: .trailing, spacing: 6) {
+                // Progression, Loop and the actions are ONE flow cell, so they
+                // never split: beside the chord chips when the row has room,
+                // otherwise together on their own row at the trailing edge.
+                // Strum chord rides along as the other play action.
+                HStack(alignment: .top, spacing: 24) {
                     HStack(spacing: 8) {
-                        Button(action: { model.startProgression() }) {
-                            Label("Play progression", systemImage: "play.fill")
-                                .frame(minWidth: 132)
+                        Picker("Progression", selection: Binding(
+                            get: { model.progressionID },
+                            set: { model.selectProgression($0) }
+                        )) {
+                            ForEach(model.progressions, id: \.id) { progression in
+                                Text(progression.name).tag(progression.id)
+                            }
                         }
-                        .modulePrimaryButton()
-                        .disabled(model.progressionChords.isEmpty)
+                        .labelsHidden()
+                        .fixedSize()
+                        .moduleMenuPicker()
+                        .disabled(model.progressions.isEmpty)
 
-                        Button(action: { model.strumChord() }) {
-                            Label("Strum chord", systemImage: "guitars")
-                        }
-                        .moduleSecondaryButton()
+                        ToggleChip(
+                            title: "Loop",
+                            isOn: model.loop,
+                            tint: NotePalette.accent,
+                            onTap: { model.setLoop(!model.loop) }
+                        )
+                    }
+                    .moduleControlCell(caption: "PROGRESSION")
 
-                        Button(action: { model.stopEverything() }) {
-                            Label("Stop", systemImage: "stop.fill")
+                    // The actions stay together in the last cell: the primary
+                    // action, its Stop, and Strum chord — a secondary action that
+                    // belongs with the others rather than a lonely cell of its own.
+                    VStack(alignment: .trailing, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Button(action: { model.startProgression() }) {
+                                Label("Play progression", systemImage: "play.fill")
+                                    .frame(minWidth: 132)
+                            }
+                            .modulePrimaryButton()
+                            .disabled(model.progressionChords.isEmpty)
+
+                            Button(action: { model.strumChord() }) {
+                                Label("Strum chord", systemImage: "guitars")
+                            }
+                            .moduleSecondaryButton()
+
+                            Button(action: { model.stopEverything() }) {
+                                Label("Stop", systemImage: "stop.fill")
+                            }
+                            .moduleSecondaryButton()
                         }
-                        .moduleSecondaryButton()
+                        if let beat = model.progressionSnapshot.countInBeat {
+                            Text("Count in… \(beat)")
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(NotePalette.accent)
+                        }
                     }
-                    if let beat = model.progressionSnapshot.countInBeat {
-                        Text("Count in… \(beat)")
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(NotePalette.accent)
-                    }
+                    .moduleControlCell(caption: "PLAY", alignment: .trailing)
                 }
-                .moduleControlCell(caption: "PLAY", alignment: .trailing)
+                // Natural width: the two inner cells must not stretch and
+                // squeeze each other (that truncated Strum and Stop to "S…").
+                .fixedSize(horizontal: true, vertical: false)
             }
         }
     }
