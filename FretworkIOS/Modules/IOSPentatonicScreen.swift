@@ -95,6 +95,7 @@ private struct IOSPentatonicStage: View {
                 title: "Practise",
                 accessibilityLabel: "Practise",
                 isRunActive: isRunActive,
+                countInBeat: model.guidedSnapshot.countInBeat,
                 disabled: !isRunActive && (model.box.isEmpty || !state.isSamplePlaybackReady),
                 start: { model.startGuided() },
                 stop: { model.stopGuided() }
@@ -147,14 +148,37 @@ private struct IOSPentatonicDrawer: View {
                 }
                 .disabled(isRunActive)
 
-                Text("A four-beat count-in, then one note per beat up the box. Tempo can be changed while practising.")
+                Text("A four-beat count-in, then one note per beat up the box.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                // The on-screen tempo handles are the model's `slower`/`faster`
+                // (the web's five presets). Like Scales', they work before a
+                // run starts — that is their whole purpose.
+                tempo
+
                 IOSModulePlaybackNotice(state: state)
             }
             .padding(20)
+        }
+    }
+
+    private var tempo: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Tempo")
+                .font(.headline)
+            HStack(spacing: 12) {
+                Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Slower")
+                Text("\(model.tempoBpm) bpm")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button { _ = model.faster() } label: { Image(systemName: "hare") }
+                    .buttonStyle(.glass)
+                    .accessibilityLabel("Faster")
+            }
         }
     }
 

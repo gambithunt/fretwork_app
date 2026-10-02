@@ -1,5 +1,18 @@
 import SwiftUI
 
+#if DEBUG
+/// The run states a layout-equality test can pin a module into without the
+/// real clock, and a screenshot harness can drive from outside. Never compiled
+/// into Release.
+enum ModuleRunSnapshot {
+    enum ForcedRun: String, Sendable { case idle, countIn, playing }
+    @MainActor static var forcedRun: ForcedRun = .idle
+    /// Forces the Triads screen onto its Paths face even when idle, so an
+    /// idle screenshot shows the same card as its count-in.
+    @MainActor static var forceTriadsPathMode = false
+}
+#endif
+
 /// The two useful ways to read a contextual fretboard: the note's literal
 /// name, or the job it performs inside the exercise's current harmony.
 enum FretboardLabelMode: String, CaseIterable {
@@ -304,32 +317,64 @@ extension View {
     }
 }
 
+/// A primary-action label that swaps between its normal title and a count-in
+/// beat without ever changing width: the widest string it can show is laid out
+/// invisibly beneath, so the count-in ticking down never moves the button or
+/// the cells beside it.
+struct ModuleCountInLabel: View {
+    let title: String
+    let countInBeat: Int?
+
+    var body: some View {
+        ZStack {
+            // Reserve the width of the widest possible label.
+            Text(title)
+                .fixedSize(horizontal: true, vertical: false)
+                .hidden()
+            Text("Count in… 4")
+                .fixedSize(horizontal: true, vertical: false)
+                .hidden()
+            Text(countInBeat.map { "Count in… \($0)" } ?? title)
+                .fixedSize(horizontal: true, vertical: false)
+                .contentTransition(.numericText())
+        }
+        .animation(.easeInOut(duration: 0.15), value: countInBeat)
+    }
+}
+
 /// The one primary action a module owns (Play/Strum/Practise/Play interval/…).
 ///
 /// It always sits in the *last* cell, at the card's trailing edge, at one
 /// consistent size — the owner noticed it changing size and position between
 /// modules. Its Stop sits right beside it in the same cell, so the two are one
-/// fixed unit rather than two buttons that drift apart.
+/// fixed unit rather than two buttons that drift apart. While a run counts in,
+/// the button's label becomes "Count in… N" in the same reserved width.
 struct ModulePrimaryAction: View {
     let title: String
     var systemImage: String = "play.fill"
     var disabled: Bool = false
+    var countInBeat: Int? = nil
     let action: () -> Void
     let stopAction: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
             Button(action: action) {
-                Label(title, systemImage: systemImage)
-                    // A button label never wraps: its measured width is the
-                    // full one-line label, so the flow layout moves the whole
-                    // action group to a new row when it doesn't fit instead
-                    // of squeezing "Play progression" onto two lines.
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(minWidth: 132)
+                Label {
+                    ModuleCountInLabel(title: title, countInBeat: countInBeat)
+                } icon: {
+                    Image(systemName: systemImage)
+                }
+                // A button label never wraps: its measured width is the
+                // full one-line label, so the flow layout moves the whole
+                // action group to a new row when it doesn't fit instead
+                // of squeezing "Play progression" onto two lines.
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minWidth: 132)
             }
             .modulePrimaryButton()
             .disabled(disabled)
+            .accessibilityLabel(countInBeat.map { "Count in… \($0)" } ?? title)
 
             Button(action: stopAction) {
                 Label("Stop", systemImage: "stop.fill")
@@ -337,6 +382,33 @@ struct ModulePrimaryAction: View {
             }
             .moduleSecondaryButton()
         }
+    }
+}
+
+/// The run-progress readout inside a module's TEMPO cell. It always occupies
+/// the width of the widest progress it can show, so idle ("– / 8") and playing
+/// ("3 / 8") never change the cell's — or the card's — width.
+struct ModuleRunProgress: View {
+    let index: Int?
+    let total: Int
+
+    private var text: String {
+        guard let index else { return "– / \(total)" }
+        return "\(index + 1) / \(total)"
+    }
+
+    var body: some View {
+        ZStack {
+            Text("88 / 88")
+                .fixedSize(horizontal: true, vertical: false)
+                .hidden()
+            Text(text)
+                .fixedSize(horizontal: true, vertical: false)
+                .contentTransition(.numericText())
+        }
+        .font(.callout.monospacedDigit())
+        .foregroundStyle(.secondary)
+        .animation(.easeInOut(duration: 0.15), value: index)
     }
 }
 

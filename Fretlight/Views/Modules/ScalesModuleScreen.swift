@@ -17,6 +17,11 @@ struct ScalesModuleScreen: View {
         .onAppear {
             if model == nil { model = state.makeScalesModuleModel() }
             state.refreshSamplePlaybackReadiness()
+            #if DEBUG
+            if ModuleRunSnapshot.forcedRun != .idle {
+                model?.debugForceRun(ModuleRunSnapshot.forcedRun)
+            }
+            #endif
         }
         .onChange(of: state.tuning) { _, tuning in model?.retune(to: tuning) }
         .onDisappear { model?.stopGuided() }
@@ -26,7 +31,7 @@ struct ScalesModuleScreen: View {
         ModuleLayout(module: .scales, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
-                controls(model)
+                Self.controls(model)
             }
         } stage: {
             VStack(alignment: .trailing, spacing: 8) {
@@ -45,7 +50,7 @@ struct ScalesModuleScreen: View {
         }
     }
 
-    private func controls(_ model: ScalesModuleModel) -> some View {
+    static func controls(_ model: ScalesModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
@@ -54,7 +59,7 @@ struct ScalesModuleScreen: View {
         }
     }
 
-    private func options(_ model: ScalesModuleModel) -> some View {
+    private static func options(_ model: ScalesModuleModel) -> some View {
         ModuleControlCard {
             Picker("Scale", selection: Binding(
                 get: { model.quality },
@@ -92,30 +97,27 @@ struct ScalesModuleScreen: View {
             .moduleMenuPicker()
             .moduleControlCell(caption: "DIRECTION")
 
-            if model.guidedSnapshot.status != .idle {
-                HStack(spacing: 8) {
-                    Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
-                        .moduleSecondaryButton()
-                    Text("\(model.guidedSnapshot.tempoBpm) bpm")
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    Button { _ = model.faster() } label: { Image(systemName: "hare") }
-                        .moduleSecondaryButton()
-                    if let beat = model.guidedSnapshot.countInBeat {
-                        Text("Count in… \(beat)")
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(NotePalette.accent)
-                    } else if let index = model.guidedSnapshot.currentIndex {
-                        Text("\(index + 1) / \(model.guidedSnapshot.total)")
-                            .font(.callout.monospacedDigit())
-                    }
-                }
-                .moduleControlCell(caption: "TEMPO")
+            HStack(spacing: 8) {
+                Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                    .moduleSecondaryButton()
+                    .accessibilityLabel("Slower")
+                Text("\(model.tempoBpm) bpm")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Button { _ = model.faster() } label: { Image(systemName: "hare") }
+                    .moduleSecondaryButton()
+                    .accessibilityLabel("Faster")
+                ModuleRunProgress(
+                    index: model.guidedSnapshot.currentIndex,
+                    total: model.sequence.count
+                )
             }
+            .moduleControlCell(caption: "TEMPO")
 
             ModulePrimaryAction(
                 title: "Practise",
                 disabled: model.sequence.isEmpty || model.guidedSnapshot.status != .idle,
+                countInBeat: model.guidedSnapshot.countInBeat,
                 action: { model.startGuided() },
                 stopAction: { model.stopGuided() }
             )

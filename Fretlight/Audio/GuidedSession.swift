@@ -140,6 +140,16 @@ final class GuidedSession<Step: Sendable>: @unchecked Sendable {
     @discardableResult func slower() -> Int { changeTempo(by: -1) }
     @discardableResult func faster() -> Int { changeTempo(by: 1) }
 
+    /// Steps a tempo across the five presets without needing a live session,
+    /// so a model can set its tempo while idle — before any run starts. The
+    /// same preset-index arithmetic `changeTempo` uses, factored out so an
+    /// idle model and a running session cannot drift apart.
+    static func tempoStep(from bpm: Int, by delta: Int) -> Int {
+        let base = tempoPresets.firstIndex(of: bpm)
+            ?? tempoPresets.firstIndex(of: defaultTempoBpm)!
+        return tempoPresets[min(max(base + delta, 0), tempoPresets.count - 1)]
+    }
+
     @discardableResult
     func setTempo(_ bpm: Int) -> Int {
         let target = Self.tempoPresets.contains(bpm) ? bpm : Self.defaultTempoBpm

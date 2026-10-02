@@ -81,6 +81,7 @@ private struct IOSScalesStage: View {
                 title: "Practise",
                 accessibilityLabel: "Practise",
                 isRunActive: isRunActive,
+                countInBeat: model.guidedSnapshot.countInBeat,
                 disabled: !isRunActive && (model.sequence.isEmpty || !state.isSamplePlaybackReady),
                 start: { model.startGuided() },
                 stop: { model.stopGuided() }
@@ -192,7 +193,7 @@ private struct IOSScalesDrawer: View {
                 Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
                     .buttonStyle(.glass)
                     .accessibilityLabel("Slower")
-                Text("\(model.guidedSnapshot.tempoBpm) bpm")
+                Text("\(model.tempoBpm) bpm")
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Button { _ = model.faster() } label: { Image(systemName: "hare") }

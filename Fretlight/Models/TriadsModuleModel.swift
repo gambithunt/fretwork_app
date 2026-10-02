@@ -40,6 +40,11 @@ final class TriadsModuleModel {
 
     private(set) var pulses: [String: Double] = [:]
     private(set) var progressionSnapshot = ProgressionSession.Snapshot()
+    /// The player's tempo, kept across runs and settable while idle. The
+    /// progression session's snapshot resets to the default on stop, so this
+    /// — not `progressionSnapshot.tempoBpm` — is what the UI shows and what a
+    /// new run starts at.
+    private(set) var tempoBpm: Int = ProgressionSession.defaultTempoBpm
 
     var tuning: Tuning
     let highestFret = LearningModule.triads.highestFret
@@ -298,6 +303,7 @@ final class TriadsModuleModel {
             }
         )
         progression = session
+        session.setTempo(tempoBpm)
         session.startProgression(total: steps.count, loop: loop, beatsPerStep: 4)
         // Taken synchronously as well as through `onState`. The callback hops
         // to the main actor, so without this the UI — and a test — would still
@@ -311,8 +317,16 @@ final class TriadsModuleModel {
         progressionSnapshot = ProgressionSession.Snapshot()
     }
 
-    @discardableResult func slower() -> Int { progression?.slower() ?? ProgressionSession.defaultTempoBpm }
-    @discardableResult func faster() -> Int { progression?.faster() ?? ProgressionSession.defaultTempoBpm }
+    @discardableResult func slower() -> Int {
+        tempoBpm = ProgressionSession.tempoStep(from: tempoBpm, by: -1)
+        progression?.setTempo(tempoBpm)
+        return tempoBpm
+    }
+    @discardableResult func faster() -> Int {
+        tempoBpm = ProgressionSession.tempoStep(from: tempoBpm, by: 1)
+        progression?.setTempo(tempoBpm)
+        return tempoBpm
+    }
 
     private func makeSequencer() -> NoteSequencer {
         NoteSequencer { [weak self] position, _, _ in
@@ -340,4 +354,33 @@ final class TriadsModuleModel {
             self?.pulses[id] = nil
         }
     }
+
+    #if DEBUG
+    /// Snapshot/test hook: pin the progression to a fixed state without the
+    /// real clock, so layout tests can render idle / count-in / mid-run
+    /// deterministically. The Paths face is forced on, since that is the only
+    /// face that has a run.
+    func debugForceRun(_ kind: ModuleRunSnapshot.ForcedRun) {
+        if !isPathMode { isPathMode = true }
+        switch kind {
+        case .idle:
+            stopEverything()
+        case .countIn:
+            var snapshot = ProgressionSession.Snapshot()
+            snapshot.status = .countIn
+            snapshot.countInBeat = 1
+            snapshot.total = pathSteps.count
+            progressionSnapshot = snapshot
+        case .playing:
+            var snapshot = ProgressionSession.Snapshot()
+            snapshot.status = .playing
+            snapshot.currentIndex = min(1, max(0, pathSteps.count - 1))
+            snapshot.total = pathSteps.count
+            progressionSnapshot = snapshot
+            if pathSteps.indices.contains(snapshot.currentIndex ?? 0) {
+                pathStep = snapshot.currentIndex ?? 0
+            }
+        }
+    }
+    #endif
 }

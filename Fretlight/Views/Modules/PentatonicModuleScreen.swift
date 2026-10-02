@@ -18,6 +18,11 @@ struct PentatonicModuleScreen: View {
         .onAppear {
             if model == nil { model = state.makePentatonicModuleModel() }
             state.refreshSamplePlaybackReadiness()
+            #if DEBUG
+            if ModuleRunSnapshot.forcedRun != .idle {
+                model?.debugForceRun(ModuleRunSnapshot.forcedRun)
+            }
+            #endif
         }
         .onDisappear { model?.stop() }
     }
@@ -28,7 +33,7 @@ struct PentatonicModuleScreen: View {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
                 StandardTuningNotice(tuning: state.tuning, what: "These boxes")
-                controls(model)
+                Self.controls(model, labelMode: $labelMode)
             }
         } stage: {
             VStack(alignment: .trailing, spacing: 8) {
@@ -48,7 +53,7 @@ struct PentatonicModuleScreen: View {
         }
     }
 
-    private func controls(_ model: PentatonicModuleModel) -> some View {
+    static func controls(_ model: PentatonicModuleModel, labelMode: Binding<FretboardLabelMode>) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             PitchClassPicker(title: "ROOT", selection: model.rootPitchClass, onSelect: model.selectRoot)
                 .moduleNotesCard()
@@ -91,34 +96,31 @@ struct PentatonicModuleScreen: View {
                 .moduleMenuPicker()
                 .moduleControlCell(caption: "POSITION")
 
-                FretboardLabelPicker(selection: $labelMode)
+                FretboardLabelPicker(selection: labelMode)
                 .moduleMenuPicker()
                     .moduleControlCell(caption: "LABELS")
 
-                if model.guidedSnapshot.status != .idle {
-                    HStack(spacing: 8) {
-                        Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
-                            .moduleSecondaryButton()
-                        Text("\(model.guidedSnapshot.tempoBpm) bpm")
-                            .font(.callout.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Button { _ = model.faster() } label: { Image(systemName: "hare") }
-                            .moduleSecondaryButton()
-                        if let beat = model.guidedSnapshot.countInBeat {
-                            Text("Count in… \(beat)")
-                                .font(.callout.weight(.medium))
-                                .foregroundStyle(NotePalette.accent)
-                        } else if let index = model.guidedSnapshot.currentIndex {
-                            Text("\(index + 1) / \(model.guidedSnapshot.total)")
-                                .font(.callout.monospacedDigit())
-                        }
-                    }
-                    .moduleControlCell(caption: "TEMPO")
+                HStack(spacing: 8) {
+                    Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                        .moduleSecondaryButton()
+                        .accessibilityLabel("Slower")
+                    Text("\(model.tempoBpm) bpm")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Button { _ = model.faster() } label: { Image(systemName: "hare") }
+                        .moduleSecondaryButton()
+                        .accessibilityLabel("Faster")
+                    ModuleRunProgress(
+                        index: model.guidedSnapshot.currentIndex,
+                        total: model.box.count
+                    )
                 }
+                .moduleControlCell(caption: "TEMPO")
 
                 ModulePrimaryAction(
                     title: "Practise",
                     disabled: model.box.isEmpty || model.guidedSnapshot.status != .idle,
+                    countInBeat: model.guidedSnapshot.countInBeat,
                     action: { model.startGuided() },
                     stopAction: { model.stopGuided() }
                 )

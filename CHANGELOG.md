@@ -113,6 +113,19 @@ apply to only one platform.
 - Note association keeps Progression, Loop and the play buttons together as
   one group: beside the chord chips when there is room, otherwise on their own
   row at the right, never split across rows.
+- Starting or stopping a run no longer changes the control card at all. The
+  count-in no longer inserts a "Count in… N" line below the buttons (which
+  pushed every cell below it down) — it now swaps the primary button's label
+  in place, reserving the widest label's width so the button and its
+  neighbours never move, and the button reads the count for accessibility.
+  Pentatonic, Scales and Triads' tempo cell (tortoise · N bpm · hare · the
+  run progress) is now always present instead of being inserted only while a
+  run is active, so tempo can be set before starting; the progress shows
+  "– / N" when idle at a reserved monospaced width. iPhone mirrors the same
+  rule in its scaffold: the count-in lives in the band button and the tempo
+  row is reserved rather than revealed. A new
+  `ModuleControlCardStabilityTests` pins each module idle/count-in/mid-run
+  and asserts the control card height is identical.
 
 ## 0.5.8 — 2026-10-01
 
