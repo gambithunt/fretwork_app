@@ -111,8 +111,22 @@ apply to only one platform.
   `-IOSSnapshotSidebarClosed` launch argument so iPad landscape can be captured
   with the sidebar open and closed.
 - Note association keeps Progression, Loop and the play buttons together as
-  one group: beside the chord chips when there is room, otherwise on their own
-  row at the right, never split across rows.
+  one full-width group on their own row (row 2, or row 3 when the chord
+  chips wrap on a narrow window): the progression part at the leading edge,
+  the play actions at the trailing edge, flexible space between — and when
+  the row is too narrow for both on one line, the play part wraps below,
+  still trailing, with nothing truncated.
+- Note association's layer switches left the control card for the board's
+  header row — the line that already holds Full neck. They are now a
+  left-aligned SHOW caption and three compact chips, each carrying its
+  layer's role colour as a dot (filled when on, hollow ring when off), the
+  same colours the board and the old legend used; Full neck stays pinned
+  right and the row stays 20pt tall. `FretRangeToggle` gained an optional
+  leading slot (empty leading stays the bare button) so the eight other
+  modules that use it are pixel-identical. The card's first row is now
+  Mode · Labels · Chord (Chord wrapping whole to its own row when narrow),
+  and the now-duplicate colour legend left the readout. Card height:
+  352pt at 750 (−5), 265pt at 1300 (±0).
 - Starting or stopping a run no longer changes the control card at all. The
   count-in no longer inserts a "Count in… N" line below the buttons (which
   pushed every cell below it down) — it now swaps the primary button's label

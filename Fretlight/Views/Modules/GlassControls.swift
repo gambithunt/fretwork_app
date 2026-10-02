@@ -344,6 +344,55 @@ struct ToggleChip: View {
     }
 }
 
+/// A compact independent toggle for the board's header row — the same
+/// on/off semantics and accessibility as `ToggleChip`, but sized to sit
+/// beside `FretRangeToggle` without growing that row. Each chip carries a
+/// role-colour dot (the same filled dots the legend and the board use):
+/// filled when on, a hollow ring when off. The chip itself is lit when on
+/// and dim when off.
+struct RoleDotToggleChip: View {
+    let title: String
+    let isOn: Bool
+    let color: Color
+    let onTap: () -> Void
+    var help: String? = nil
+
+    var body: some View {
+        Button {
+            withAnimation(FretworkMotion.gravity) { onTap() }
+        } label: {
+            HStack(spacing: 5) {
+                dot
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(isOn ? .primary : .secondary)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isOn ? color.opacity(0.20) : Color.white.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(isOn ? color.opacity(0.60) : .white.opacity(0.10), lineWidth: 1)
+            )
+        }
+        .buttonStyle(ElasticPressStyle())
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
+        .accessibilityLabel(title)
+        .modifier(OptionalHelp(text: help))
+    }
+
+    private var dot: some View {
+        Circle()
+            .fill(isOn ? color : Color.clear)
+            .overlay(Circle().strokeBorder(color, lineWidth: isOn ? 0 : 1.5))
+            .frame(width: 8, height: 8)
+    }
+}
+
 /// `.help(_:)` only accepts a `String`, never an optional — this applies it
 /// only when the caller actually has one, so `ChipPicker` can offer a tooltip
 /// closure without forcing every caller to supply one.
@@ -447,11 +496,40 @@ struct FretboardEdgeNav<Board: View>: View {
 /// size it is, the neck around it just gets longer. Purely a rendering
 /// choice: every module's board already scales to however many frets it's
 /// told to draw.
-struct FretRangeToggle: View {
+///
+/// The board's header row. Modules normally use just the toggle; a module
+/// that needs leading content in that same row (Note Association's layer
+/// switches) supplies `leading`, and the toggle stays pinned at the trailing
+/// edge. When `leading` is empty the body is exactly the bare button, so the
+/// eight modules that use it unchanged stay pixel-identical.
+struct FretRangeToggle<Leading: View>: View {
     @Binding var isExpanded: Bool
     let defaultFrets: Int
+    @ViewBuilder var leading: () -> Leading
+
+    init(
+        isExpanded: Binding<Bool>,
+        defaultFrets: Int,
+        @ViewBuilder leading: @escaping () -> Leading = { EmptyView() }
+    ) {
+        self._isExpanded = isExpanded
+        self.defaultFrets = defaultFrets
+        self.leading = leading
+    }
 
     var body: some View {
+        if Leading.self == EmptyView.self {
+            button
+        } else {
+            HStack(alignment: .center, spacing: 0) {
+                leading()
+                Spacer(minLength: 12)
+                button
+            }
+        }
+    }
+
+    private var button: some View {
         Button {
             withAnimation(FretworkMotion.gravity) { isExpanded.toggle() }
         } label: {

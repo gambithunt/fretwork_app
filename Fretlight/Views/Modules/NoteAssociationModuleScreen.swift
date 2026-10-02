@@ -35,7 +35,9 @@ struct NoteAssociationModuleScreen: View {
             }
         } stage: {
             VStack(alignment: .trailing, spacing: 8) {
-                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret)
+                FretRangeToggle(isExpanded: $showsFullNeck, defaultFrets: model.highestFret) {
+                    layersHeader(model)
+                }
                 FretboardBoardView(
                     dots: model.dots,
                     frets: showsFullNeck ? 22 : model.highestFret,
@@ -57,9 +59,10 @@ struct NoteAssociationModuleScreen: View {
                 .moduleNotesCard()
 
             // Three rows, rebuilt to the owner's balance: row 1 is what to
-            // show (Mode · Labels · Layers), row 2 is the chord degree row at
-            // full width so its seven chips stay one line, row 3 is the
-            // progression (with Loop beside it) and the actions together.
+            // show (Mode · Labels · Chord, the chord chips wrapping whole to
+            // their own row when narrow), row 2 is a full-width group with
+            // the progression (and Loop) leading and the play actions
+            // trailing.
             ModuleControlCard {
                 Picker("Mode", selection: Binding(
                     get: { model.isMajor },
@@ -85,41 +88,14 @@ struct NoteAssociationModuleScreen: View {
                 .moduleMenuPicker()
                 .moduleControlCell(caption: "LABELS")
 
-                // The layer switches. Seeing the scale alone, or the chord
-                // tones alone, is a different exercise from seeing all three
-                // at once. Chips, not the macOS-only checkbox style, so the
-                // same control works on the Mac and on touch. One line of
-                // `ToggleChip`s — not a `ToggleChipGrid` — so the three layer
-                // chips stay on a single line inside their cell.
-                ModuleChipRowLayout {
-                    ToggleChip(
-                        title: "Chord tones",
-                        isOn: model.showsChordTones,
-                        tint: NotePalette.accent,
-                        onTap: { model.setLayer(chordTones: !model.showsChordTones) },
-                        help: "Show the notes of the chord in focus"
-                    )
-                    ToggleChip(
-                        title: "Pentatonic",
-                        isOn: model.showsPentatonic,
-                        tint: NotePalette.accent,
-                        onTap: { model.setLayer(pentatonic: !model.showsPentatonic) },
-                        help: "Show the safe notes around them"
-                    )
-                    ToggleChip(
-                        title: "Rest of scale",
-                        isOn: model.showsScale,
-                        tint: NotePalette.accent,
-                        onTap: { model.setLayer(scale: !model.showsScale) },
-                        help: "Show the rest of the key's scale"
-                    )
-                }
-                .moduleControlCell(caption: "LAYERS")
+                // The layer switches moved out of the card onto the board's
+                // header row (the SHOW chips beside Full neck), so the card's
+                // first row is now Mode · Labels · Chord.
 
                 // The chord degree row keeps all seven chips on one line; the
                 // flow layout measures that line as the cell's natural width.
-                // It starts its own row (Mode · Labels · Layers sit above) and
-                // shares it with the progression-and-play group when that fits.
+                // It flows beside Mode and Labels when that fits, and wraps
+                // whole to its own row otherwise.
                 ChipPicker(
                     values: Array(model.chords.indices),
                     selection: model.focusedDegree,
@@ -139,77 +115,130 @@ struct NoteAssociationModuleScreen: View {
                     }
                 }
                 .moduleControlCell(caption: "CHORD")
-                .moduleControlRowBreak()
 
-                // Progression, Loop and the actions are ONE flow cell, so they
-                // never split: beside the chord chips when the row has room,
-                // otherwise together on their own row at the trailing edge.
-                // Strum chord rides along as the other play action.
-                HStack(alignment: .top, spacing: 24) {
-                    HStack(spacing: 8) {
-                        Picker("Progression", selection: Binding(
-                            get: { model.progressionID },
-                            set: { model.selectProgression($0) }
-                        )) {
-                            ForEach(model.progressions, id: \.id) { progression in
-                                Text(progression.name).tag(progression.id)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                        .moduleMenuPicker()
-                        .disabled(model.progressions.isEmpty)
-
-                        ToggleChip(
-                            title: "Loop",
-                            isOn: model.loop,
-                            tint: NotePalette.accent,
-                            onTap: { model.setLoop(!model.loop) }
-                        )
+                // Progression, Loop and the actions are ONE full-width flow
+                // cell that always starts its own row: the progression part
+                // at the leading edge, the play actions at the trailing edge,
+                // flexible space between. When the row is too narrow for both
+                // on one line, the play part wraps below — still trailing —
+                // and nothing truncates.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 24) {
+                        Self.progressionGroup(model)
+                        Spacer(minLength: 24)
+                        Self.playGroup(model)
                     }
-                    .moduleControlCell(caption: "PROGRESSION")
-
-                    // The actions stay together in the last cell: the primary
-                    // action, its Stop, and Strum chord — a secondary action that
-                    // belongs with the others rather than a lonely cell of its own.
-                    VStack(alignment: .trailing, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Button(action: { model.startProgression() }) {
-                                Label {
-                                    ModuleCountInLabel(
-                                        title: "Play progression",
-                                        countInBeat: model.progressionSnapshot.countInBeat
-                                    )
-                                } icon: {
-                                    Image(systemName: "play.fill")
-                                }
-                                .fixedSize(horizontal: true, vertical: false)
-                                .frame(minWidth: 132)
-                            }
-                            .modulePrimaryButton()
-                            .disabled(model.progressionChords.isEmpty)
-                            .accessibilityLabel(model.progressionSnapshot.countInBeat.map { "Count in… \($0)" } ?? "Play progression")
-
-                            Button(action: { model.strumChord() }) {
-                                Label("Strum chord", systemImage: "guitars")
-                            }
-                            .moduleSecondaryButton()
-
-                            Button(action: { model.stopEverything() }) {
-                                Label("Stop", systemImage: "stop.fill")
-                            }
-                            .moduleSecondaryButton()
-                        }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Self.progressionGroup(model)
+                        Self.playGroup(model)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
-                    .moduleControlCell(caption: "PLAY", alignment: .trailing)
                 }
-                // Natural width: the two inner cells must not stretch and
-                // squeeze each other (that truncated Strum and Stop to "S…").
-                .fixedSize(horizontal: true, vertical: false)
+                .moduleControlFullWidth()
             }
         }
     }
 
+    /// The progression picker and Loop, kept as one natural-width cell so they
+    /// never stretch to fill the row's flexible space.
+    private static func progressionGroup(_ model: NoteAssociationModuleModel) -> some View {
+        HStack(spacing: 8) {
+            Picker("Progression", selection: Binding(
+                get: { model.progressionID },
+                set: { model.selectProgression($0) }
+            )) {
+                ForEach(model.progressions, id: \.id) { progression in
+                    Text(progression.name).tag(progression.id)
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .moduleMenuPicker()
+            .disabled(model.progressions.isEmpty)
+
+            ToggleChip(
+                title: "Loop",
+                isOn: model.loop,
+                tint: NotePalette.accent,
+                onTap: { model.setLoop(!model.loop) }
+            )
+        }
+        .moduleControlCell(caption: "PROGRESSION")
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// The play actions stay together: the primary action, its Stop, and
+    /// Strum chord — a secondary action that belongs with the others rather
+    /// than a lonely cell of its own. Natural width, so the row's flexible
+    /// space pushes it to the trailing edge instead of stretching the buttons
+    /// apart (which truncated Strum and Stop to "S…").
+    private static func playGroup(_ model: NoteAssociationModuleModel) -> some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            HStack(spacing: 8) {
+                Button(action: { model.startProgression() }) {
+                    Label {
+                        ModuleCountInLabel(
+                            title: "Play progression",
+                            countInBeat: model.progressionSnapshot.countInBeat
+                        )
+                    } icon: {
+                        Image(systemName: "play.fill")
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(minWidth: 132)
+                }
+                .modulePrimaryButton()
+                .disabled(model.progressionChords.isEmpty)
+                .accessibilityLabel(model.progressionSnapshot.countInBeat.map { "Count in… \($0)" } ?? "Play progression")
+
+                Button(action: { model.strumChord() }) {
+                    Label("Strum chord", systemImage: "guitars")
+                }
+                .moduleSecondaryButton()
+
+                Button(action: { model.stopEverything() }) {
+                    Label("Stop", systemImage: "stop.fill")
+                }
+                .moduleSecondaryButton()
+            }
+        }
+        .moduleControlCell(caption: "PLAY", alignment: .trailing)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// The SHOW caption and the three layer chips for the board's header row,
+    /// each carrying its layer's role colour as its dot — the same colours the
+    /// board uses. On = lit chip with a filled dot; off = dim chip with a
+    /// hollow ring dot.
+    @ViewBuilder
+    private func layersHeader(_ model: NoteAssociationModuleModel) -> some View {
+        HStack(spacing: 8) {
+            Text("SHOW")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+            RoleDotToggleChip(
+                title: "Chord tones",
+                isOn: model.showsChordTones,
+                color: NotePalette.color(for: .root),
+                onTap: { model.setLayer(chordTones: !model.showsChordTones) },
+                help: "Show the notes of the chord in focus"
+            )
+            RoleDotToggleChip(
+                title: "Pentatonic",
+                isOn: model.showsPentatonic,
+                color: NotePalette.color(for: .pentatonic),
+                onTap: { model.setLayer(pentatonic: !model.showsPentatonic) },
+                help: "Show the safe notes around them"
+            )
+            RoleDotToggleChip(
+                title: "Rest of scale",
+                isOn: model.showsScale,
+                color: NotePalette.color(for: .outsideShape),
+                onTap: { model.setLayer(scale: !model.showsScale) },
+                help: "Show the rest of the key's scale"
+            )
+        }
+    }
 
     private func readout(_ model: NoteAssociationModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -220,25 +249,7 @@ struct NoteAssociationModuleScreen: View {
                            value: model.pentatonicNotes.map { $0.name() }.joined(separator: " "),
                            tint: NotePalette.color(for: .pentatonic))
             }
-            key
             ModuleProse(paragraphs: prose(model))
-        }
-    }
-
-    /// A legend, because three layers of meaning on one neck is exactly the
-    /// place a reader needs telling what the colours mean.
-    private var key: some View {
-        HStack(spacing: 16) {
-            legend(NotePalette.color(for: .root), "Chord tone")
-            legend(NotePalette.color(for: .pentatonic), "Pentatonic")
-            legend(NotePalette.color(for: .outsideShape), "Rest of the scale")
-        }
-    }
-
-    private func legend(_ color: Color, _ text: String) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 10, height: 10)
-            Text(text).font(.caption).foregroundStyle(.secondary)
         }
     }
 
