@@ -126,6 +126,8 @@ apply to only one platform.
   row is reserved rather than revealed. A new
   `ModuleControlCardStabilityTests` pins each module idle/count-in/mid-run
   and asserts the control card height is identical.
+- The Mac app icon now matches the iPhone and iPad icon (six coloured string
+  pills), drawn on the standard macOS rounded-square grid.
 
 ## 0.5.8 — 2026-10-01
 
