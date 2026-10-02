@@ -72,14 +72,27 @@ apply to only one platform.
 - Rebuilt the learning modules' control row as one shared labelled-cell card
   (`ModuleControlCard` in `ModuleLayout.swift`) instead of ten near-identical
   hand-rolled rows. Each control now sits in a cell with a small caps caption
-  (the ROOT caption style), the cells share the card width evenly and wrap to
-  balanced extra rows when they do not fit — never squashed, never bunched
-  left. The primary action (Play/Strum/Practise/…) and its Stop now form one
+  (the ROOT caption style); every cell keeps its natural width, the row's
+  leftover space is distributed between cells (justified), and a cell that
+  doesn't fit moves whole to the next row. A chip group (degree chips, layer
+  chips) is always one line inside its cell, never wrapped or squashed. The
+  primary action (Play/Strum/Practise/…) and its Stop now form one
   fixed unit in the last cell at one size in every module, instead of changing
   size and position between modules. Triads' four stacked lines became one row;
   Note association's four ragged sections became two balanced rows; Notes'
   Play/Stop and Clear all were split apart (Clear is destructive and stays far
   right).
+- Refined the control card's flow rule after the first build: cells no longer
+  receive an equal share of leftover width — that made chip groups wrap inside
+  a cell that was wider than the chips needed. Degree rows now render on one
+  line via `ChipPicker(singleLine:)`, and layer toggles via a single-line
+  `ModuleChipRowLayout`. Harmonizing is Mode · Labels on row 1 and the degree
+  row with Play chord on row 2; Note association is Mode · Labels · Layers,
+  then the degree row with Progression and the actions, wrapping the action
+  group to a right-aligned third row only when narrow. Scales no longer wraps
+  its options card in a second options card (a card-in-card on Mac and iPad).
+  Re-shot all ten modules at the Mac min/wide widths and iPad Pro 13 landscape:
+  none grew taller, and the other seven are unchanged.
 - iPad landscape (which hosts these Mac screens unchanged) now styles the
   controls with Liquid Glass: the primary action is a tinted glass capsule with
   a faint accent wash and accent text/icon (contrast ≥ 4.5:1 on the dark

@@ -83,11 +83,10 @@ struct NoteAssociationModuleScreen: View {
                 // The layer switches. Seeing the scale alone, or the chord
                 // tones alone, is a different exercise from seeing all three
                 // at once. Chips, not the macOS-only checkbox style, so the
-                // same control works on the Mac and on touch. Kept as a row of
-                // `ToggleChip`s — not a `ToggleChipGrid` — and wrapped inside
-                // the cell so a narrow column never hyphenates a label
-                // ("Penta-tonic").
-                ModuleChipWrapLayout {
+                // same control works on the Mac and on touch. One line of
+                // `ToggleChip`s — not a `ToggleChipGrid` — so the three layer
+                // chips stay on a single line inside their cell.
+                ModuleChipRowLayout {
                     ToggleChip(
                         title: "Chord tones",
                         isOn: model.showsChordTones,
@@ -112,16 +111,18 @@ struct NoteAssociationModuleScreen: View {
                 }
                 .moduleControlCell(caption: "LAYERS")
 
-                // The chord degree row spans its own full-width row, so the
-                // whole key stays one line at wide widths and wraps evenly only
-                // when the card forces it to.
+                // The chord degree row keeps all seven chips on one line; the
+                // flow layout measures that line as the cell's natural width.
+                // It starts its own row (Mode · Labels · Layers sit above) and
+                // shares it with Progression and the actions on the right.
                 ChipPicker(
                     values: Array(model.chords.indices),
                     selection: model.focusedDegree,
                     tint: { _ in NotePalette.accent },
                     onSelect: model.selectDegree,
                     isEmphasized: { model.playingDegree == $0 },
-                    accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" }
+                    accessibilityLabel: { "\(model.chords[$0].roman), \(model.chords[$0].name)" },
+                    singleLine: true
                 ) { index, isActive in
                     VStack(spacing: 2) {
                         Text(model.chords[index].roman)
@@ -133,7 +134,7 @@ struct NoteAssociationModuleScreen: View {
                     }
                 }
                 .moduleControlCell(caption: "CHORD")
-                .moduleControlFullWidth()
+                .moduleControlRowBreak()
 
                 HStack(spacing: 8) {
                     Picker("Progression", selection: Binding(

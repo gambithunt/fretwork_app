@@ -124,21 +124,33 @@ struct ChipPicker<Value: Hashable, Label: View>: View {
     /// (a degree chip's roman numeral over its chord name) needs its own,
     /// since VoiceOver would otherwise only pick up one of the two lines.
     var accessibilityLabel: ((Value) -> String)? = nil
+    /// Degree rows (`singleLine: true`) keep all chips on one line; the
+    /// control card then measures that full line as the cell's natural width.
+    /// The note pickers stay wrapping, since twelve pitch chips never fit a
+    /// narrow card on one line.
+    var singleLine: Bool = false
     @ViewBuilder var label: (Value, Bool) -> Label
 
     @Namespace private var glow
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
-            ForEach(values, id: \.self) { value in
-                chip(value)
+        if singleLine {
+            HStack(spacing: 8) {
+                ForEach(values, id: \.self) { value in
+                    chip(value)
+                }
+            }
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 56), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(values, id: \.self) { value in
+                    chip(value)
+                }
             }
         }
     }
 
     private func chip(_ value: Value) -> some View {
         let isActive = value == selection
-        let emphasized = isEmphasized(value)
         let color = tint(value)
         // Sound is the model's job, not this component's: `onSelect` already
         // reaches into whichever module model owns the tap, and every one of
@@ -147,21 +159,45 @@ struct ChipPicker<Value: Hashable, Label: View>: View {
         return Button {
             withAnimation(FretworkMotion.gravity) { onSelect(value) }
         } label: {
-            label(value, isActive)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
-                .background(
-                    ChipFill(color: color, lit: isActive, emphasized: emphasized)
-                        // Only the lit fill travels — an unlit chip has
-                        // nothing to hand off from, and giving every chip
-                        // the same id would make the namespace ambiguous.
-                        .modifier(TravelIfLit(id: "chip-highlight", namespace: glow, lit: isActive))
-                )
+            chipLabel(value, isActive, color: color)
         }
         .buttonStyle(ElasticPressStyle())
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
         .modifier(OptionalHelp(text: help?(value)))
         .modifier(OptionalAccessibilityLabel(text: accessibilityLabel?(value)))
+    }
+
+    @ViewBuilder
+    private func chipLabel(_ value: Value, _ isActive: Bool, color: Color) -> some View {
+        if singleLine {
+            // Degree rows: each chip keeps the width the wrapping grid gave it
+            // on main (~76pt) instead of collapsing to its short label
+            // ("C", "Dm"). The label never wraps, so the chip reports that
+            // width as its natural size.
+            label(value, isActive)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minWidth: 76)
+                .padding(.vertical, 7)
+                .background(
+                    ChipFill(color: color, lit: isActive, emphasized: isEmphasized(value))
+                        // Only the lit fill travels — an unlit chip has
+                        // nothing to hand off from, and giving every chip
+                        // the same id would make the namespace ambiguous.
+                        .modifier(TravelIfLit(id: "chip-highlight", namespace: glow, lit: isActive))
+                )
+        } else {
+            // Wrapping note pickers: the label stretches to fill its grid
+            // column first, then padding and background, so the chip is the
+            // whole cell — not a natural-width sliver centred in an empty
+            // column.
+            label(value, isActive)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(
+                    ChipFill(color: color, lit: isActive, emphasized: isEmphasized(value))
+                        .modifier(TravelIfLit(id: "chip-highlight", namespace: glow, lit: isActive))
+                )
+        }
     }
 }
 

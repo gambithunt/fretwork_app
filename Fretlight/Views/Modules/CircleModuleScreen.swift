@@ -148,7 +148,7 @@ struct CircleModuleScreen: View {
             .moduleMenuPicker()
                 .moduleControlCell(caption: "LABELS")
 
-            ModuleChipWrapLayout {
+            ModuleChipRowLayout {
                 ModuleSecondaryAction(
                     title: "Anticlockwise",
                     systemImage: "arrow.counterclockwise",

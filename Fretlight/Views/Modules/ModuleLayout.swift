@@ -321,6 +321,11 @@ struct ModulePrimaryAction: View {
         HStack(spacing: 8) {
             Button(action: action) {
                 Label(title, systemImage: systemImage)
+                    // A button label never wraps: its measured width is the
+                    // full one-line label, so the flow layout moves the whole
+                    // action group to a new row when it doesn't fit instead
+                    // of squeezing "Play progression" onto two lines.
+                    .fixedSize(horizontal: true, vertical: false)
                     .frame(minWidth: 132)
             }
             .modulePrimaryButton()
@@ -328,6 +333,7 @@ struct ModulePrimaryAction: View {
 
             Button(action: stopAction) {
                 Label("Stop", systemImage: "stop.fill")
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .moduleSecondaryButton()
         }
@@ -353,6 +359,7 @@ struct ModuleSecondaryAction: View {
                     Text(title)
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
             .moduleSecondaryButton(tint: tint)
         }
         .disabled(disabled)
@@ -360,9 +367,12 @@ struct ModuleSecondaryAction: View {
 }
 
 /// The card shell every module's labelled control cells live in. Cells flow
-/// left-to-right into rows that each fill the card width (one row where they
-/// fit, wrapping to evenly-spaced extra rows where they do not, by each cell's
-/// measured ideal width); a `.moduleControlFullWidth()` cell spans a whole row.
+/// left-to-right into rows, each cell kept at its measured natural width and
+/// the row's leftover space distributed *between* cells (justified), so rows
+/// stay evenly spread and a chip group never wraps inside a cell that was
+/// made wider than the chips need. A cell that doesn't fit moves to the next
+/// row whole; the primary action, always the last cell, ends its row at the
+/// card's trailing edge. A `.moduleControlFullWidth()` cell spans a whole row.
 /// The `.spread` distribution keeps Notes' action row — Play/Stop leading,
 /// Clear all trailing, the middle empty — as its own deliberate exception.
 struct ModuleControlCard<Content: View>: View {
@@ -387,9 +397,17 @@ struct ModuleControlCard<Content: View>: View {
     }
 }
 
-/// Marks a cell as spanning its own full-width row (Note Association's chord
-/// chip row), instead of sharing a row with its neighbours.
+/// Marks a cell as spanning its own full-width row, instead of sharing a row
+/// with its neighbours.
 private struct ModuleFullWidthKey: LayoutValueKey {
+    static let defaultValue = false
+}
+
+/// Marks a cell as *starting* a new row while keeping its natural width and
+/// flowing with the cells after it — the degree-chip row in Harmonizing and
+/// Note Association, which always begins its own row but shares it with the
+/// progression and primary action.
+private struct ModuleRowBreakKey: LayoutValueKey {
     static let defaultValue = false
 }
 
@@ -397,12 +415,20 @@ extension View {
     func moduleControlFullWidth() -> some View {
         layoutValue(key: ModuleFullWidthKey.self, value: true)
     }
+
+    func moduleControlRowBreak() -> some View {
+        layoutValue(key: ModuleRowBreakKey.self, value: true)
+    }
 }
 
-/// Balanced flow: pack as many cells onto each row as fit by their measured
-/// ideal widths (full-width cells force a row break), then hand each row's
-/// cells the leftover space evenly, so every row fills the card without
-/// squashing anything and without bunching left.
+/// Natural-width flow: pack as many cells onto each row as fit by their
+/// measured ideal widths (full-width cells force a row break), then keep every
+/// cell at its natural width and distribute the row's leftover space *between*
+/// cells, justified. Nothing grows beyond its content — a chip group's cell is
+/// exactly as wide as its chips, so the chips stay one line and the whole cell
+/// moves to the next row when it doesn't fit. The primary action is always the
+/// last cell, so the card's last row — shared or alone — ends at the trailing
+/// edge.
 struct ModuleControlFlowLayout: Layout {
     var hSpacing: CGFloat = 14
     var vSpacing: CGFloat = 14
@@ -411,6 +437,7 @@ struct ModuleControlFlowLayout: Layout {
         var rows: [[Int]]
         var rowWidths: [[CGFloat]]
         var rowHeights: [CGFloat]
+        var rowGaps: [CGFloat]
         var totalHeight: CGFloat
     }
 
@@ -424,7 +451,7 @@ struct ModuleControlFlowLayout: Layout {
 
     private func compute(subviews: Subviews, width: CGFloat?) -> Cache {
         guard !subviews.isEmpty else {
-            return Cache(rows: [], rowWidths: [], rowHeights: [], totalHeight: 0)
+            return Cache(rows: [], rowWidths: [], rowHeights: [], rowGaps: [], totalHeight: 0)
         }
         let available = width ?? .infinity
 
@@ -434,10 +461,14 @@ struct ModuleControlFlowLayout: Layout {
         var current: [Int] = []
         var currentWidth: CGFloat = 0
         for (index, subview) in subviews.enumerated() {
-            if subview[ModuleFullWidthKey.self] {
+            // A full-width cell gets a row to itself; a row-break cell flushes
+            // the current row and then flows normally at its natural width.
+            if subview[ModuleFullWidthKey.self] || subview[ModuleRowBreakKey.self] {
                 if !current.isEmpty { rows.append(current); current = []; currentWidth = 0 }
-                rows.append([index])
-                continue
+                if subview[ModuleFullWidthKey.self] {
+                    rows.append([index])
+                    continue
+                }
             }
             let ideal = idealWidth(subview)
             let added = ideal + (current.isEmpty ? 0 : hSpacing)
@@ -453,8 +484,9 @@ struct ModuleControlFlowLayout: Layout {
 
         var rowWidths: [[CGFloat]] = []
         var rowHeights: [CGFloat] = []
+        var rowGaps: [CGFloat] = []
         var totalHeight: CGFloat = 0
-        for row in rows {
+        for (rowIndex, row) in rows.enumerated() {
             let isFullWidthRow = row.count == 1 && subviews[row[0]][ModuleFullWidthKey.self]
             var widths: [CGFloat] = []
             var height: CGFloat = 0
@@ -464,29 +496,51 @@ struct ModuleControlFlowLayout: Layout {
                 widths = [w]
                 height = subviews[row[0]].sizeThatFits(ProposedViewSize(width: w, height: nil)).height
             } else {
-                let ideals = row.map { idealWidth(subviews[$0]) }
-                let used = ideals.reduce(0, +) + hSpacing * CGFloat(row.count - 1)
-                let extra = available.isFinite ? max(0, available - used) / CGFloat(row.count) : 0
-                for (position, index) in row.enumerated() {
-                    let w = available.isFinite ? ideals[position] + extra : ideals[position]
+                for index in row {
+                    let w = idealWidth(subviews[index])
                     widths.append(w)
                     height = max(height, subviews[index].sizeThatFits(ProposedViewSize(width: w, height: nil)).height)
                 }
             }
+
+            // Leftover space goes between the cells, never into them. A
+            // two-cell row that is not the last row packs left with normal
+            // spacing — justifying it would pin its two cells to opposite
+            // ends. The last row (the primary action) and rows of three or
+            // more justify, so the action still ends at the trailing edge.
+            let isLastRow = rowIndex == rows.count - 1
+            let justify = row.count >= 3 || (isLastRow && row.count >= 2)
+            let gap: CGFloat
+            if !isFullWidthRow, justify, available.isFinite {
+                let used = widths.reduce(0, +) + hSpacing * CGFloat(row.count - 1)
+                gap = hSpacing + max(0, available - used) / CGFloat(row.count - 1)
+            } else {
+                gap = hSpacing
+            }
+
             rowWidths.append(widths)
             rowHeights.append(height)
+            rowGaps.append(gap)
             totalHeight += height
         }
         totalHeight += vSpacing * CGFloat(max(0, rows.count - 1))
 
-        return Cache(rows: rows, rowWidths: rowWidths, rowHeights: rowHeights, totalHeight: totalHeight)
+        return Cache(rows: rows, rowWidths: rowWidths, rowHeights: rowHeights, rowGaps: rowGaps, totalHeight: totalHeight)
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         let computed = compute(subviews: subviews, width: proposal.width)
         cache = computed
-        let width = proposal.width ?? computed.rowWidths.flatMap { $0 }.reduce(0, +)
-            + CGFloat(max(0, subviews.count - 1)) * hSpacing
+        let width: CGFloat
+        if let proposed = proposal.width, proposed.isFinite {
+            width = proposed
+        } else {
+            width = computed.rowWidths.enumerated().reduce(CGFloat(0)) { widest, pair in
+                let (index, row) = pair
+                let rowWidth = row.reduce(0, +) + computed.rowGaps[index] * CGFloat(max(0, row.count - 1))
+                return max(widest, rowWidth)
+            }
+        }
         return CGSize(width: width, height: computed.totalHeight)
     }
 
@@ -495,7 +549,13 @@ struct ModuleControlFlowLayout: Layout {
         cache = computed
         var y = bounds.minY
         for (rowIndex, row) in computed.rows.enumerated() {
+            let isFullWidthRow = row.count == 1 && subviews[row[0]][ModuleFullWidthKey.self]
+            // A lone cell on the last row is the trailing primary action.
+            let isLoneTrailingCell = row.count == 1 && rowIndex == computed.rows.count - 1
             var x = bounds.minX
+            if isLoneTrailingCell, !isFullWidthRow {
+                x = bounds.maxX - computed.rowWidths[rowIndex][0]
+            }
             for (position, index) in row.enumerated() {
                 let cellWidth = computed.rowWidths[rowIndex][position]
                 subviews[index].place(
@@ -503,7 +563,7 @@ struct ModuleControlFlowLayout: Layout {
                     anchor: .topLeading,
                     proposal: ProposedViewSize(width: cellWidth, height: computed.rowHeights[rowIndex])
                 )
-                x += cellWidth + hSpacing
+                x += cellWidth + computed.rowGaps[rowIndex]
             }
             y += computed.rowHeights[rowIndex] + vSpacing
         }
@@ -554,60 +614,31 @@ struct ModuleSpreadLayout: Layout {
     }
 }
 
-/// Wraps fixed-size chips (layer toggles) at their natural widths inside a
-/// control cell, so they never hyphenate or overflow when the cell is narrower
-/// than the row they'd form at full width.
-struct ModuleChipWrapLayout: Layout {
+/// Lays fixed-size chips (layer toggles, rotation buttons) on a single line at
+/// their natural widths. Chips never wrap inside their cell: the control
+/// card's flow layout measures this cell's full one-line width and moves the
+/// whole cell to the next row when it does not fit.
+struct ModuleChipRowLayout: Layout {
     var hSpacing: CGFloat = 8
-    var vSpacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        // Report the widest single chip as the ideal, so a wrapping cell never
-        // inflates the control card's minimum column width — the chips wrap
-        // inside whatever width the card actually gives them.
-        let ideal = subviews.reduce(CGSize.zero) { acc, subview in
-            let size = subview.sizeThatFits(.unspecified)
-            return CGSize(width: max(acc.width, size.width), height: max(acc.height, size.height))
-        }
-        guard let width = proposal.width, width.isFinite else {
-            return ideal
-        }
-        return arrange(subviews: subviews, width: width).size
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let width = sizes.reduce(CGFloat(0)) { $0 + $1.width } + CGFloat(max(0, subviews.count - 1)) * hSpacing
+        let height = sizes.map(\.height).max() ?? 0
+        return CGSize(width: width, height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = arrange(subviews: subviews, width: bounds.width)
-        for (index, subview) in subviews.enumerated() {
-            subview.place(
-                at: CGPoint(x: bounds.minX + result.origins[index].x, y: bounds.minY + result.origins[index].y),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(width: result.sizes[index].width, height: result.sizes[index].height)
-            )
-        }
-    }
-
-    private func arrange(subviews: Subviews, width: CGFloat) -> (size: CGSize, origins: [CGPoint], sizes: [CGSize]) {
-        var origins: [CGPoint] = []
-        var sizes: [CGSize] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-
+        var x = bounds.minX
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width {
-                x = 0
-                y += rowHeight + vSpacing
-                rowHeight = 0
-            }
-            origins.append(CGPoint(x: x, y: y))
-            sizes.append(size)
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
             x += size.width + hSpacing
-            rowHeight = max(rowHeight, size.height)
-            totalWidth = max(totalWidth, x - hSpacing)
         }
-        return (CGSize(width: totalWidth, height: y + rowHeight), origins, sizes)
     }
 }
 
