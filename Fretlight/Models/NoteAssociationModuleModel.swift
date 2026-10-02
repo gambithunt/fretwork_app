@@ -306,4 +306,33 @@ final class NoteAssociationModuleModel {
         sequencer?.stop()
         pulses.removeAll()
     }
+
+    #if DEBUG
+    /// Snapshot/test hook: pin the progression to a fixed state without the
+    /// real clock, so layout tests can render idle / count-in / mid-run
+    /// deterministically. `.countIn` uses the real session's synchronous first
+    /// beat; `.playing` fabricates the snapshot so no timer keeps racing the
+    /// test's measurement.
+    func debugForceRun(_ kind: ModuleRunSnapshot.ForcedRun) {
+        switch kind {
+        case .idle:
+            stopEverything()
+        case .countIn:
+            var snapshot = ProgressionSession.Snapshot()
+            snapshot.status = .countIn
+            snapshot.countInBeat = 1
+            snapshot.total = progressionChords.count
+            progressionSnapshot = snapshot
+        case .playing:
+            var snapshot = ProgressionSession.Snapshot()
+            snapshot.status = .playing
+            snapshot.currentIndex = min(1, max(0, progressionChords.count - 1))
+            snapshot.total = progressionChords.count
+            progressionSnapshot = snapshot
+            if progressionChords.indices.contains(snapshot.currentIndex ?? 0) {
+                playingDegree = snapshot.currentIndex
+            }
+        }
+    }
+    #endif
 }

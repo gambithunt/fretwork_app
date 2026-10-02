@@ -87,6 +87,7 @@ private struct IOSNoteAssociationStage: View {
                 title: "Play progression",
                 accessibilityLabel: "Play progression",
                 isRunActive: isRunActive,
+                countInBeat: model.progressionSnapshot.countInBeat,
                 disabled: !isRunActive && (model.progressionChords.isEmpty || !state.isSamplePlaybackReady),
                 start: { model.startProgression() },
                 stop: { model.stopEverything() }

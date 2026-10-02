@@ -35,6 +35,10 @@ struct IOSModuleBandAction {
     let systemImage: String
     let accessibilityLabel: String
     let disabled: Bool
+    /// Labels this action can show, laid out invisibly inside the button so
+    /// the trailing corner never moves when a run toggles or a count-in ticks
+    /// down. Empty for play-once actions, whose title never changes.
+    var reservedTitles: [String] = []
     let action: () -> Void
 }
 
@@ -75,20 +79,24 @@ extension IOSModuleBandAction {
     }
 
     /// A labelled corner whose text/icon flip between a start action and the
-    /// ■ Stop that replaces it in place while a run is active (D-27 revised).
+    /// ■ Stop that replaces it in place while a run is active (D-27 revised),
+    /// with the count-in shown in the same reserved width.
     static func runToggle(
         title: String,
         accessibilityLabel: String,
         isRunActive: Bool,
+        countInBeat: Int? = nil,
         disabled: Bool,
         start: @escaping () -> Void,
         stop: @escaping () -> Void
     ) -> IOSModuleBandAction {
-        IOSModuleBandAction(
-            title: isRunActive ? "Stop" : title,
-            systemImage: isRunActive ? "stop.fill" : "play.fill",
-            accessibilityLabel: isRunActive ? "Stop" : accessibilityLabel,
+        let countInTitle = countInBeat.map { "Count in… \($0)" }
+        return IOSModuleBandAction(
+            title: countInTitle ?? (isRunActive ? "Stop" : title),
+            systemImage: countInBeat != nil ? "play.fill" : (isRunActive ? "stop.fill" : "play.fill"),
+            accessibilityLabel: countInTitle ?? (isRunActive ? "Stop" : accessibilityLabel),
             disabled: disabled,
+            reservedTitles: [title, "Stop", "Count in… 4"],
             action: isRunActive ? stop : start
         )
     }
@@ -106,6 +114,8 @@ struct IOSModulePrimaryAction: View {
     let systemImage: String
     let accessibilityLabel: String
     let disabled: Bool
+    /// Labels to reserve width for; the current `title` is always included.
+    var reservedTitles: [String] = []
     let action: () -> Void
 
     /// ONE size, decided here rather than by any module.
@@ -114,7 +124,7 @@ struct IOSModulePrimaryAction: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
+            label
                 .font(.body.weight(.semibold))
                 .padding(.horizontal, 16)
                 .frame(minWidth: Self.minWidth)
@@ -131,6 +141,29 @@ struct IOSModulePrimaryAction: View {
         .disabled(disabled)
         .iosRunDimmed(disabled)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if reservedTitles.isEmpty {
+            Label(title, systemImage: systemImage)
+        } else {
+            Label {
+                ZStack {
+                    ForEach(Array(reservedTitles), id: \.self) { reserved in
+                        Text(reserved)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .hidden()
+                    }
+                    Text(title)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .contentTransition(.numericText())
+                }
+                .animation(.easeInOut(duration: 0.15), value: title)
+            } icon: {
+                Image(systemName: systemImage)
+            }
+        }
     }
 }
 
@@ -600,6 +633,7 @@ struct IOSModuleScaffold<Neck: View, Companion: View, Drawer: View>: View {
             systemImage: action.systemImage,
             accessibilityLabel: action.accessibilityLabel,
             disabled: action.disabled,
+            reservedTitles: action.reservedTitles,
             action: action.action
         )
     }

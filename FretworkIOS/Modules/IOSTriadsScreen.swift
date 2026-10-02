@@ -112,6 +112,7 @@ private struct IOSTriadsStage: View {
                 title: "Play path",
                 accessibilityLabel: "Play path",
                 isRunActive: isRunActive,
+                countInBeat: model.progressionSnapshot.countInBeat,
                 disabled: !isRunActive && (model.pathSteps.isEmpty || !state.isSamplePlaybackReady),
                 start: { model.startProgression(loop: false) },
                 stop: { model.stopEverything() }
@@ -301,26 +302,18 @@ private struct IOSTriadsDrawer: View {
                 .disabled(isRunActive || model.pathSteps.isEmpty || !state.isSamplePlaybackReady)
             }
 
-            if model.progressionSnapshot.status != .idle {
-                LabeledContent("Tempo") {
-                    HStack(spacing: 12) {
-                        Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
-                            .buttonStyle(.glass)
-                            .accessibilityLabel("Slower")
-                        Text("\(model.progressionSnapshot.tempoBpm) bpm")
-                            .font(.callout.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                        Button { _ = model.faster() } label: { Image(systemName: "hare") }
-                            .buttonStyle(.glass)
-                            .accessibilityLabel("Faster")
-                    }
+            LabeledContent("Tempo") {
+                HStack(spacing: 12) {
+                    Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Slower")
+                    Text("\(model.tempoBpm) bpm")
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Button { _ = model.faster() } label: { Image(systemName: "hare") }
+                        .buttonStyle(.glass)
+                        .accessibilityLabel("Faster")
                 }
-            }
-
-            if let beat = model.progressionSnapshot.countInBeat {
-                Text("Count in… \(beat)")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(NotePalette.accent)
             }
         }
     }

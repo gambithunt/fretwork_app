@@ -18,6 +18,11 @@ struct TriadsModuleScreen: View {
         .onAppear {
             if model == nil { model = state.makeTriadsModuleModel() }
             state.refreshSamplePlaybackReadiness()
+            #if DEBUG
+            if ModuleRunSnapshot.forceTriadsPathMode || ModuleRunSnapshot.forcedRun != .idle {
+                model?.debugForceRun(ModuleRunSnapshot.forcedRun)
+            }
+            #endif
         }
         .onChange(of: state.tuning) { _, tuning in model?.retune(to: tuning) }
         .onDisappear { model?.stopEverything() }
@@ -28,7 +33,7 @@ struct TriadsModuleScreen: View {
         return ModuleLayout(module: .triads, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
-                controls(model)
+                Self.controls(model, labelMode: $labelMode)
             }
         } stage: {
             // Shapes mode moves along the neck with Lower/Higher; Paths
@@ -53,7 +58,7 @@ struct TriadsModuleScreen: View {
         }
     }
 
-    private func controls(_ model: TriadsModuleModel) -> some View {
+    static func controls(_ model: TriadsModuleModel, labelMode: Binding<FretboardLabelMode>) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             PitchClassPicker(
                 title: model.isPathMode ? "KEY" : "ROOT",
@@ -76,7 +81,7 @@ struct TriadsModuleScreen: View {
                 .tint(NotePalette.accent)
                 .moduleControlCell(caption: "EXERCISE")
 
-                FretboardLabelPicker(selection: $labelMode)
+                FretboardLabelPicker(selection: labelMode)
                 .moduleMenuPicker()
                     .moduleControlCell(caption: "LABELS")
 
@@ -90,7 +95,7 @@ struct TriadsModuleScreen: View {
     }
 
     @ViewBuilder
-    private func shapeCells(_ model: TriadsModuleModel) -> some View {
+    private static func shapeCells(_ model: TriadsModuleModel) -> some View {
         Picker("Triad", selection: Binding(
             get: { model.view == .doubleStops ? "doubleStops" : model.triad.short },
             set: { value in
@@ -154,7 +159,7 @@ struct TriadsModuleScreen: View {
     }
 
     @ViewBuilder
-    private func pathCells(_ model: TriadsModuleModel) -> some View {
+    private static func pathCells(_ model: TriadsModuleModel) -> some View {
         Picker("String set", selection: Binding(
             get: { model.pathStringSet },
             set: { model.selectPathStringSet($0) }
@@ -188,27 +193,27 @@ struct TriadsModuleScreen: View {
         )
         .moduleControlCell(caption: "LOOP")
 
-        if model.progressionSnapshot.status != .idle {
-            HStack(spacing: 8) {
-                Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
-                    .moduleSecondaryButton()
-                Text("\(model.progressionSnapshot.tempoBpm) bpm")
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Button { _ = model.faster() } label: { Image(systemName: "hare") }
-                    .moduleSecondaryButton()
-                if let beat = model.progressionSnapshot.countInBeat {
-                    Text("Count in… \(beat)")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(NotePalette.accent)
-                }
-            }
-            .moduleControlCell(caption: "TEMPO")
+        HStack(spacing: 8) {
+            Button { _ = model.slower() } label: { Image(systemName: "tortoise") }
+                .moduleSecondaryButton()
+                .accessibilityLabel("Slower")
+            Text("\(model.tempoBpm) bpm")
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Button { _ = model.faster() } label: { Image(systemName: "hare") }
+                .moduleSecondaryButton()
+                .accessibilityLabel("Faster")
+            ModuleRunProgress(
+                index: model.progressionSnapshot.currentIndex,
+                total: model.pathSteps.count
+            )
         }
+        .moduleControlCell(caption: "TEMPO")
 
         ModulePrimaryAction(
             title: "Play path",
             disabled: model.pathSteps.isEmpty,
+            countInBeat: model.progressionSnapshot.countInBeat,
             action: { model.startProgression(loop: false) },
             stopAction: { model.stopEverything() }
         )

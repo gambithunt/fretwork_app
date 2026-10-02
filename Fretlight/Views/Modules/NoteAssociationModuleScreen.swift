@@ -17,6 +17,11 @@ struct NoteAssociationModuleScreen: View {
         .onAppear {
             if model == nil { model = state.makeNoteAssociationModuleModel() }
             state.refreshSamplePlaybackReadiness()
+            #if DEBUG
+            if ModuleRunSnapshot.forcedRun != .idle {
+                model?.debugForceRun(ModuleRunSnapshot.forcedRun)
+            }
+            #endif
         }
         .onChange(of: state.tuning) { _, tuning in model?.retune(to: tuning) }
         .onDisappear { model?.stopEverything() }
@@ -26,7 +31,7 @@ struct NoteAssociationModuleScreen: View {
         ModuleLayout(module: .noteAssociation, state: state) {
             VStack(alignment: .leading, spacing: 12) {
                 ModuleAudioNotice(isReady: state.isSamplePlaybackReady, error: state.samplePlaybackError)
-                controls(model)
+                Self.controls(model)
             }
         } stage: {
             VStack(alignment: .trailing, spacing: 8) {
@@ -46,7 +51,7 @@ struct NoteAssociationModuleScreen: View {
         }
     }
 
-    private func controls(_ model: NoteAssociationModuleModel) -> some View {
+    static func controls(_ model: NoteAssociationModuleModel) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             PitchClassPicker(title: "KEY", selection: model.keyRoot, onSelect: model.selectKeyRoot)
                 .moduleNotesCard()
@@ -170,11 +175,20 @@ struct NoteAssociationModuleScreen: View {
                     VStack(alignment: .trailing, spacing: 6) {
                         HStack(spacing: 8) {
                             Button(action: { model.startProgression() }) {
-                                Label("Play progression", systemImage: "play.fill")
-                                    .frame(minWidth: 132)
+                                Label {
+                                    ModuleCountInLabel(
+                                        title: "Play progression",
+                                        countInBeat: model.progressionSnapshot.countInBeat
+                                    )
+                                } icon: {
+                                    Image(systemName: "play.fill")
+                                }
+                                .fixedSize(horizontal: true, vertical: false)
+                                .frame(minWidth: 132)
                             }
                             .modulePrimaryButton()
                             .disabled(model.progressionChords.isEmpty)
+                            .accessibilityLabel(model.progressionSnapshot.countInBeat.map { "Count in… \($0)" } ?? "Play progression")
 
                             Button(action: { model.strumChord() }) {
                                 Label("Strum chord", systemImage: "guitars")
@@ -185,11 +199,6 @@ struct NoteAssociationModuleScreen: View {
                                 Label("Stop", systemImage: "stop.fill")
                             }
                             .moduleSecondaryButton()
-                        }
-                        if let beat = model.progressionSnapshot.countInBeat {
-                            Text("Count in… \(beat)")
-                                .font(.callout.weight(.medium))
-                                .foregroundStyle(NotePalette.accent)
                         }
                     }
                     .moduleControlCell(caption: "PLAY", alignment: .trailing)

@@ -34,6 +34,11 @@ final class PentatonicModuleModel {
     private(set) var pulses: [String: Double] = [:]
     private(set) var guidedSnapshot = GuidedSession<GuidedScaleStep>.Snapshot()
     private(set) var currentStep: GuidedScaleStep?
+    /// The player's tempo, kept across runs and settable while idle. The
+    /// guided session's snapshot resets to the default on stop, so this — not
+    /// `guidedSnapshot.tempoBpm` — is what the UI shows and what a new run
+    /// starts at.
+    private(set) var tempoBpm: Int = GuidedSession<GuidedScaleStep>.defaultTempoBpm
 
     let highestFret = LearningModule.pentatonic.highestFret
 
@@ -199,6 +204,7 @@ final class PentatonicModuleModel {
             }
         )
         guided = session
+        session.setTempo(tempoBpm)
         session.start(steps)
         guidedSnapshot = session.snapshot
     }
@@ -209,8 +215,16 @@ final class PentatonicModuleModel {
         currentStep = nil
     }
 
-    @discardableResult func slower() -> Int { guided?.slower() ?? GuidedSession<GuidedScaleStep>.defaultTempoBpm }
-    @discardableResult func faster() -> Int { guided?.faster() ?? GuidedSession<GuidedScaleStep>.defaultTempoBpm }
+    @discardableResult func slower() -> Int {
+        tempoBpm = GuidedSession<GuidedScaleStep>.tempoStep(from: tempoBpm, by: -1)
+        guided?.setTempo(tempoBpm)
+        return tempoBpm
+    }
+    @discardableResult func faster() -> Int {
+        tempoBpm = GuidedSession<GuidedScaleStep>.tempoStep(from: tempoBpm, by: 1)
+        guided?.setTempo(tempoBpm)
+        return tempoBpm
+    }
 
     /// The note after the current one, so the player can see where the hand is
     /// going rather than only where it is.
@@ -224,4 +238,30 @@ final class PentatonicModuleModel {
         stopGuided()
         pulses.removeAll()
     }
+
+    #if DEBUG
+    /// Snapshot/test hook: pin the run to a fixed state without the real
+    /// clock, so layout tests can render idle / count-in / mid-run
+    /// deterministically. `.countIn` uses the real session's synchronous first
+    /// beat; `.playing` fabricates the snapshot so no timer keeps racing the
+    /// test's measurement.
+    func debugForceRun(_ kind: ModuleRunSnapshot.ForcedRun) {
+        switch kind {
+        case .idle:
+            stopGuided()
+        case .countIn:
+            var snapshot = GuidedSession<GuidedScaleStep>.Snapshot()
+            snapshot.status = .countIn
+            snapshot.countInBeat = 1
+            snapshot.total = box.count
+            guidedSnapshot = snapshot
+        case .playing:
+            var snapshot = GuidedSession<GuidedScaleStep>.Snapshot()
+            snapshot.status = .playing
+            snapshot.currentIndex = min(1, max(0, box.count - 1))
+            snapshot.total = box.count
+            guidedSnapshot = snapshot
+        }
+    }
+    #endif
 }
