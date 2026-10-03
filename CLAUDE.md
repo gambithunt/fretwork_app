@@ -330,6 +330,14 @@ scattered across call sites.
   and add the CHANGELOG entry, but leave tagging (and pushing) to the Mac
   release workstream.
 
+- `xcodebuild -exportArchive` fails with a bare "Copy failed" on this Mac
+  because Homebrew's rsync (3.4.x) shadows `/usr/bin/rsync` on PATH: Xcode runs
+  the system rsync, which spawns the PATH one for the receiving side, and they
+  disagree on `--extended-attributes`. Signing has already succeeded by then;
+  only packaging the IPA fails. The real cause is in the `.xcdistributionlogs`
+  bundle (IDEDistributionPipeline.log), not the console. Run the export with a
+  system-only PATH: `env PATH=/usr/bin:/bin:/usr/sbin:/sbin xcodebuild -exportArchive …`.
+
 ## Versioning
 
 Two separate fields, both in the `Fretlight` target's build settings
