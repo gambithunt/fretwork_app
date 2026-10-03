@@ -101,6 +101,8 @@ struct IOSAppRootView: View {
                     // wait until sample playback is actually ready before the
                     // capture settles (the module screens request it lazily).
                     await IOSSnapshot.awaitSamplePlaybackReady(appState)
+                    // Listen's live-note shot injects fixed detected content.
+                    IOSSnapshot.applyScenarioState(appState)
                 }
                 #endif
                 await unlockStore.refreshEntitlements()
@@ -226,6 +228,18 @@ struct IOSAppRootView: View {
                 }
             }
         }
+        // The grouped List's page background is `systemBackground` — pure
+        // black in dark mode — so the area behind the large title and the
+        // gaps between sections rendered as black bands on the iPhone list.
+        // Match every other screen's backdrop (and the iPad sidebar's
+        // explicit background) instead; light mode keeps the system grouped
+        // background it already had.
+        .scrollContentBackground(.hidden)
+        .background(
+            colorScheme == .dark
+                ? NotePalette.backdrop
+                : Color(uiColor: .systemGroupedBackground)
+        )
     }
 
     // MARK: - iPad (split)
