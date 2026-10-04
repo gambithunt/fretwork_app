@@ -4,6 +4,17 @@ All notable changes to Fretwork are recorded here, newest first. The Mac app
 and the iPhone/iPad app version independently; entries are labelled when they
 apply to only one platform.
 
+## 0.5.10 — 2026-10-04
+
+- Fix: the Mac app heard nothing from any input — guitar interface or built-in
+  microphone — in every release since 0.5.5. Notarization turned on the
+  hardened runtime, and the app never declared the
+  `com.apple.security.device.audio-input` entitlement (the release script's
+  `codesign --deep` re-sign would have stripped it anyway). Under the hardened
+  runtime macOS does not refuse the microphone in that case; it delivers
+  silence, so the app showed "No signal" with no error. The app now carries the
+  entitlement, and the release script refuses to build a release without it.
+
 ## 1.0.0 (iOS) — 2026-10-02
 
 - First App Store version of Fretwork for iPhone and iPad. Listen and Notes

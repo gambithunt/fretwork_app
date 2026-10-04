@@ -330,6 +330,18 @@ scattered across call sites.
   and add the CHANGELOG entry, but leave tagging (and pushing) to the Mac
   release workstream.
 
+- The hardened runtime without `com.apple.security.device.audio-input` does
+  **not** deny the microphone — it delivers digital silence from every input,
+  with no error and no prompt. Releases 0.5.5–0.5.9 shipped deaf this way:
+  there was no entitlements file, and `build-release.sh`'s `codesign --force
+  --deep` re-sign strips entitlements anyway, so the app is re-signed on its
+  own with `--entitlements Config/Fretwork.entitlements` and the script checks
+  for it. Debug builds and CLI harnesses cannot show this: a bare binary's
+  capture is attributed to the terminal, so only a `.app` launched with `open`
+  reproduces it. `codesign --entitlements` also rejects XML comments
+  (`AMFIUnserializeXML: syntax error`) even though Xcode accepts them, so the
+  entitlements file has none.
+
 - `xcodebuild -exportArchive` fails with a bare "Copy failed" on this Mac
   because Homebrew's rsync (3.4.x) shadows `/usr/bin/rsync` on PATH: Xcode runs
   the system rsync, which spawns the PATH one for the receiving side, and they

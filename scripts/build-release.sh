@@ -58,6 +58,13 @@ APP="$ARCHIVE/Products/Applications/$APP_NAME.app"
 # and package it.
 echo "==> Re-signing bundled code with Developer ID"
 codesign --force --deep --sign "$IDENTITY" --options runtime --timestamp "$APP"
+# `--deep` re-signs the nested Sparkle code but does not carry the app's own
+# entitlements across, so the main executable is re-signed on its own here. The
+# audio-input entitlement is load-bearing under the hardened runtime: without
+# it macOS does not error, it feeds every input as digital silence, which looks
+# exactly like a dead guitar or a broken detector.
+codesign --force --sign "$IDENTITY" --options runtime --timestamp \
+  --entitlements Config/Fretwork.entitlements "$APP"
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist")
@@ -83,6 +90,15 @@ FLAGS=$(codesign -d -vvv "$APP" 2>&1 | sed -n 's/^.*flags=\([^)]*\).*$/\1/p')
 case "$FLAGS" in
   *runtime*) ;;
   *) echo "error: hardened runtime is missing; Apple will reject notarization" >&2; exit 1 ;;
+esac
+# Hardened runtime without com.apple.security.device.audio-input does not deny
+# the microphone — it hands the app digital silence from every input, with no
+# error anywhere in the UI or the build log. Check it explicitly so a re-sign
+# that drops the entitlement fails here instead of shipping a mute build.
+ENTITLEMENTS=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null || true)
+case "$ENTITLEMENTS" in
+  *com.apple.security.device.audio-input*) ;;
+  *) echo "error: audio-input entitlement is missing; hardened runtime would deliver silence from every input" >&2; exit 1 ;;
 esac
 
 echo "==> Building disk image"
