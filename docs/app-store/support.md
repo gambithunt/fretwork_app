@@ -45,6 +45,3 @@ No. Audio is analysed on your device and discarded. See the
 **The screen turns off while I'm practising.**
 Check that **Keep screen on while listening** is on in Settings (it is on by default). The screen stays awake only while Fretwork is listening.
 
----
-
-_Replace the contact address above with the real mailbox before publishing._
