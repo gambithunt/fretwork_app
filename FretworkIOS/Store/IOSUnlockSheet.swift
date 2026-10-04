@@ -52,9 +52,7 @@ struct IOSUnlockSheet: View {
         .presentationDragIndicator(.visible)
         .tint(NotePalette.accent)
         .task {
-            if store.displayPrice == nil {
-                await store.loadProduct()
-            }
+            await store.loadProductIfNeeded()
         }
         .onChange(of: store.isUnlocked) { _, unlocked in
             if unlocked { onUnlocked() }
@@ -103,26 +101,42 @@ struct IOSUnlockSheet: View {
 
     private var actions: some View {
         VStack(spacing: 12) {
-            Button {
-                Task { await store.purchase() }
-            } label: {
-                HStack {
-                    if store.isPurchasing {
-                        ProgressView()
-                    } else if let price = store.displayPrice {
-                        Text("Unlock — \(price)")
+            if store.productLoadState == .failed && store.displayPrice == nil {
+                // The App Store returned no product: say so and offer a retry,
+                // at the same height as the buy button so nothing jumps.
+                VStack(spacing: 6) {
+                    Text("Can't reach the App Store right now.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        Task { await store.loadProduct() }
+                    } label: {
+                        Text("Try again")
                             .fontWeight(.semibold)
-                    } else {
-                        Text("Unlock")
-                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
                 }
-                .foregroundStyle(NotePalette.backdrop)
-                .frame(maxWidth: .infinity)
+            } else {
+                Button {
+                    Task { await store.purchase() }
+                } label: {
+                    HStack {
+                        if store.isPurchasing || store.displayPrice == nil {
+                            ProgressView()
+                        } else if let price = store.displayPrice {
+                            Text("Unlock — \(price)")
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .foregroundStyle(NotePalette.backdrop)
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
+                .disabled(store.isPurchasing || store.displayPrice == nil)
             }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
-            .disabled(store.isPurchasing || store.displayPrice == nil)
 
             Button("Restore Purchases") {
                 Task { await store.restore() }

@@ -74,6 +74,12 @@ final class IOSUnlockStore {
     private(set) var displayName: String?
     private(set) var displayPrice: String?
     private(set) var isPurchasing = false
+    /// Where the product lookup stands. `failed` means the App Store returned
+    /// nothing (or threw) — a store-side configuration or network problem the
+    /// sheet must show, with a retry, rather than a silently dead button.
+    private(set) var productLoadState: ProductLoadState = .idle
+
+    enum ProductLoadState: Equatable { case idle, loading, loaded, failed }
     /// The last terminal outcome, surfaced by the sheet and Settings.
     private(set) var statusMessage: String?
 
@@ -138,17 +144,33 @@ final class IOSUnlockStore {
 
     func loadProduct() async {
         #if DEBUG
-        if IOSSnapshot.isActive {
+        // `-IOSSnapshotProductUnavailable` lets a snapshot fall through to the
+        // real lookup, which returns nothing in a simulator without a StoreKit
+        // configuration — the failed state the sheet must show.
+        if IOSSnapshot.isActive && !CommandLine.arguments.contains("-IOSSnapshotProductUnavailable") {
             let snapshot = Self.snapshotProductDisplay()
             displayName = snapshot.name
             displayPrice = snapshot.price
+            productLoadState = .loaded
             return
         }
         #endif
+        guard productLoadState != .loading else { return }
+        productLoadState = .loading
         if let display = await gateway.loadDisplay() {
             displayName = display.displayName
             displayPrice = display.displayPrice
+            productLoadState = .loaded
+        } else {
+            productLoadState = displayPrice == nil ? .failed : .loaded
         }
+    }
+
+    /// Loads the product unless it is already loaded or in flight; used when
+    /// the unlock sheet appears and when the app returns to the foreground.
+    func loadProductIfNeeded() async {
+        guard productLoadState == .idle || productLoadState == .failed else { return }
+        await loadProduct()
     }
 
     func purchase() async {
