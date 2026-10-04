@@ -9,6 +9,9 @@ apply to only one platform.
 - First App Store version of Fretwork for iPhone and iPad. Listen and Notes
   are free; a one-time purchase unlocks the other nine learning modules.
   Includes everything in the 0.x iOS entries below.
+- If the App Store can't supply the unlock's price, the unlock sheet now says
+  so with a Try again button (and retries when reopened or when the app
+  returns to the foreground) instead of showing a disabled button.
 
 ## 0.3.0 (iOS) — 2026-10-01
 

@@ -37,6 +37,43 @@ final class IOSUnlockStoreTests: XCTestCase {
         XCTAssertEqual(product["type"] as? String, "NonConsumable")
     }
 
+    // MARK: - Product lookup
+
+    /// The App Store returning no product (seen on TestFlight while the
+    /// purchase was misconfigured) must surface as `failed`, not a silently
+    /// disabled button.
+    func testEmptyProductLookupFails() async {
+        let gateway = FakeUnlockGateway()
+        gateway.display = nil
+        let store = IOSUnlockStore(gateway: gateway)
+        await store.loadProduct()
+        XCTAssertEqual(store.productLoadState, .failed)
+        XCTAssertNil(store.displayPrice)
+    }
+
+    func testRetryAfterFailureLoads() async {
+        let gateway = FakeUnlockGateway()
+        gateway.display = nil
+        let store = IOSUnlockStore(gateway: gateway)
+        await store.loadProductIfNeeded()
+        XCTAssertEqual(store.productLoadState, .failed)
+
+        gateway.display = IOSUnlockProductDisplay(displayName: "Fretwork Unlock", displayPrice: "$19.99")
+        await store.loadProductIfNeeded()
+        XCTAssertEqual(store.productLoadState, .loaded)
+        XCTAssertEqual(store.displayPrice, "$19.99")
+    }
+
+    func testLoadIfNeededDoesNotReloadALoadedProduct() async {
+        let gateway = FakeUnlockGateway()
+        let store = IOSUnlockStore(gateway: gateway)
+        await store.loadProduct()
+        gateway.display = nil
+        await store.loadProductIfNeeded()
+        XCTAssertEqual(store.productLoadState, .loaded)
+        XCTAssertEqual(store.displayPrice, "$19.99")
+    }
+
     // MARK: - Purchase / restore / pending (fake gateway)
 
     func testPurchaseUnlocks() async {

@@ -45,6 +45,7 @@ struct IOSAppRootView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     /// Namespace for the one sidebar selection highlight that slides between
     /// rows (`matchedGeometryEffect`) instead of jumping.
     @Namespace private var sidebarHighlightNamespace
@@ -81,6 +82,14 @@ struct IOSAppRootView: View {
             }
             .tint(NotePalette.accent)
             .preferredColorScheme(IOSSnapshot.preferredColorScheme)
+            // A product lookup that failed at launch (no network, or the App
+            // Store not yet serving the product) is retried on return to the
+            // foreground, so the unlock sheet isn't stuck until a relaunch.
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await unlockStore.loadProductIfNeeded() }
+                }
+            }
             .task {
                 unlockStore.start()
                 IOSSnapshot.requestOrientationIfNeeded()
