@@ -46,6 +46,15 @@ final class IOSAudioController: AudioControlling {
     /// the sample's own tail while the window still holds it.
     static let samplePlaybackGateTail: TimeInterval = 0.150
 
+    /// A burst of `.AVAudioEngineConfigurationChange` notifications is coalesced
+    /// into one rebuild this long after the last one.
+    nonisolated static let configurationChangeDebounce: Duration = .milliseconds(300)
+    /// At most this many config-change rebuilds inside
+    /// `configurationChangeRebuildWindow`; past it the app fails instead of
+    /// looping forever (CLAUDE.md's restart-loop gotcha).
+    nonisolated static let configurationChangeRebuildLimit = 3
+    nonisolated static let configurationChangeRebuildWindow: TimeInterval = 10
+
     // MARK: - AudioControlling
 
     var onEvent: (@MainActor @Sendable (AudioControllerEvent) -> Void)?
@@ -95,6 +104,12 @@ final class IOSAudioController: AudioControlling {
     private let graphBuilder: IOSAudioGraphBuilding
     private let playerFactory: @Sendable (NoteSampleLibrary, Double) -> SamplePlayer
     private let playThroughPlayer: @Sendable (SamplePlayer, Int, Int, Double, Float) -> Void
+    /// How long a burst of engine-configuration changes is coalesced before the
+    /// one rebuild. The debounce is the settle window, and it is armed when the
+    /// notification arrives — i.e. after the build has finished — not when the
+    /// build started (CLAUDE.md's settle-window gotcha). Injectable so tests can
+    /// run it fast.
+    private let configurationChangeDebounce: Duration
     /// Monotonic time source for the playback gate. Injectable so gate timing
     /// can be stepped deterministically in tests.
     private let now: @Sendable () -> TimeInterval
@@ -133,6 +148,12 @@ final class IOSAudioController: AudioControlling {
     /// teardown.
     @ObservationIgnored
     private var gateLiftTask: Task<Void, Never>?
+    /// A pending debounced rebuild after `.AVAudioEngineConfigurationChange`.
+    @ObservationIgnored
+    private var configRebuildTask: Task<Void, Never>?
+    /// When recent config-change rebuilds happened, for the restart-loop cap.
+    @ObservationIgnored
+    private var configRebuildTimestamps: [TimeInterval] = []
     #if DEBUG
     /// The `-FretworkCaptureDump` writer and its 60 s flush timer. Only ever
     /// non-nil in DEBUG when the launch argument is present.
@@ -165,12 +186,14 @@ final class IOSAudioController: AudioControlling {
          playThroughPlayer: @escaping @Sendable (SamplePlayer, Int, Int, Double, Float) -> Void = { player, string, fret, rate, gain in
              player.play(string: string, fret: fret, rateMultiplier: rate, gain: gain)
          },
+         configurationChangeDebounce: Duration = IOSAudioController.configurationChangeDebounce,
          now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.session = session
         self.foreground = foreground
         self.graphBuilder = graphBuilder
         self.playerFactory = playerFactory
         self.playThroughPlayer = playThroughPlayer
+        self.configurationChangeDebounce = configurationChangeDebounce
         self.now = now
         self.playbackGate = PlaybackGate(tail: Self.samplePlaybackGateTail)
 
@@ -189,6 +212,7 @@ final class IOSAudioController: AudioControlling {
     }
 
     isolated deinit {
+        configRebuildTask?.cancel()
         run?.analysisWorker.stop()
         run?.chordWorker.stop()
         run?.graph.stop()
@@ -198,6 +222,9 @@ final class IOSAudioController: AudioControlling {
 
     @discardableResult
     func start() -> Bool {
+        // A user-visible (re)start — including Retry after the restart cap —
+        // gets a fresh config-change budget.
+        configRebuildTimestamps.removeAll()
         switch session.recordPermission {
         case .denied:
             handlePermissionDenied()
@@ -232,6 +259,9 @@ final class IOSAudioController: AudioControlling {
         wantsPlaybackGraph = false
         generation &+= 1
         status = .idle
+        configRebuildTask?.cancel()
+        configRebuildTask = nil
+        configRebuildTimestamps.removeAll()
         teardownRun(deactivate: true)
     }
 
@@ -390,6 +420,54 @@ final class IOSAudioController: AudioControlling {
         onEvent?(.error("Microphone permission is off. Enable it in Settings."))
     }
 
+    // MARK: - Engine configuration changes
+
+    /// The engine posted `.AVAudioEngineConfigurationChange` and stopped itself.
+    /// Rebuild the same leg so playback readiness reflects a live engine, but
+    /// coalesce a burst into one rebuild and cap a loop.
+    private func handleGraphConfigurationChange(generation gen: Int) {
+        // Stale: a newer run (or a teardown) already owns the audio, or there is
+        // nothing left to rebuild. This is also the settle: a notification that
+        // arrives while a build is in flight sees `run == nil` and is dropped,
+        // so only changes delivered after the build finished start the debounce
+        // below.
+        guard let run, gen == generation else { return }
+
+        let leg = run.leg
+        let debounce = configurationChangeDebounce
+        configRebuildTask?.cancel()
+        configRebuildTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: debounce)
+            guard let self, !Task.isCancelled else { return }
+            self.rebuildAfterConfigurationChange(leg: leg, generation: gen)
+        }
+    }
+
+    /// The debounced tail of `handleGraphConfigurationChange`. Re-checks after
+    /// the wait, then rebuilds the same leg — or fails if changes keep coming.
+    private func rebuildAfterConfigurationChange(leg: IOSAudioGraphLeg, generation gen: Int) {
+        // A newer run, a teardown or a background transition wins.
+        guard run != nil, gen == generation, foregroundActive else { return }
+
+        let now = self.now()
+        configRebuildTimestamps = configRebuildTimestamps.filter {
+            now - $0 < Self.configurationChangeRebuildWindow
+        }
+        guard configRebuildTimestamps.count < Self.configurationChangeRebuildLimit else {
+            teardownRun(deactivate: true)
+            fail(ConfigurationChangeLoopError())
+            return
+        }
+        configRebuildTimestamps.append(now)
+        scheduleRun(leg: leg, notifyRecovered: true)
+    }
+
+    /// Raised when the engine reconfigures more times than the cap allows, so
+    /// `fail` presents a plain-language message instead of restarting forever.
+    private struct ConfigurationChangeLoopError: Error, CustomStringConvertible {
+        var description: String { "Audio output keeps reconfiguring. Tap Retry." }
+    }
+
     // MARK: - Run lifecycle (all graph work serialized off the main actor)
 
     private func scheduleRun(leg: IOSAudioGraphLeg, notifyRecovered: Bool) {
@@ -434,6 +512,13 @@ final class IOSAudioController: AudioControlling {
         let sampleRate = session.sampleRate
         let builder = graphBuilder
         let chordEnabled = chordDetectionEnabled
+        // Identifies this run when the engine reports a configuration change;
+        // a stale generation means a newer run already replaced this one.
+        let onConfigurationChange: IOSAudioConfigurationChangeHandler = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.handleGraphConfigurationChange(generation: gen)
+            }
+        }
 
         enqueueTransition { [weak self] in
             guard let self, gen == self.generation else { return }
@@ -446,7 +531,8 @@ final class IOSAudioController: AudioControlling {
                     sampleRate: sampleRate,
                     analysisRing: analysisRing,
                     chordRing: chordRing,
-                    recordingRing: recordingRing
+                    recordingRing: recordingRing,
+                    onConfigurationChange: onConfigurationChange
                 )
                 // A newer transition superseded this build while it was off the
                 // main actor; discard the dead engine instead of leaking it.
@@ -468,6 +554,15 @@ final class IOSAudioController: AudioControlling {
                     newRun.player = player
                 }
                 self.run = newRun
+                // If the engine stopped itself during `start()` — the config
+                // change landed while this build was in flight, so its
+                // notification was dropped by the `run == nil` guard — recover
+                // through the same debounced, capped path. Reading the graph's
+                // own `isRunning` (which consults `engine.isRunning`) catches
+                // that timing; the notification alone cannot.
+                if !newRun.graph.isRunning {
+                    self.handleGraphConfigurationChange(generation: gen)
+                }
                 // Nothing feeds the rings without the input leg, so detection
                 // workers would only poll empty buffers.
                 guard captures else { return }
@@ -719,14 +814,16 @@ final class IOSAudioController: AudioControlling {
         sampleRate: Double,
         analysisRing: RingBuffer,
         chordRing: RingBuffer,
-        recordingRing: RingBuffer?
+        recordingRing: RingBuffer?,
+        onConfigurationChange: @escaping IOSAudioConfigurationChangeHandler
     ) async throws -> IOSAudioGraphHandling {
         let graph = try builder.build(
             leg: leg,
             sessionSampleRate: sampleRate,
             analysisRing: analysisRing,
             chordRing: chordRing,
-            recordingRing: recordingRing
+            recordingRing: recordingRing,
+            onConfigurationChange: onConfigurationChange
         )
         do {
             try graph.start()

@@ -101,14 +101,23 @@ final class FakeIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     private let lock = NSLock()
     private let stats: FakeIOSAudioGraphStats
     private let startError: TestFailure?
+    private let onConfigurationChange: IOSAudioConfigurationChangeHandler
+    /// When true, `start()` returns with `isRunning == false`, simulating an
+    /// engine that stopped itself during start.
+    private let startLeavesNotRunning: Bool
     private var _isRunning = false
     private var _attachedPlayers: [SamplePlayer] = []
     private var _sampleRate: Double = 48_000
     private var _captureSampleRate: Double? = 48_000
 
-    init(stats: FakeIOSAudioGraphStats, startError: TestFailure?) {
+    init(stats: FakeIOSAudioGraphStats,
+         startError: TestFailure?,
+         onConfigurationChange: @escaping IOSAudioConfigurationChangeHandler,
+         startLeavesNotRunning: Bool = false) {
         self.stats = stats
         self.startError = startError
+        self.onConfigurationChange = onConfigurationChange
+        self.startLeavesNotRunning = startLeavesNotRunning
     }
 
     var sampleRate: Double {
@@ -125,7 +134,7 @@ final class FakeIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     func start() throws {
         try locked {
             if let startError { throw startError }
-            _isRunning = true
+            _isRunning = !startLeavesNotRunning
         }
         stats.recordStart()
     }
@@ -133,6 +142,15 @@ final class FakeIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     func stop() {
         locked { _isRunning = false }
         stats.recordStop()
+    }
+
+    /// Simulates `AVAudioEngine` stopping itself and posting
+    /// `.AVAudioEngineConfigurationChange`, exactly as `SystemIOSAudioGraph`
+    /// observes it: the graph stops reporting running, then the injected
+    /// handler is invoked.
+    func fireConfigurationChange() {
+        locked { _isRunning = false }
+        onConfigurationChange()
     }
 
     func attachPlayer(_ player: SamplePlayer) { locked { _attachedPlayers.append(player) } }
@@ -150,6 +168,9 @@ final class FakeIOSAudioGraphBuilder: IOSAudioGraphBuilding, @unchecked Sendable
     private var weakGraphs: [WeakGraph] = []
     var buildError: TestFailure?
     var startError: TestFailure?
+    /// When true, only the first graph built starts with `isRunning == false`,
+    /// simulating a config change that landed while the build was in flight.
+    var firstGraphStartsNotRunning = false
 
     private struct WeakGraph { weak var value: FakeIOSAudioGraph? }
 
@@ -172,15 +193,23 @@ final class FakeIOSAudioGraphBuilder: IOSAudioGraphBuilding, @unchecked Sendable
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
                chordRing: RingBuffer,
-               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling {
+               recordingRing: RingBuffer?,
+               onConfigurationChange: @escaping IOSAudioConfigurationChangeHandler) throws -> IOSAudioGraphHandling {
         lock.lock()
         let error = buildError
         let startError = self.startError
         _builds.append(leg)
+        let isFirst = _builds.count == 1
+        let firstStartsNotRunning = firstGraphStartsNotRunning
         lock.unlock()
         if let error { throw error }
 
-        let graph = FakeIOSAudioGraph(stats: stats, startError: startError)
+        let graph = FakeIOSAudioGraph(
+            stats: stats,
+            startError: startError,
+            onConfigurationChange: onConfigurationChange,
+            startLeavesNotRunning: firstStartsNotRunning && isFirst
+        )
         lock.lock()
         weakGraphs.append(WeakGraph(value: graph))
         lock.unlock()
@@ -251,7 +280,8 @@ final class WeakGraphRef {
 final class IOSAudioControllerTests: XCTestCase {
     private func makeController(
         permission: IOSAudioRecordPermission = .granted,
-        plays: PlayRecorder? = nil
+        plays: PlayRecorder? = nil,
+        configurationChangeDebounce: Duration = IOSAudioController.configurationChangeDebounce
     ) -> (IOSAudioController, FakeIOSAudioSession, FakeIOSForegroundObserver, FakeIOSAudioGraphBuilder, EventRecorder) {
         let session = FakeIOSAudioSession()
         session.recordPermission = permission
@@ -272,7 +302,8 @@ final class IOSAudioControllerTests: XCTestCase {
             session: session,
             foreground: foreground,
             graphBuilder: builder,
-            playThroughPlayer: play
+            playThroughPlayer: play,
+            configurationChangeDebounce: configurationChangeDebounce
         )
         controller.onEvent = { [recorder] in recorder.record($0) }
         return (controller, session, foreground, builder, recorder)
@@ -286,6 +317,11 @@ final class IOSAudioControllerTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(5))
         }
         return condition()
+    }
+
+    private func isFailed(_ status: IOSAudioStatus) -> Bool {
+        if case .failed = status { return true }
+        return false
     }
 
     private func loadLibrary(_ controller: IOSAudioController) async {
@@ -617,6 +653,47 @@ final class IOSAudioControllerTests: XCTestCase {
 
     // MARK: 7. Repeated foreground/background cycles
 
+    /// On iOS-on-Mac the app reaches `foreground-active` before
+    /// `SystemIOSForegroundObserver` exists, so the new catch-up read delivers
+    /// `true` and the real `didBecomeActive` may deliver it again. The second
+    /// `true` must be a no-op: it must not stop and rebuild the running graph.
+    func testRepeatedForegroundTrueDoesNotRebuildCaptureGraph() async {
+        let (controller, _, foreground, builder, _) = makeController()
+        foreground.fire(true)
+        _ = controller.start()
+        await controller.settleGraphWork()
+        XCTAssertEqual(builder.builds, [.captureAndOutput])
+        XCTAssertEqual(builder.graphStartCount, 1)
+
+        foreground.fire(true)
+        await controller.settleGraphWork()
+
+        XCTAssertEqual(builder.builds, [.captureAndOutput], "a repeated true must not build a second graph")
+        XCTAssertEqual(builder.graphStartCount, 1, "the running graph must not be restarted")
+        XCTAssertEqual(builder.graphStopCount, 0, "the running graph must not be torn down")
+        XCTAssertEqual(controller.currentLeg, .captureAndOutput)
+        XCTAssertTrue(controller.hasRunForTesting)
+    }
+
+    /// The same duplicate-`true` no-op for the playback-only leg.
+    func testRepeatedForegroundTrueDoesNotRebuildOutputOnlyGraph() async {
+        let (controller, session, foreground, builder, _) = makeController()
+        foreground.fire(true)
+        await loadLibrary(controller)
+        await controller.settleGraphWork()
+        XCTAssertEqual(builder.builds, [.outputOnly])
+        XCTAssertTrue(controller.isSamplePlaybackReady)
+
+        foreground.fire(true)
+        await controller.settleGraphWork()
+
+        XCTAssertEqual(builder.builds, [.outputOnly], "a repeated true must not build a second graph")
+        XCTAssertEqual(builder.graphStartCount, 1)
+        XCTAssertEqual(session.setActiveValues, [true], "the duplicate must not re-activate the session")
+        XCTAssertEqual(controller.currentLeg, .outputOnly)
+        XCTAssertTrue(controller.isSamplePlaybackReady)
+    }
+
     func testFiftyForegroundCyclesActivateOnceEachAndDoNotDuplicateCallbacks() async {
         let (controller, session, foreground, builder, recorder) = makeController()
         _ = controller.start()   // foreground false: intent only, no activation
@@ -678,7 +755,131 @@ final class IOSAudioControllerTests: XCTestCase {
         XCTAssertEqual(builder.graphs.count, 1, "only the live run's graph may remain")
     }
 
-    // MARK: 8. Release
+    // MARK: 8. Engine configuration changes
+
+    /// The engine stopped itself (`.AVAudioEngineConfigurationChange`). The
+    /// controller must rebuild the *same* leg so readiness reflects a live
+    /// engine again.
+    func testConfigurationChangeRebuildsTheSameLegOnce() async {
+        let (controller, _, foreground, builder, recorder) = makeController(
+            configurationChangeDebounce: .milliseconds(20)
+        )
+        foreground.fire(true)
+        _ = controller.start()
+        await controller.settleGraphWork()
+        XCTAssertEqual(builder.builds, [.captureAndOutput])
+        XCTAssertEqual(builder.graphStartCount, 1)
+
+        guard let changed = builder.lastGraph else { return XCTFail("no graph") }
+        changed.fireConfigurationChange()
+
+        let rebuilt = await waitUntil { builder.builds.count == 2 }
+        XCTAssertTrue(rebuilt, "a config change must rebuild the run")
+        await controller.settleGraphWork()
+        XCTAssertEqual(builder.builds, [.captureAndOutput, .captureAndOutput],
+                       "the rebuild must use the same leg")
+        XCTAssertEqual(builder.graphStartCount, 2)
+        XCTAssertEqual(builder.graphStopCount, 1)
+        XCTAssertEqual(recorder.recoveredCount, 1, "a config rebuild reports recovery")
+        XCTAssertEqual(controller.status, .listening)
+    }
+
+    /// Five changes inside the debounce window collapse into one rebuild.
+    func testBurstOfConfigurationChangesRebuildsOnce() async {
+        let (controller, _, foreground, builder, _) = makeController(
+            configurationChangeDebounce: .milliseconds(50)
+        )
+        foreground.fire(true)
+        _ = controller.start()
+        await controller.settleGraphWork()
+        guard let changed = builder.lastGraph else { return XCTFail("no graph") }
+
+        for _ in 0..<5 { changed.fireConfigurationChange() }
+        let rebuilt = await waitUntil { builder.builds.count == 2 }
+        XCTAssertTrue(rebuilt)
+        await controller.settleGraphWork()
+        try? await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(builder.builds.count, 2, "a burst within the debounce must yield one rebuild")
+        XCTAssertEqual(builder.graphStartCount, 2)
+    }
+
+    /// A change delivered for a run that has since been replaced must be ignored.
+    func testStaleGenerationConfigurationChangeIsIgnored() async {
+        let (controller, _, foreground, builder, _) = makeController(
+            configurationChangeDebounce: .milliseconds(20)
+        )
+        foreground.fire(true)
+        _ = controller.start()
+        await controller.settleGraphWork()
+        guard let staleGraph = builder.lastGraph else { return XCTFail("no graph") }
+
+        // Background then foreground replaces the run (a new generation).
+        foreground.fire(false)
+        await controller.settleGraphWork()
+        foreground.fire(true)
+        await controller.settleGraphWork()
+        XCTAssertEqual(builder.builds.count, 2)
+
+        staleGraph.fireConfigurationChange()
+        try? await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(builder.builds.count, 2, "a stale-generation change must not rebuild")
+    }
+
+    /// A config change that lands while a build is in flight has its
+    /// notification dropped by the `run == nil` guard. If the engine stopped
+    /// during `start()`, the installed run must still be recovered — exactly
+    /// once, through the same debounced path.
+    func testConfigurationChangeDuringBuildRebuildsOnce() async {
+        let (controller, _, foreground, builder, _) = makeController(
+            configurationChangeDebounce: .milliseconds(20)
+        )
+        builder.firstGraphStartsNotRunning = true
+        foreground.fire(true)
+        _ = controller.start()
+
+        let rebuilt = await waitUntil { builder.builds.count == 2 }
+        XCTAssertTrue(rebuilt, "an install-time not-running graph must rebuild")
+        await controller.settleGraphWork()
+
+        XCTAssertEqual(builder.builds, [.captureAndOutput, .captureAndOutput],
+                       "the recovery must rebuild the same leg")
+        XCTAssertEqual(builder.graphStartCount, 2)
+        try? await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(builder.builds.count, 2, "only the first graph is not running; no loop")
+    }
+
+    /// Three rebuilds are allowed inside 10 s; the fourth change fails with an
+    /// actionable message instead of looping forever.
+    func testConfigurationChangeCapFailsInsteadOfLooping() async {
+        let (controller, _, foreground, builder, recorder) = makeController(
+            configurationChangeDebounce: .milliseconds(10)
+        )
+        foreground.fire(true)
+        _ = controller.start()
+        await controller.settleGraphWork()
+        XCTAssertEqual(builder.builds.count, 1)
+
+        for _ in 0..<4 {
+            guard let graph = builder.lastGraph else { return XCTFail("no graph") }
+            let before = builder.builds.count
+            graph.fireConfigurationChange()
+            _ = await waitUntil { builder.builds.count > before || isFailed(controller.status) }
+            await controller.settleGraphWork()
+        }
+
+        XCTAssertEqual(builder.builds.count, 4, "three rebuilds are allowed, the fourth fails")
+        guard case .failed(let message) = controller.status else {
+            return XCTFail("expected .failed, got \(controller.status)")
+        }
+        XCTAssertEqual(message, "Audio output keeps reconfiguring. Tap Retry.")
+        XCTAssertEqual(recorder.messages.last, "Audio output keeps reconfiguring. Tap Retry.")
+
+        builder.lastGraph?.fireConfigurationChange()
+        try? await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(builder.builds.count, 4, "the cap must not restart")
+    }
+
+    // MARK: 9. Release
 
     func testReleasingTheControllerStopsTheGraph() async {
         let session = FakeIOSAudioSession()

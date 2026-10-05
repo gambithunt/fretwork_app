@@ -23,6 +23,20 @@ apply to only one platform.
 - If the App Store can't supply the unlock's price, the unlock sheet now says
   so with a Try again button (and retries when reopened or when the app
   returns to the foreground) instead of showing a disabled button.
+- Fix: on a Mac (the iPhone/iPad app running on Apple silicon) notes never
+  sounded and the modules showed "Notes will not sound until audio is ready."
+  Audio only starts once the app is foreground-active, and that was learned
+  solely from `didBecomeActive`. On the Mac the app is already active ~18 ms
+  before the audio controller exists, so the notification was missed and no
+  audio engine was ever built. The observer now reads the current activation
+  state when it is created.
+- Fix: when the system stopped the audio engine under the app
+  (`AVAudioEngineConfigurationChange` — an output device change, or macOS
+  reconfiguring its aggregate device), the app kept reporting playback as
+  ready and tapped notes went nowhere. It now rebuilds the same graph,
+  coalescing a burst into one rebuild and capping it at three in ten seconds
+  before showing "Audio output keeps reconfiguring. Tap Retry." A stop that
+  lands while a graph is still being built is caught too.
 
 ## 0.3.0 (iOS) — 2026-10-01
 

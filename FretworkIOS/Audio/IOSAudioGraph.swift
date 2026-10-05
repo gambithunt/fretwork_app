@@ -41,6 +41,12 @@ protocol IOSAudioGraphHandling: AnyObject, Sendable {
     func attachPlayer(_ player: SamplePlayer)
 }
 
+/// Invoked when `AVAudioEngine` posts `.AVAudioEngineConfigurationChange`.
+/// The framework has already stopped the engine and this graph has marked
+/// itself not running; the controller decides whether and how to rebuild.
+/// `@Sendable` because NotificationCenter delivers it on its own thread.
+typealias IOSAudioConfigurationChangeHandler = @Sendable () -> Void
+
 /// `Sendable` because it runs on a detached task: a slow `session.setActive`
 /// or `engine.start()` must not block the main actor (the Mac `graphQueue`
 /// lesson, iOS-shaped).
@@ -49,7 +55,8 @@ protocol IOSAudioGraphBuilding: Sendable {
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
                chordRing: RingBuffer,
-               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling
+               recordingRing: RingBuffer?,
+               onConfigurationChange: @escaping IOSAudioConfigurationChangeHandler) throws -> IOSAudioGraphHandling
 }
 
 /// Production builder. Stateless, so it is trivially `Sendable` without an
@@ -59,13 +66,15 @@ struct SystemIOSAudioGraphBuilder: IOSAudioGraphBuilding {
                sessionSampleRate: Double,
                analysisRing: RingBuffer,
                chordRing: RingBuffer,
-               recordingRing: RingBuffer?) throws -> IOSAudioGraphHandling {
+               recordingRing: RingBuffer?,
+               onConfigurationChange: @escaping IOSAudioConfigurationChangeHandler) throws -> IOSAudioGraphHandling {
         try SystemIOSAudioGraph(
             leg: leg,
             sessionSampleRate: sessionSampleRate,
             analysisRing: analysisRing,
             chordRing: chordRing,
-            recordingRing: recordingRing
+            recordingRing: recordingRing,
+            onConfigurationChange: onConfigurationChange
         )
     }
 }
@@ -107,6 +116,9 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     /// up. This — not the session rate the graph was *built* with — is the
     /// rate of the samples `CaptureSink` writes into the rings.
     private var inputSampleRate: Double?
+    /// Called on `.AVAudioEngineConfigurationChange` after `running` is cleared.
+    private let onConfigurationChange: IOSAudioConfigurationChangeHandler
+    private var configurationObserver: NSObjectProtocol?
 
     let sampleRate: Double
 
@@ -114,9 +126,11 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
          sessionSampleRate: Double,
          analysisRing: RingBuffer,
          chordRing: RingBuffer,
-         recordingRing: RingBuffer?) throws {
+         recordingRing: RingBuffer?,
+         onConfigurationChange: @escaping IOSAudioConfigurationChangeHandler) throws {
         self.leg = leg
         self.sampleRate = sessionSampleRate
+        self.onConfigurationChange = onConfigurationChange
         guard let mono = AVAudioFormat(standardFormatWithSampleRate: sessionSampleRate, channels: 1) else {
             throw IOSAudioGraphError.unsupportedFormat(sampleRate: sessionSampleRate)
         }
@@ -127,11 +141,49 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
         self.sink = leg == .captureAndOutput
             ? CaptureSink(analysisRing: analysisRing, monitorRing: nil, chordRing: chordRing, recordingRing: recordingRing)
             : nil
+        installConfigurationObserverLocked()
+    }
+
+    deinit {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+        }
+    }
+
+    /// Watches the one notification that means “the framework stopped this
+    /// engine under us”. `object: engine` scopes it to this graph, so a second
+    /// engine's change cannot be attributed here. Removed by `stop()`/`deinit`,
+    /// and re-armed by `start()` in case the graph is ever restarted.
+    private func installConfigurationObserverLocked() {
+        guard configurationObserver == nil else { return }
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            // Deliberately no lock and no state mutation. `isRunning` reads
+            // `engine.isRunning`, which the framework has already flipped by
+            // the time it posts this. Taking the lock here could deadlock
+            // against `start()`, which holds it across `engine.start()`, if
+            // the notification is ever posted synchronously on that thread.
+            self?.onConfigurationChange()
+        }
+    }
+
+    private func removeConfigurationObserverLocked() {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+            self.configurationObserver = nil
+        }
     }
 
     var isRunning: Bool {
         lock.lock(); defer { lock.unlock() }
-        return running
+        // `running` is this graph's own start/stop bookkeeping; `engine.isRunning`
+        // is what the framework flips when it stops the engine on a
+        // configuration change. Combining the two means the observer never has
+        // to touch the lock to make the graph report itself down.
+        return running && engine.isRunning
     }
 
     var captureSampleRate: Double? {
@@ -142,6 +194,7 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
     func start() throws {
         lock.lock(); defer { lock.unlock() }
         guard !running else { return }
+        installConfigurationObserverLocked()
 
         if let sink {
             let input = engine.inputNode
@@ -176,6 +229,7 @@ final class SystemIOSAudioGraph: IOSAudioGraphHandling, @unchecked Sendable {
 
     func stop() {
         lock.lock(); defer { lock.unlock() }
+        removeConfigurationObserverLocked()
         guard running || sink != nil || player != nil else { return }
         engine.stop()
         if let sink {
